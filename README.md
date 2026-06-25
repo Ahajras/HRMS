@@ -78,7 +78,7 @@ App: `http://localhost:5173`.
 
 All endpoints except `POST /api/v1/auth/login` and `/actuator/health` require a JWT bearer token. Log in to obtain one; the token carries the user's company (tenant) and permissions, so the tenant is derived from the authenticated principal rather than a client header. Platform/super-admin accounts (no company) may still target a company via the `X-Company-Id` header.
 
-Default seeded admin: **`admin` / `Admin@123`** (change after first login). Set `HRMS_JWT_SECRET` (≥ 32 chars) in production.
+Seeded accounts (change passwords after first login): **`manager` / `Admin@123`** — a company administrator tied to a real company; use this for normal work (no Company ID field). **`admin` / `Admin@123`** — a platform super-admin not tied to any company (shows the Company ID field for cross-company work). Set `HRMS_JWT_SECRET` (≥ 32 chars) in production.
 
 | Resource | Endpoints |
 |---|---|

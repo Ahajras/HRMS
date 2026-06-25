@@ -11,4 +11,7 @@ public interface OrgUnitTypeRepository extends JpaRepository<OrgUnitType, UUID> 
     List<OrgUnitType> findByCompanyIdOrderByLevelOrder(UUID companyId);
 
     List<OrgUnitType> findByCompanyIdIsNullOrderByLevelOrder();
+
+    /** Global default levels (company_id NULL) plus any company-specific ones. */
+    List<OrgUnitType> findByCompanyIdIsNullOrCompanyIdOrderByLevelOrder(UUID companyId);
 }

@@ -51,12 +51,20 @@ Flyway applies migrations V1–V5 automatically on backend startup.
 
 ## 5. First use — log in
 
-The app now requires authentication (Phase 2). A default platform administrator is seeded by migration V6:
+The app requires authentication (Phase 2). Two accounts are seeded:
 
-- **Username:** `admin`
+**Normal use — `manager` (recommended):** a company administrator tied to a real company (migration V7).
+
+- **Username:** `manager`
 - **Password:** `Admin@123`  ← change this after first login (Users screen)
 
-The admin is a *platform* account (not tied to a company), so the top bar still shows a **Company ID** field: paste any UUID there (e.g. `uuidgen`) to scope the data you create. All company data is scoped to that id; reference data (currencies, countries, org levels) is global. Create company-scoped users from the **Users** screen and give them roles from **Roles** — those users log in straight into their own company with no Company ID field.
+Logging in as `manager` carries the company in the token, so there is **no Company ID field** — you work straight inside your company. This is the account to use day-to-day and to hand to other users (create more from the **Users** screen, assign roles from **Roles**).
+
+**Platform admin — `admin`:** a global super-admin not tied to any company (migration V6), for managing across companies.
+
+- **Username:** `admin`  **Password:** `Admin@123`
+
+Because `admin` has no company, the top bar shows a **Company ID** field; that field only appears for platform admins. Reference data (currencies, countries, org levels) is global; everything else is company-scoped.
 
 Set a strong `HRMS_JWT_SECRET` (≥ 32 chars) in `.env` before going beyond a test environment.
 

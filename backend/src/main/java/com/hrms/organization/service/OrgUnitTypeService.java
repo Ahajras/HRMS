@@ -30,7 +30,7 @@ public class OrgUnitTypeService {
         UUID companyId = TenantContext.getCompanyId().orElse(null);
         List<OrgUnitType> levels = companyId == null
                 ? repository.findByCompanyIdIsNullOrderByLevelOrder()
-                : repository.findByCompanyIdOrderByLevelOrder(companyId);
+                : repository.findByCompanyIdIsNullOrCompanyIdOrderByLevelOrder(companyId);
         return levels.stream().map(this::toDto).toList();
     }
 
