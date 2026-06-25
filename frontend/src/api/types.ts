@@ -160,6 +160,19 @@ export interface Contract {
   status?: string;
 }
 
+export interface ContractPayItem {
+  id?: string;
+  contractId: string;
+  employeeId?: string;
+  payComponentId: string;
+  amount: number;
+  currencyCode?: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  status?: string;
+  remarks?: string;
+}
+
 export interface EmployeeDocument {
   id?: string;
   employeeId: string;

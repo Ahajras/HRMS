@@ -113,6 +113,7 @@ All endpoints are under `/api/v1`. For platform admins, company scoping is suppl
 | Employee documents | `GET /employee-documents?employeeId=`, `POST`, `GET/PUT/DELETE /employee-documents/{id}` |
 | Employee bank accounts | `GET /employee-bank-accounts?employeeId=`, `POST`, `GET/PUT/DELETE /employee-bank-accounts/{id}` |
 | Contracts | `GET /contracts?employeeId=`, `POST /contracts`, `GET/PUT/DELETE /contracts/{id}` |
+| Contract pay items | `GET /contract-pay-items?contractId=`, `POST` (auto-supersedes prior active), `GET/PUT/DELETE /contract-pay-items/{id}` |
 | Lookups | `GET /lookups?category=` (configurable dropdown source) |
 | Banks | `GET/POST /banks`, `GET/PUT/DELETE /banks/{id}` |
 | Assignments | `GET /assignments?employeeId=`, `POST /assignments`, `GET/PUT/DELETE /assignments/{id}` |

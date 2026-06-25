@@ -1,0 +1,58 @@
+package com.hrms.employee.web;
+
+import com.hrms.employee.dto.ContractPayItemDto;
+import com.hrms.employee.service.ContractPayItemService;
+import jakarta.validation.Valid;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.List;
+import java.util.UUID;
+
+@RestController
+@RequestMapping("/api/v1/contract-pay-items")
+public class ContractPayItemController {
+
+    private final ContractPayItemService service;
+
+    public ContractPayItemController(ContractPayItemService service) {
+        this.service = service;
+    }
+
+    @GetMapping
+    public List<ContractPayItemDto> findByContract(@RequestParam UUID contractId) {
+        return service.findByContract(contractId);
+    }
+
+    @GetMapping("/{id}")
+    public ContractPayItemDto findById(@PathVariable UUID id) {
+        return service.findById(id);
+    }
+
+    @PostMapping
+    @ResponseStatus(HttpStatus.CREATED)
+    public ContractPayItemDto create(@Valid @RequestBody ContractPayItemDto dto) {
+        return service.create(dto);
+    }
+
+    @PutMapping("/{id}")
+    public ContractPayItemDto update(@PathVariable UUID id, @Valid @RequestBody ContractPayItemDto dto) {
+        return service.update(id, dto);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable UUID id) {
+        service.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+}
