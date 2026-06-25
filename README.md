@@ -50,6 +50,18 @@ hrms/
 | 9 | Provision | Planned |
 | 10 | Settlement | Planned |
 
+## Current status / continue here
+
+**Done:** Foundation, Phase 1 (Employee + Organization + Master Data), Phase 2 (Security + Auth). Deployed and running on the VPS (port 82) via `docker-compose.prod.yml`.
+
+**Seeded logins:** `manager / Admin@123` (company admin — use for normal work, no Company ID box) and `admin / Admin@123` (platform super-admin). Change passwords after first login.
+
+**Recent fixes:** seeded a real company + `manager` user (V7) so no UUID typing; org-level dropdown now shows global defaults; audit author now stores the username (was overflowing `created_by` VARCHAR(100) and causing 409/500 on every authenticated create).
+
+**Next step:** Phase 3 — Rule Engine. This is the prerequisite for hourly/absence/lateness deductions (monthly staff keep a FIXED base; absence is a separate FORMULA deduction = hours × derived hourly rate, fed by Timesheet in Phase 4).
+
+**Deploy workflow:** edit on PC → `git add -A && git commit && git push` → on server `cd /opt/hrms && bash deploy.sh`. See `SERVER.md` for ops commands.
+
 ## Running locally
 
 ### 1. Start infrastructure
