@@ -1,0 +1,96 @@
+# =====================================================================
+# Full-stack deployment for a Linux VPS with Docker.
+# Brings up infra + backend + frontend with a single command:
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+#
+# Then open:  http://<VPS_IP>        (frontend, port 80)
+#             http://<VPS_IP>/api    (backend, via Nginx proxy)
+#
+# Override secrets/ports via a .env file (see .env.example).
+# =====================================================================
+
+services:
+  postgres:
+    image: postgres:16
+    container_name: hrms-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-hrms}
+      POSTGRES_USER: ${POSTGRES_USER:-hrms}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-hrms}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-hrms} -d ${POSTGRES_DB:-hrms}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7
+    container_name: hrms-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: hrms-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-hrms}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-hrms}
+    volumes:
+      - rabbitdata:/var/lib/rabbitmq
+    # Management UI only exposed if you map it; kept internal by default.
+
+  minio:
+    image: minio/minio
+    container_name: hrms-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_USER:-hrms}
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD:-hrms12345}
+    volumes:
+      - miniodata:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  backend:
+    build:
+      context: ./backend
+    container_name: hrms-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-hrms}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-hrms}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-hrms}
+      HRMS_JWT_SECRET: ${HRMS_JWT_SECRET:-change-me-please-use-a-long-random-secret-key-32b+}
+    # No host port needed; the frontend reaches it over the internal network.
+    expose:
+      - "8080"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: hrms-frontend
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "${HTTP_PORT:-80}:80"
+
+volumes:
+  pgdata:
+  redisdata:
+  rabbitdata:
+  miniodata:

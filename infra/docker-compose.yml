@@ -1,0 +1,56 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: hrms-postgres
+    environment:
+      POSTGRES_DB: hrms
+      POSTGRES_USER: hrms
+      POSTGRES_PASSWORD: hrms
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hrms -d hrms"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7
+    container_name: hrms-redis
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./data/redis:/data
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    container_name: hrms-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: hrms
+      RABBITMQ_DEFAULT_PASS: hrms
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - ./data/rabbitmq:/var/lib/rabbitmq
+
+  minio:
+    image: minio/minio
+    container_name: hrms-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: hrms
+      MINIO_ROOT_PASSWORD: hrms12345
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - ./data/minio:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3

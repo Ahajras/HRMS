@@ -1,0 +1,63 @@
+spring:
+  application:
+    name: hrms-backend
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/hrms}
+    username: ${SPRING_DATASOURCE_USERNAME:hrms}
+    password: ${SPRING_DATASOURCE_PASSWORD:hrms}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      pool-name: hrms-pool
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+        format_sql: false
+    show-sql: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+server:
+  port: 8080
+  servlet:
+    context-path: /
+
+# Application-level configuration (configuration-first principle).
+# These are sensible defaults; all are overridable without code changes.
+hrms:
+  defaults:
+    base-currency: AED
+    base-country: AE
+    proration-basis: CALENDAR_30
+    rounding-method: HALF_UP
+    rounding-scale: 2
+  tenant:
+    header: X-Company-Id
+  security:
+    jwt:
+      # HS256 signing secret. MUST be >= 32 chars; override in production via env.
+      secret: ${HRMS_JWT_SECRET:change-me-please-use-a-long-random-secret-key-32b+}
+      # Access-token lifetime in minutes.
+      expiration-minutes: ${HRMS_JWT_EXPIRATION_MINUTES:480}
+      issuer: hrms
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+
+logging:
+  level:
+    com.hrms: INFO
+    org.flywaydb: INFO
