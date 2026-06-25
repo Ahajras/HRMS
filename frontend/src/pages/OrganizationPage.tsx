@@ -1,5 +1,6 @@
 import { useState } from "react";
 import {
+  Alert,
   Box,
   Button,
   Card,
@@ -10,6 +11,7 @@ import {
   DialogTitle,
   IconButton,
   MenuItem,
+  Snackbar,
   Stack,
   TextField,
   Typography,
@@ -19,6 +21,7 @@ import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import AddIcon from "@mui/icons-material/Add";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { organizationUnitApi, orgUnitTypeApi } from "../api/resources";
+import { getApiErrorMessage } from "../api/errors";
 import type { OrgUnitTreeNode, OrganizationUnit } from "../api/types";
 
 const EMPTY: OrganizationUnit = {
@@ -61,21 +64,26 @@ export default function OrganizationPage() {
   const { data: units = [] } = useQuery({ queryKey: ["orgUnits"], queryFn: organizationUnitApi.list });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<OrganizationUnit>(EMPTY);
+  const [error, setError] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
 
   const save = useMutation({
     mutationFn: (u: OrganizationUnit) => organizationUnitApi.create(u),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["orgTree"] });
       qc.invalidateQueries({ queryKey: ["orgUnits"] });
+      setError(null);
+      setToast("Organisation unit saved.");
       setOpen(false);
     },
+    onError: (err) => setError(getApiErrorMessage(err)),
   });
 
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h5">Organization Tree</Typography>
-        <Button startIcon={<AddIcon />} variant="contained" onClick={() => { setForm(EMPTY); setOpen(true); }}>
+        <Button startIcon={<AddIcon />} variant="contained" onClick={() => { setForm(EMPTY); setError(null); setOpen(true); }}>
           New Unit
         </Button>
       </Stack>
@@ -92,6 +100,7 @@ export default function OrganizationPage() {
         <DialogTitle>New Organisation Unit</DialogTitle>
         <DialogContent>
           <Stack spacing={2} mt={1}>
+            {error && <Alert severity="error" onClose={() => setError(null)}>{error}</Alert>}
             <TextField select label="Level (Type)" value={form.typeId}
               onChange={(e) => setForm({ ...form, typeId: e.target.value })}>
               {types.map((t) => <MenuItem key={t.id} value={t.id}>{t.levelOrder} — {t.name}</MenuItem>)}
@@ -112,6 +121,15 @@ export default function OrganizationPage() {
           <Button variant="contained" onClick={() => save.mutate(form)} disabled={save.isPending || !form.typeId}>Save</Button>
         </DialogActions>
       </Dialog>
+
+      <Snackbar
+        open={!!toast}
+        autoHideDuration={3000}
+        onClose={() => setToast(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="success" onClose={() => setToast(null)}>{toast}</Alert>
+      </Snackbar>
     </Box>
   );
 }
