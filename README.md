@@ -110,7 +110,11 @@ All endpoints are under `/api/v1`. For platform admins, company scoping is suppl
 | Org levels | `GET/POST /org-unit-types`, `GET/PUT/DELETE /org-unit-types/{id}` |
 | Org units | `GET/POST /organization-units`, `GET /organization-units/tree`, `GET/PUT/DELETE /organization-units/{id}` |
 | Employees | `GET/POST /employees` (paged), `GET/PUT/DELETE /employees/{id}` |
+| Employee documents | `GET /employee-documents?employeeId=`, `POST`, `GET/PUT/DELETE /employee-documents/{id}` |
+| Employee bank accounts | `GET /employee-bank-accounts?employeeId=`, `POST`, `GET/PUT/DELETE /employee-bank-accounts/{id}` |
 | Contracts | `GET /contracts?employeeId=`, `POST /contracts`, `GET/PUT/DELETE /contracts/{id}` |
+| Lookups | `GET /lookups?category=` (configurable dropdown source) |
+| Banks | `GET/POST /banks`, `GET/PUT/DELETE /banks/{id}` |
 | Assignments | `GET /assignments?employeeId=`, `POST /assignments`, `GET/PUT/DELETE /assignments/{id}` |
 | Pay components | `GET /payroll-components?category=`, `POST`, `GET/PUT/DELETE /payroll-components/{id}` |
 

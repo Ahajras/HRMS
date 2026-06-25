@@ -1,14 +1,63 @@
 import { api } from "./client";
 import type {
+  Bank,
+  Contract,
   Country,
   Currency,
   Employee,
+  EmployeeBankAccount,
+  EmployeeDocument,
+  LookupValue,
   OrgUnitTreeNode,
   OrgUnitType,
   OrganizationUnit,
   PageResponse,
   PayrollComponent,
 } from "./types";
+
+// --- Lookups (configurable dropdown sources) ---
+export const lookupApi = {
+  byCategory: (category: string) =>
+    api.get<LookupValue[]>("/lookups", { params: { category } }).then((r) => r.data),
+};
+
+// --- Banks ---
+export const bankApi = {
+  list: () => api.get<Bank[]>("/banks").then((r) => r.data),
+  create: (d: Bank) => api.post<Bank>("/banks", d).then((r) => r.data),
+  update: (id: string, d: Bank) => api.put<Bank>(`/banks/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/banks/${id}`).then(() => undefined),
+};
+
+// --- Contracts ---
+export const contractApi = {
+  byEmployee: (employeeId: string) =>
+    api.get<Contract[]>("/contracts", { params: { employeeId } }).then((r) => r.data),
+  create: (d: Contract) => api.post<Contract>("/contracts", d).then((r) => r.data),
+  update: (id: string, d: Contract) => api.put<Contract>(`/contracts/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/contracts/${id}`).then(() => undefined),
+};
+
+// --- Employee documents ---
+export const employeeDocumentApi = {
+  byEmployee: (employeeId: string) =>
+    api.get<EmployeeDocument[]>("/employee-documents", { params: { employeeId } }).then((r) => r.data),
+  create: (d: EmployeeDocument) => api.post<EmployeeDocument>("/employee-documents", d).then((r) => r.data),
+  update: (id: string, d: EmployeeDocument) =>
+    api.put<EmployeeDocument>(`/employee-documents/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/employee-documents/${id}`).then(() => undefined),
+};
+
+// --- Employee bank accounts ---
+export const employeeBankAccountApi = {
+  byEmployee: (employeeId: string) =>
+    api.get<EmployeeBankAccount[]>("/employee-bank-accounts", { params: { employeeId } }).then((r) => r.data),
+  create: (d: EmployeeBankAccount) =>
+    api.post<EmployeeBankAccount>("/employee-bank-accounts", d).then((r) => r.data),
+  update: (id: string, d: EmployeeBankAccount) =>
+    api.put<EmployeeBankAccount>(`/employee-bank-accounts/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/employee-bank-accounts/${id}`).then(() => undefined),
+};
 
 // --- Currencies ---
 export const currencyApi = {

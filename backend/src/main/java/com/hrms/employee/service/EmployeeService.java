@@ -70,7 +70,12 @@ public class EmployeeService {
         entity.setEmployeeNumber(dto.getEmployeeNumber());
         entity.setFirstName(dto.getFirstName());
         entity.setLastName(dto.getLastName());
+        entity.setMiddleName(dto.getMiddleName());
         entity.setNationalityCountryCode(dto.getNationalityCountryCode());
+        entity.setMaritalStatus(dto.getMaritalStatus());
+        entity.setAddressLine(dto.getAddressLine());
+        entity.setCity(dto.getCity());
+        entity.setCountryOfResidenceCode(dto.getCountryOfResidenceCode());
         entity.setDateOfBirth(dto.getDateOfBirth());
         entity.setGender(dto.getGender());
         entity.setHireDate(dto.getHireDate());
@@ -89,7 +94,12 @@ public class EmployeeService {
         dto.setEmployeeNumber(entity.getEmployeeNumber());
         dto.setFirstName(entity.getFirstName());
         dto.setLastName(entity.getLastName());
+        dto.setMiddleName(entity.getMiddleName());
         dto.setNationalityCountryCode(entity.getNationalityCountryCode());
+        dto.setMaritalStatus(entity.getMaritalStatus());
+        dto.setAddressLine(entity.getAddressLine());
+        dto.setCity(entity.getCity());
+        dto.setCountryOfResidenceCode(entity.getCountryOfResidenceCode());
         dto.setDateOfBirth(entity.getDateOfBirth());
         dto.setGender(entity.getGender());
         dto.setHireDate(entity.getHireDate());

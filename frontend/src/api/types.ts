@@ -114,13 +114,73 @@ export interface Employee {
   employeeNumber: string;
   firstName: string;
   lastName: string;
+  middleName?: string;
   nationalityCountryCode?: string;
+  maritalStatus?: string;
+  addressLine?: string;
+  city?: string;
+  countryOfResidenceCode?: string;
   dateOfBirth?: string;
   gender?: string;
   hireDate: string;
   terminationDate?: string;
   email?: string;
   phone?: string;
+  status?: string;
+}
+
+export interface LookupValue {
+  id?: string;
+  companyId?: string;
+  category: string;
+  code: string;
+  label: string;
+  sortOrder?: number;
+  status?: string;
+}
+
+export interface Bank {
+  id?: string;
+  companyId?: string;
+  code: string;
+  name: string;
+  swiftCode?: string;
+  countryCode?: string;
+  status?: string;
+}
+
+export interface Contract {
+  id?: string;
+  employeeId: string;
+  contractNumber?: string;
+  contractType: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  baseCurrencyCode?: string;
+  status?: string;
+}
+
+export interface EmployeeDocument {
+  id?: string;
+  employeeId: string;
+  documentType: string;
+  documentNumber: string;
+  issuingCountryCode?: string;
+  issueDate?: string;
+  expiryDate?: string;
+  issuingAuthority?: string;
+  status?: string;
+}
+
+export interface EmployeeBankAccount {
+  id?: string;
+  employeeId: string;
+  bankId?: string;
+  accountHolderName?: string;
+  iban?: string;
+  accountNumber?: string;
+  currencyCode?: string;
+  primary?: boolean;
   status?: string;
 }
 

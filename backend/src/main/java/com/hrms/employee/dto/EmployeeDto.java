@@ -29,8 +29,23 @@ public class EmployeeDto {
     @Size(max = 100)
     private String lastName;
 
+    @Size(max = 100)
+    private String middleName;
+
     @Size(min = 2, max = 2)
     private String nationalityCountryCode;
+
+    @Size(max = 20)
+    private String maritalStatus;
+
+    @Size(max = 255)
+    private String addressLine;
+
+    @Size(max = 100)
+    private String city;
+
+    @Size(min = 2, max = 2)
+    private String countryOfResidenceCode;
 
     private LocalDate dateOfBirth;
 
@@ -65,6 +80,21 @@ public class EmployeeDto {
 
     public String getLastName() { return lastName; }
     public void setLastName(String lastName) { this.lastName = lastName; }
+
+    public String getMiddleName() { return middleName; }
+    public void setMiddleName(String middleName) { this.middleName = middleName; }
+
+    public String getMaritalStatus() { return maritalStatus; }
+    public void setMaritalStatus(String maritalStatus) { this.maritalStatus = maritalStatus; }
+
+    public String getAddressLine() { return addressLine; }
+    public void setAddressLine(String addressLine) { this.addressLine = addressLine; }
+
+    public String getCity() { return city; }
+    public void setCity(String city) { this.city = city; }
+
+    public String getCountryOfResidenceCode() { return countryOfResidenceCode; }
+    public void setCountryOfResidenceCode(String countryOfResidenceCode) { this.countryOfResidenceCode = countryOfResidenceCode; }
 
     public String getNationalityCountryCode() { return nationalityCountryCode; }
     public void setNationalityCountryCode(String nationalityCountryCode) { this.nationalityCountryCode = nationalityCountryCode; }

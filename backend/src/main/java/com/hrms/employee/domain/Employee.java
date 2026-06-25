@@ -28,8 +28,23 @@ public class Employee extends AuditableEntity {
     @Column(name = "last_name", nullable = false, length = 100)
     private String lastName;
 
+    @Column(name = "middle_name", length = 100)
+    private String middleName;
+
     @Column(name = "nationality_country_code", length = 2)
     private String nationalityCountryCode;
+
+    @Column(name = "marital_status", length = 20)
+    private String maritalStatus;
+
+    @Column(name = "address_line", length = 255)
+    private String addressLine;
+
+    @Column(name = "city", length = 100)
+    private String city;
+
+    @Column(name = "country_of_residence_code", length = 2)
+    private String countryOfResidenceCode;
 
     @Column(name = "date_of_birth")
     private LocalDate dateOfBirth;
@@ -63,6 +78,21 @@ public class Employee extends AuditableEntity {
 
     public String getLastName() { return lastName; }
     public void setLastName(String lastName) { this.lastName = lastName; }
+
+    public String getMiddleName() { return middleName; }
+    public void setMiddleName(String middleName) { this.middleName = middleName; }
+
+    public String getMaritalStatus() { return maritalStatus; }
+    public void setMaritalStatus(String maritalStatus) { this.maritalStatus = maritalStatus; }
+
+    public String getAddressLine() { return addressLine; }
+    public void setAddressLine(String addressLine) { this.addressLine = addressLine; }
+
+    public String getCity() { return city; }
+    public void setCity(String city) { this.city = city; }
+
+    public String getCountryOfResidenceCode() { return countryOfResidenceCode; }
+    public void setCountryOfResidenceCode(String countryOfResidenceCode) { this.countryOfResidenceCode = countryOfResidenceCode; }
 
     public String getNationalityCountryCode() { return nationalityCountryCode; }
     public void setNationalityCountryCode(String nationalityCountryCode) { this.nationalityCountryCode = nationalityCountryCode; }
