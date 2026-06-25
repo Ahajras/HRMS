@@ -2,6 +2,7 @@ import { api } from "./client";
 import type {
   Bank,
   Contract,
+  ContractPayItem,
   Country,
   Currency,
   Employee,
@@ -36,6 +37,16 @@ export const contractApi = {
   create: (d: Contract) => api.post<Contract>("/contracts", d).then((r) => r.data),
   update: (id: string, d: Contract) => api.put<Contract>(`/contracts/${id}`, d).then((r) => r.data),
   remove: (id: string) => api.delete(`/contracts/${id}`).then(() => undefined),
+};
+
+// --- Contract pay items (effective-dated salary structure) ---
+export const contractPayItemApi = {
+  byContract: (contractId: string) =>
+    api.get<ContractPayItem[]>("/contract-pay-items", { params: { contractId } }).then((r) => r.data),
+  create: (d: ContractPayItem) => api.post<ContractPayItem>("/contract-pay-items", d).then((r) => r.data),
+  update: (id: string, d: ContractPayItem) =>
+    api.put<ContractPayItem>(`/contract-pay-items/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/contract-pay-items/${id}`).then(() => undefined),
 };
 
 // --- Employee documents ---

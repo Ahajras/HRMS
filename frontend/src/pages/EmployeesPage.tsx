@@ -25,15 +25,18 @@ import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import {
   bankApi,
   contractApi,
+  contractPayItemApi,
   countryApi,
   currencyApi,
   employeeApi,
   employeeBankAccountApi,
   employeeDocumentApi,
   lookupApi,
+  payrollComponentApi,
 } from "../api/resources";
 import type {
   Contract,
+  ContractPayItem,
   Employee,
   EmployeeBankAccount,
   EmployeeDocument,
@@ -77,6 +80,15 @@ function useCurrencies() {
 
 function useBanks() {
   const { data = [] } = useQuery({ queryKey: ["banks"], queryFn: bankApi.list, staleTime: 5 * 60 * 1000 });
+  return data;
+}
+
+function usePayComponents() {
+  const { data = [] } = useQuery({
+    queryKey: ["payComponents"],
+    queryFn: () => payrollComponentApi.list(),
+    staleTime: 5 * 60 * 1000,
+  });
   return data;
 }
 
@@ -354,6 +366,133 @@ function BankTab({ employeeId }: { employeeId: string }) {
 }
 
 // =======================================================================
+// Contract pay items panel (effective-dated salary structure)
+// =======================================================================
+const EMPTY_ITEM = (contractId: string, employeeId: string, currency?: string): ContractPayItem => ({
+  contractId,
+  employeeId,
+  payComponentId: "",
+  amount: 0,
+  currencyCode: currency,
+  effectiveFrom: new Date().toISOString().slice(0, 10),
+  status: "ACTIVE",
+});
+
+function PayItemsPanel({ contractId, employeeId, defaultCurrency }: {
+  contractId: string;
+  employeeId: string;
+  defaultCurrency?: string;
+}) {
+  const qc = useQueryClient();
+  const components = usePayComponents();
+  const compById = (id: string) => components.find((c) => c.id === id);
+  const compLabel = (id: string) => {
+    const c = compById(id);
+    return c ? `${c.name} (${c.category})` : id;
+  };
+  const { data = [] } = useQuery({
+    queryKey: ["payitems", contractId],
+    queryFn: () => contractPayItemApi.byContract(contractId),
+  });
+  const [form, setForm] = useState<ContractPayItem>(EMPTY_ITEM(contractId, employeeId, defaultCurrency));
+  const [showHistory, setShowHistory] = useState(false);
+
+  const save = useMutation({
+    mutationFn: (i: ContractPayItem) => contractPayItemApi.create(i),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["payitems", contractId] });
+      setForm(EMPTY_ITEM(contractId, employeeId, defaultCurrency));
+    },
+  });
+  const del = useMutation({
+    mutationFn: (id: string) => contractPayItemApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["payitems", contractId] }),
+  });
+
+  const active = data.filter((i) => i.status === "ACTIVE");
+  const history = data.filter((i) => i.status !== "ACTIVE");
+
+  // Net of active items: earnings add, deductions subtract.
+  const net = active.reduce((sum, i) => {
+    const type = compById(i.payComponentId)?.componentType;
+    return sum + (type === "DEDUCTION" ? -Number(i.amount) : Number(i.amount));
+  }, 0);
+
+  const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const set = (k: keyof ContractPayItem, v: string | number) => setForm({ ...form, [k]: v } as ContractPayItem);
+
+  const renderRow = (i: ContractPayItem, faded: boolean) => (
+    <Stack key={i.id} direction="row" alignItems="center" justifyContent="space-between"
+      sx={{ py: 0.75, px: 1, opacity: faded ? 0.55 : 1, borderBottom: 1, borderColor: "divider" }}>
+      <Box>
+        <Typography variant="body2" fontWeight={600}>
+          {compLabel(i.payComponentId)} — {fmt(Number(i.amount))} {i.currencyCode ?? defaultCurrency ?? ""}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          {i.effectiveFrom}{i.effectiveTo ? ` → ${i.effectiveTo}` : " → current"}{i.remarks ? ` · ${i.remarks}` : ""}
+        </Typography>
+      </Box>
+      <IconButton size="small" color="error" onClick={() => i.id && del.mutate(i.id)}><DeleteIcon fontSize="small" /></IconButton>
+    </Stack>
+  );
+
+  return (
+    <Box sx={{ mt: 1.5, p: 1.5, bgcolor: "action.hover", borderRadius: 1 }}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+        <Typography variant="subtitle2">Pay items</Typography>
+        <Typography variant="subtitle2" color="primary">
+          Net: {fmt(net)} {defaultCurrency ?? ""}
+        </Typography>
+      </Stack>
+
+      {active.length === 0 && <Typography variant="body2" color="text.secondary">No active pay items. Add one below.</Typography>}
+      {active.map((i) => renderRow(i, false))}
+
+      {history.length > 0 && (
+        <Box mt={1}>
+          <Button size="small" onClick={() => setShowHistory((s) => !s)}>
+            {showHistory ? "Hide history" : `Show history (${history.length})`}
+          </Button>
+          {showHistory && history.map((i) => renderRow(i, true))}
+        </Box>
+      )}
+
+      <Divider sx={{ my: 1.5 }} textAlign="left"><Typography variant="caption">Add / change a pay item</Typography></Divider>
+      <Grid container spacing={1.5}>
+        <Grid item xs={12} sm={4}>
+          <SelectField label="Component" value={form.payComponentId} onChange={(v) => set("payComponentId", v)}
+            options={components.map((c) => ({ value: c.id!, label: `${c.name} (${c.category})` }))} allowEmpty={false} />
+        </Grid>
+        <Grid item xs={6} sm={3}>
+          <TextField fullWidth label="Amount" type="number" value={form.amount || ""} onChange={(e) => set("amount", Number(e.target.value))} />
+        </Grid>
+        <Grid item xs={6} sm={2}>
+          <TextField fullWidth label="Currency" value={form.currencyCode ?? ""} onChange={(e) => set("currencyCode", e.target.value.toUpperCase())} inputProps={{ maxLength: 3 }} />
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField fullWidth label="Effective From" type="date" InputLabelProps={{ shrink: true }}
+            value={form.effectiveFrom} onChange={(e) => set("effectiveFrom", e.target.value)} />
+        </Grid>
+        <Grid item xs={12}>
+          <TextField fullWidth label="Remarks (e.g. action sheet ref)" value={form.remarks ?? ""} onChange={(e) => set("remarks", e.target.value)} />
+        </Grid>
+        <Grid item xs={12}>
+          <Button variant="contained" size="small"
+            disabled={!form.payComponentId || !form.amount || save.isPending}
+            onClick={() => save.mutate(form)}>Apply</Button>
+          {save.isError && <Typography variant="caption" color="error" sx={{ ml: 2 }}>
+            Could not apply. The new effective date must be after the current item's date.
+          </Typography>}
+        </Grid>
+      </Grid>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+        Adding a component that already has an active item supersedes the old one — it moves to history, the new one becomes current.
+      </Typography>
+    </Box>
+  );
+}
+
+// =======================================================================
 // Contracts tab
 // =======================================================================
 const EMPTY_CONTRACT = (employeeId: string): Contract => ({
@@ -382,6 +521,7 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
   });
 
   const set = (k: keyof Contract, v: string) => setForm({ ...form, [k]: v });
+  const [openItems, setOpenItems] = useState<string | null>(null);
 
   return (
     <Stack spacing={2} mt={1}>
@@ -396,10 +536,16 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
               </Typography>
             </Box>
             <Box>
+              <Button size="small" onClick={() => setOpenItems(openItems === c.id ? null : (c.id ?? null))}>
+                {openItems === c.id ? "Hide pay items" : "Pay items"}
+              </Button>
               <Button size="small" onClick={() => setForm(c)}>Edit</Button>
               <IconButton size="small" color="error" onClick={() => c.id && del.mutate(c.id)}><DeleteIcon /></IconButton>
             </Box>
           </Stack>
+          {openItems === c.id && c.id && (
+            <PayItemsPanel contractId={c.id} employeeId={employeeId} defaultCurrency={c.baseCurrencyCode} />
+          )}
         </Paper>
       ))}
       {data.length === 0 && <Typography variant="body2" color="text.secondary">No contracts yet. Add one below.</Typography>}
