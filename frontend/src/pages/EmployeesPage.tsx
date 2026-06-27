@@ -31,6 +31,7 @@ import {
   employeeApi,
   employeeBankAccountApi,
   employeeDocumentApi,
+  legacyRawApi,
   lookupApi,
   payrollComponentApi,
 } from "../api/resources";
@@ -627,6 +628,82 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
 }
 
 // =======================================================================
+// Legacy Data — faithful snapshot of the old system (every column, even blank)
+// =======================================================================
+function LegacyTab({ employeeId }: { employeeId: string }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["legacy-raw", employeeId],
+    queryFn: () => legacyRawApi.byEmployee(employeeId),
+    retry: false,
+  });
+
+  if (isLoading) {
+    return <Typography sx={{ mt: 2 }}>Loading…</Typography>;
+  }
+  if (isError || !data) {
+    return (
+      <Alert severity="info" sx={{ mt: 2 }}>
+        No legacy snapshot for this employee. Run an import from the legacy system to populate it.
+      </Alert>
+    );
+  }
+
+  const headerEntries = Object.entries(data.header ?? {});
+  const detailCols = data.detail && data.detail.length > 0 ? Object.keys(data.detail[0]) : [];
+
+  return (
+    <Stack spacing={3} sx={{ mt: 2 }}>
+      <Alert severity="info">
+        نسخة خام من النظام القديم — كل الحقول كما هي حتى الفاضية. للأرشيف فقط (المحركات تقرأ من الجداول العادية).
+        {data.importedAt ? ` · Imported: ${new Date(data.importedAt).toLocaleString()}` : ""}
+        {data.source ? ` · Source: ${data.source}` : ""}
+      </Alert>
+
+      <Box>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Header ({headerEntries.length} fields)
+        </Typography>
+        <Paper variant="outlined">
+          <Grid container>
+            {headerEntries.map(([k, v]) => (
+              <Grid item xs={12} sm={6} md={4} key={k} sx={{ p: 1, borderBottom: 1, borderColor: "divider" }}>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+                  {k}
+                </Typography>
+                <Typography variant="body2" sx={{ wordBreak: "break-word" }}>
+                  {v === "" ? "—" : v}
+                </Typography>
+              </Grid>
+            ))}
+          </Grid>
+        </Paper>
+      </Box>
+
+      <Box>
+        <Typography variant="subtitle1" sx={{ mb: 1 }}>
+          Detail / pay lines ({data.detail?.length ?? 0})
+        </Typography>
+        {detailCols.length === 0 ? (
+          <Alert severity="info">No detail lines.</Alert>
+        ) : (
+          <div style={{ width: "100%", overflowX: "auto" }}>
+            <DataGrid
+              autoHeight
+              density="compact"
+              rows={data.detail.map((row, i) => ({ id: i, ...row }))}
+              columns={detailCols.map((c) => ({ field: c, headerName: c, minWidth: 120, flex: 1 }))}
+              hideFooterSelectedRowCount
+              pageSizeOptions={[5, 10, 25]}
+              initialState={{ pagination: { paginationModel: { pageSize: 10, page: 0 } } }}
+            />
+          </div>
+        )}
+      </Box>
+    </Stack>
+  );
+}
+
+// =======================================================================
 // Page
 // =======================================================================
 export default function EmployeesPage() {
@@ -693,6 +770,7 @@ export default function EmployeesPage() {
             <Tab label="Documents" />
             <Tab label="Bank" />
             <Tab label="Contracts" />
+            <Tab label="Legacy Data" />
           </Tabs>
 
           {tab === 0 && <PersonalTab form={form} set={set} />}
@@ -705,6 +783,7 @@ export default function EmployeesPage() {
           {tab === 1 && isSaved && <DocumentsTab employeeId={form.id!} />}
           {tab === 2 && isSaved && <BankTab employeeId={form.id!} />}
           {tab === 3 && isSaved && <ContractsTab employeeId={form.id!} />}
+          {tab === 4 && isSaved && <LegacyTab employeeId={form.id!} />}
 
           {save.isError && <Alert severity="error" sx={{ mt: 2 }}>Could not save. Check the fields and try again.</Alert>}
           {save.isSuccess && tab === 0 && <Alert severity="success" sx={{ mt: 2 }}>Saved.</Alert>}

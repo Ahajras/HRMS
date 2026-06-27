@@ -2,7 +2,10 @@ package com.hrms.migration.web;
 
 import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.migration.dto.ImportSummary;
+import com.hrms.migration.dto.LegacyRawDto;
 import com.hrms.migration.service.LegacyImportService;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -13,6 +16,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
+import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
@@ -45,6 +49,12 @@ public class LegacyImportController {
     @PostMapping
     public ImportSummary commit(@RequestParam("files") MultipartFile[] files) {
         return process(files, true);
+    }
+
+    /** Full legacy snapshot (header + all detail lines) for one employee. */
+    @GetMapping("/raw/{employeeId}")
+    public LegacyRawDto raw(@PathVariable UUID employeeId) {
+        return service.getRaw(employeeId);
     }
 
     private ImportSummary process(MultipartFile[] files, boolean commit) {

@@ -20,6 +20,16 @@ export interface ImportSummary {
   sample: ImportSamplePreview[];
 }
 
+// Faithful legacy snapshot for one employee: full header row + all detail
+// (pay) lines, every legacy column preserved (blanks kept).
+export interface LegacyRaw {
+  employeeNumber: string;
+  source?: string | null;
+  importedAt?: string | null;
+  header: Record<string, string>;
+  detail: Record<string, string>[];
+}
+
 export interface AuthUser {
   id?: string;
   companyId?: string;

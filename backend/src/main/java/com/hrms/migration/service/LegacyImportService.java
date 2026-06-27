@@ -12,8 +12,14 @@ import com.hrms.employee.repository.ContractRepository;
 import com.hrms.employee.repository.EmployeeDependentRepository;
 import com.hrms.employee.repository.EmployeeDocumentRepository;
 import com.hrms.employee.repository.EmployeeRepository;
+import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.migration.NationalityMap;
+import com.hrms.migration.domain.LegacyEmployeeRaw;
 import com.hrms.migration.dto.ImportSummary;
+import com.hrms.migration.dto.LegacyRawDto;
+import com.hrms.migration.repository.LegacyEmployeeRawRepository;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hrms.payroll.domain.PayrollComponent;
 import com.hrms.payroll.repository.PayrollComponentRepository;
 import org.springframework.stereotype.Service;
@@ -61,19 +67,24 @@ public class LegacyImportService {
     private final ContractPayItemRepository payItemRepo;
     private final EmployeeDocumentRepository documentRepo;
     private final EmployeeDependentRepository dependentRepo;
+    private final LegacyEmployeeRawRepository rawRepo;
+
+    private final ObjectMapper json = new ObjectMapper();
 
     public LegacyImportService(PayrollComponentRepository componentRepo,
                                EmployeeRepository employeeRepo,
                                ContractRepository contractRepo,
                                ContractPayItemRepository payItemRepo,
                                EmployeeDocumentRepository documentRepo,
-                               EmployeeDependentRepository dependentRepo) {
+                               EmployeeDependentRepository dependentRepo,
+                               LegacyEmployeeRawRepository rawRepo) {
         this.componentRepo = componentRepo;
         this.employeeRepo = employeeRepo;
         this.contractRepo = contractRepo;
         this.payItemRepo = payItemRepo;
         this.documentRepo = documentRepo;
         this.dependentRepo = dependentRepo;
+        this.rawRepo = rawRepo;
     }
 
     /**
@@ -304,6 +315,10 @@ public class LegacyImportService {
                 }
             }
 
+            // raw archive: keep the FULL legacy row (header + all detail lines)
+            // exactly as exported, so every column has a place even when blank.
+            upsertRaw(commit, companyId, empId, badge, h, lines, sum);
+
             if (sampled < 5) {
                 Map<String, Object> row = new LinkedHashMap<>();
                 row.put("employeeNumber", badge);
@@ -318,6 +333,43 @@ public class LegacyImportService {
         }
 
         return sum;
+    }
+
+    /** Parsed legacy snapshot for one employee (full header + all detail lines). */
+    @Transactional(readOnly = true)
+    public LegacyRawDto getRaw(UUID employeeId) {
+        LegacyEmployeeRaw raw = rawRepo.findByEmployeeId(employeeId)
+                .orElseThrow(() -> new ResourceNotFoundException(
+                        "No legacy snapshot for employee: " + employeeId));
+        LegacyRawDto dto = new LegacyRawDto();
+        dto.setEmployeeNumber(raw.getEmployeeNumber());
+        dto.setSource(raw.getSource());
+        dto.setImportedAt(raw.getImportedAt());
+        dto.setHeader(parseMap(raw.getHeaderJson()));
+        dto.setDetail(parseList(raw.getDetailJson()));
+        return dto;
+    }
+
+    private Map<String, String> parseMap(String s) {
+        if (s == null || s.isBlank()) {
+            return new LinkedHashMap<>();
+        }
+        try {
+            return json.readValue(s, new TypeReference<LinkedHashMap<String, String>>() {});
+        } catch (Exception e) {
+            return new LinkedHashMap<>();
+        }
+    }
+
+    private List<Map<String, String>> parseList(String s) {
+        if (s == null || s.isBlank()) {
+            return new ArrayList<>();
+        }
+        try {
+            return json.readValue(s, new TypeReference<List<LinkedHashMap<String, String>>>() {});
+        } catch (Exception e) {
+            return new ArrayList<>();
+        }
     }
 
     // ---- helpers -----------------------------------------------------------
@@ -380,6 +432,71 @@ public class LegacyImportService {
             documentRepo.save(doc);
         }
         sum.bump("document_inserted");
+    }
+
+    /**
+     * Idempotent upsert of the faithful legacy snapshot. Stores the full header
+     * row and every detail line as JSON, preserving ALL columns (blank values
+     * kept as "") so nothing from the legacy file is ever lost.
+     */
+    private void upsertRaw(boolean commit, UUID companyId, UUID empId, String badge,
+                           Map<String, Object> header, List<Map<String, Object>> lines,
+                           ImportSummary sum) {
+        if (!commit) {
+            sum.bump("raw_snapshot_pending");
+            return;
+        }
+        String headerJson = toJson(normalize(header));
+        List<Map<String, String>> normLines = new ArrayList<>();
+        for (Map<String, Object> l : lines) {
+            normLines.add(normalize(l));
+        }
+        String detailJson = toJson(normLines);
+
+        LegacyEmployeeRaw raw = rawRepo.findByCompanyIdAndEmployeeNumber(companyId, badge)
+                .orElseGet(LegacyEmployeeRaw::new);
+        boolean isNew = raw.getId() == null;
+        raw.setCompanyId(companyId);
+        raw.setEmployeeId(empId);
+        raw.setEmployeeNumber(badge);
+        raw.setSource("payresulth/payresultd");
+        raw.setHeaderJson(headerJson);
+        raw.setDetailJson(detailJson);
+        raw.setImportedAt(java.time.Instant.now());
+        rawRepo.save(raw);
+        sum.bump(isNew ? "raw_snapshot_inserted" : "raw_snapshot_updated");
+    }
+
+    /** Render a legacy row to an ordered map of clean display strings; keeps every key, blank -> "". */
+    private static Map<String, String> normalize(Map<String, Object> row) {
+        Map<String, String> out = new LinkedHashMap<>();
+        for (Map.Entry<String, Object> e : row.entrySet()) {
+            Object v = e.getValue();
+            String text;
+            if (v == null) {
+                text = "";
+            } else if (v instanceof Date d) {
+                text = d.toInstant().atZone(ZoneOffset.UTC).toLocalDate().toString();
+            } else if (v instanceof LocalDate ld) {
+                text = ld.toString();
+            } else if (v instanceof Number n) {
+                text = new BigDecimal(n.toString()).stripTrailingZeros().toPlainString();
+            } else if (v instanceof Boolean b) {
+                text = b ? "true" : "false";
+            } else {
+                text = v.toString().trim();
+            }
+            out.put(e.getKey(), text);
+        }
+        return out;
+    }
+
+    private String toJson(Object o) {
+        try {
+            return json.writeValueAsString(o);
+        } catch (Exception e) {
+            return "{}";
+        }
     }
 
     private static Map<String, List<Map<String, Object>>> groupByBadge(List<Map<String, Object>> rows) {

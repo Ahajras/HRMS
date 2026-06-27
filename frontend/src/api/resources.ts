@@ -9,6 +9,7 @@ import type {
   EmployeeBankAccount,
   EmployeeDocument,
   ImportSummary,
+  LegacyRaw,
   LookupValue,
   OrgUnitTreeNode,
   OrgUnitType,
@@ -119,6 +120,12 @@ export const employeeApi = {
 export const legacyImportApi = {
   preview: (files: File[]) => post("/legacy-import/preview", files),
   commit: (files: File[]) => post("/legacy-import", files),
+};
+
+// --- Legacy raw snapshot (full header + detail, every column preserved) ---
+export const legacyRawApi = {
+  byEmployee: (employeeId: string) =>
+    api.get<LegacyRaw>(`/legacy-import/raw/${employeeId}`).then((r) => r.data),
 };
 
 function post(url: string, files: File[]) {

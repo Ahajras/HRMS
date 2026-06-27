@@ -196,6 +196,18 @@ imports are repeatable.
 - DBF reader: javadbf 1.14.1 (Java); dbfread (Python, for analysis)
 - Frontend types: `frontend/src/api/types.ts`; UI: `frontend/src/pages/EmployeesPage.tsx`
 
+### Raw legacy snapshot (V12) — every field has a place
+- `legacy_employee_raw` table (V12): keeps the FULL legacy row per employee —
+  header (payresulth) + all detail lines (payresultd) — as **JSONB**, every
+  column preserved even when blank (future exports may populate them). Archive
+  only; engines still read the normalized tables.
+- Entity `com.hrms.migration.domain.LegacyEmployeeRaw` (`@JdbcTypeCode(SqlTypes.JSON)`),
+  repo `LegacyEmployeeRawRepository`, upsert in `LegacyImportService.upsertRaw`
+  (idempotent on company_id+employee_number; values normalized to display strings).
+- REST: `GET /api/v1/legacy-import/raw/{employeeId}` → `LegacyRawDto` (header map + detail list).
+- UI: **"Legacy Data" tab** in EmployeesPage (header key/value grid + detail DataGrid).
+  `legacyRawApi` in resources.ts, `LegacyRaw` type in types.ts.
+
 ### Sample snapshot note
 In the current legacy snapshot most columns are empty (gender, DOB, residence,
 etc.); `payresulth.dbf` (25 rows, ~75 cols) is the real employee file. Only ~6
