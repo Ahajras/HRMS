@@ -902,6 +902,7 @@ export default function EmployeesPage() {
   const [pagination, setPagination] = useState<GridPaginationModel>({ page: 0, pageSize: 20 });
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
+  const [payFilter, setPayFilter] = useState(""); // "" = all, MONTHLY, DAILY
   useEffect(() => {
     const t = setTimeout(() => {
       setDebounced(search);
@@ -910,8 +911,8 @@ export default function EmployeesPage() {
     return () => clearTimeout(t);
   }, [search]);
   const { data, isLoading } = useQuery({
-    queryKey: ["employees", pagination.page, pagination.pageSize, debounced],
-    queryFn: () => employeeApi.list(pagination.page, pagination.pageSize, debounced || undefined),
+    queryKey: ["employees", pagination.page, pagination.pageSize, debounced, payFilter],
+    queryFn: () => employeeApi.list(pagination.page, pagination.pageSize, debounced || undefined, payFilter || undefined),
   });
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState(0);
@@ -931,6 +932,7 @@ export default function EmployeesPage() {
     { field: "lastName", headerName: "Last Name", flex: 1 },
     { field: "hireDate", headerName: "Hire Date", width: 140 },
     { field: "email", headerName: "Email", flex: 1 },
+    { field: "payStatus", headerName: "Pay Status", width: 130 },
     { field: "status", headerName: "Status", width: 110 },
   ];
 
@@ -947,10 +949,24 @@ export default function EmployeesPage() {
         <Button startIcon={<AddIcon />} variant="contained" onClick={openNew}>New Employee</Button>
       </Stack>
 
+      <Tabs
+        value={payFilter}
+        onChange={(_, v) => { setPayFilter(v); setPagination((p) => ({ ...p, page: 0 })); }}
+        sx={{ mb: 1, borderBottom: 1, borderColor: "divider" }}
+      >
+        <Tab label="All" value="" />
+        <Tab label="Monthly" value="MONTHLY" />
+        <Tab label="Daily" value="DAILY" />
+      </Tabs>
+
       <TextField
         fullWidth
         size="small"
-        placeholder="Search by employee number, name, or action sheet…"
+        placeholder={
+          payFilter === "MONTHLY" ? "Search monthly employees…"
+            : payFilter === "DAILY" ? "Search daily employees…"
+            : "Search by employee number, name, or action sheet…"
+        }
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         sx={{ mb: 2 }}

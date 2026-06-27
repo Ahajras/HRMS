@@ -33,8 +33,9 @@ public class EmployeeController {
 
     @GetMapping
     public PageResponse<EmployeeDto> findAll(@RequestParam(required = false) String q,
+                                             @RequestParam(required = false) String payStatus,
                                              @PageableDefault(size = 20) Pageable pageable) {
-        return service.findAll(q, pageable);
+        return service.findAll(q, payStatus, pageable);
     }
 
     @GetMapping("/{id}")

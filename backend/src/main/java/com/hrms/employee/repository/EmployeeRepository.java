@@ -42,4 +42,34 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
             )
             """)
     Page<Employee> search(@Param("companyId") UUID companyId, @Param("q") String q, Pageable pageable);
+
+    /**
+     * Unified list with optional free-text ({@code q}) and optional pay-status
+     * keyword (e.g. DAILY, MONTHLY — matched as a substring of pay_status, which
+     * may hold legacy values like "DAILY PAID"). Null/blank params are ignored.
+     */
+    @Query("""
+            select distinct e from Employee e
+            where e.companyId = :companyId
+              and (:payStatus is null or :payStatus = ''
+                   or lower(coalesce(e.payStatus, '')) like lower(concat('%', :payStatus, '%')))
+              and (:q is null or :q = '' or (
+                    lower(e.employeeNumber) like lower(concat('%', :q, '%'))
+                 or lower(e.firstName) like lower(concat('%', :q, '%'))
+                 or lower(e.lastName) like lower(concat('%', :q, '%'))
+                 or lower(coalesce(e.middleName, '')) like lower(concat('%', :q, '%'))
+                 or lower(coalesce(e.arabicName, '')) like lower(concat('%', :q, '%'))
+                 or lower(coalesce(e.jobTitle, '')) like lower(concat('%', :q, '%'))
+                 or lower(coalesce(e.email, '')) like lower(concat('%', :q, '%'))
+                 or exists (
+                      select 1 from ContractPayItem pi
+                      where pi.employeeId = e.id and (
+                            lower(coalesce(pi.actionSheetNo, '')) like lower(concat('%', :q, '%'))
+                         or lower(coalesce(pi.remarks, '')) like lower(concat('%', :q, '%'))
+                      )
+                 )
+              ))
+            """)
+    Page<Employee> searchFiltered(@Param("companyId") UUID companyId, @Param("q") String q,
+                                  @Param("payStatus") String payStatus, Pageable pageable);
 }
