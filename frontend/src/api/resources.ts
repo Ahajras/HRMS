@@ -16,7 +16,25 @@ import type {
   OrganizationUnit,
   PageResponse,
   PayrollComponent,
+  Rule,
+  RulePackage,
 } from "./types";
+
+// --- Rule engine (country law) ---
+export const rulePackageApi = {
+  list: () => api.get<RulePackage[]>("/rule-packages").then((r) => r.data),
+  getActive: () => api.get<{ packageCode: string }>("/rule-packages/active").then((r) => r.data),
+  setActive: (packageCode: string) =>
+    api.put<{ packageCode: string }>("/rule-packages/active", { packageCode }).then((r) => r.data),
+};
+
+export const ruleApi = {
+  byPackage: (packageCode: string) =>
+    api.get<Rule[]>("/rules", { params: { packageCode } }).then((r) => r.data),
+  create: (d: Rule) => api.post<Rule>("/rules", d).then((r) => r.data),
+  update: (id: string, d: Rule) => api.put<Rule>(`/rules/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/rules/${id}`).then(() => undefined),
+};
 
 // --- Lookups (configurable dropdown sources) ---
 export const lookupApi = {

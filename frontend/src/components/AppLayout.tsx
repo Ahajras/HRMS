@@ -20,6 +20,7 @@ import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import LayersIcon from "@mui/icons-material/Layers";
 import PaymentsIcon from "@mui/icons-material/Payments";
 import PublicIcon from "@mui/icons-material/Public";
+import GavelIcon from "@mui/icons-material/Gavel";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
 import SecurityIcon from "@mui/icons-material/Security";
@@ -43,6 +44,7 @@ const NAV: NavItem[] = [
   { to: "/org-unit-types", label: "Org Levels", icon: <LayersIcon />, authority: "organization.read" },
   { to: "/payroll-components", label: "Pay Components", icon: <PaymentsIcon />, authority: "payroll.config.read" },
   { to: "/countries", label: "Countries", icon: <PublicIcon />, authority: "reference.read" },
+  { to: "/country-law", label: "Country Law", icon: <GavelIcon />, authority: "reference.read" },
   { to: "/currencies", label: "Currencies", icon: <AttachMoneyIcon />, authority: "reference.read" },
   { to: "/users", label: "Users", icon: <ManageAccountsIcon />, authority: "security.user.read" },
   { to: "/roles", label: "Roles", icon: <SecurityIcon />, authority: "security.role.read" },

@@ -6,6 +6,7 @@ import OrganizationPage from "./pages/OrganizationPage";
 import OrgUnitTypesPage from "./pages/OrgUnitTypesPage";
 import PayrollComponentsPage from "./pages/PayrollComponentsPage";
 import CountriesPage from "./pages/CountriesPage";
+import CountryLawPage from "./pages/CountryLawPage";
 import CurrenciesPage from "./pages/CurrenciesPage";
 import UsersPage from "./pages/UsersPage";
 import RolesPage from "./pages/RolesPage";
@@ -43,6 +44,7 @@ export default function App() {
         <Route path="/org-unit-types" element={<OrgUnitTypesPage />} />
         <Route path="/payroll-components" element={<PayrollComponentsPage />} />
         <Route path="/countries" element={<CountriesPage />} />
+        <Route path="/country-law" element={<CountryLawPage />} />
         <Route path="/currencies" element={<CurrenciesPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/roles" element={<RolesPage />} />
