@@ -26,9 +26,11 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import SearchIcon from "@mui/icons-material/Search";
 import {
+  assignmentApi,
   bankApi,
   contractApi,
   contractPayItemApi,
+  costCodeApi,
   countryApi,
   currencyApi,
   employeeApi,
@@ -36,9 +38,12 @@ import {
   employeeDocumentApi,
   legacyRawApi,
   lookupApi,
+  organizationUnitApi,
   payrollComponentApi,
+  projectApi,
 } from "../api/resources";
 import type {
+  Assignment,
   Contract,
   ContractPayItem,
   Employee,
@@ -793,6 +798,103 @@ function LegacyTab({ employeeId }: { employeeId: string }) {
 }
 
 // =======================================================================
+// Assignment tab (org unit / position / supervisor / project / cost code)
+// =======================================================================
+const EMPTY_ASSIGNMENT = (employeeId: string): Assignment => ({
+  employeeId,
+  organizationUnitId: "",
+  primaryAssignment: true,
+  effectiveFrom: new Date().toISOString().slice(0, 10),
+  status: "ACTIVE",
+});
+
+function AssignmentTab({ employeeId }: { employeeId: string }) {
+  const qc = useQueryClient();
+  const { data = [] } = useQuery({ queryKey: ["assignments", employeeId], queryFn: () => assignmentApi.byEmployee(employeeId) });
+  const { data: orgUnits = [] } = useQuery({ queryKey: ["orgUnits"], queryFn: organizationUnitApi.list, staleTime: 5 * 60 * 1000 });
+  const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list, staleTime: 5 * 60 * 1000 });
+  const [form, setForm] = useState<Assignment>(EMPTY_ASSIGNMENT(employeeId));
+  const { data: costCodes = [] } = useQuery({
+    queryKey: ["costCodes", form.projectId],
+    queryFn: () => costCodeApi.byProject(form.projectId!),
+    enabled: Boolean(form.projectId),
+  });
+
+  const orgName = (id: string) => orgUnits.find((o) => o.id === id)?.name ?? id;
+  const projName = (id?: string) => projects.find((p) => p.id === id)?.name ?? "—";
+
+  const save = useMutation({
+    mutationFn: (a: Assignment) => (a.id ? assignmentApi.update(a.id, a) : assignmentApi.create(a)),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["assignments", employeeId] }); setForm(EMPTY_ASSIGNMENT(employeeId)); },
+  });
+  const del = useMutation({
+    mutationFn: (id: string) => assignmentApi.remove(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["assignments", employeeId] }),
+  });
+
+  const set = (k: keyof Assignment, v: string | boolean) => setForm({ ...form, [k]: v } as Assignment);
+
+  return (
+    <Stack spacing={2} mt={1}>
+      {data.map((a) => (
+        <Paper key={a.id} variant="outlined" sx={{ p: 1.5 }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between">
+            <Box>
+              <Typography fontWeight={600}>
+                {orgName(a.organizationUnitId)}{a.positionTitle ? ` · ${a.positionTitle}` : ""} {a.primaryAssignment ? "· Primary" : ""}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                Project: {projName(a.projectId)} · {a.effectiveFrom}{a.effectiveTo ? ` → ${a.effectiveTo}` : " → open"} · {a.status}
+              </Typography>
+            </Box>
+            <Box>
+              <Button size="small" onClick={() => setForm(a)}>Edit</Button>
+              <IconButton size="small" color="error" onClick={() => a.id && del.mutate(a.id)}><DeleteIcon /></IconButton>
+            </Box>
+          </Stack>
+        </Paper>
+      ))}
+      {data.length === 0 && <Typography variant="body2" color="text.secondary">No assignments yet. Add one below.</Typography>}
+
+      <Divider textAlign="left"><Typography variant="caption">{form.id ? "Edit assignment" : "Add assignment"}</Typography></Divider>
+      <Grid container spacing={2}>
+        <Grid item xs={12} sm={6}>
+          <SelectField label="Organization Unit" value={form.organizationUnitId} onChange={(v) => set("organizationUnitId", v)}
+            options={orgUnits.map((o) => ({ value: o.id!, label: o.name }))} allowEmpty={false} />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <TextField fullWidth label="Position" value={form.positionTitle ?? ""} onChange={(e) => set("positionTitle", e.target.value)} />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <SelectField label="Project" value={form.projectId} onChange={(v) => setForm({ ...form, projectId: v, costCodeId: undefined })}
+            options={projects.map((p) => ({ value: p.id!, label: `${p.code} — ${p.name}` }))} />
+        </Grid>
+        <Grid item xs={12} sm={6}>
+          <SelectField label="Cost Code" value={form.costCodeId} onChange={(v) => set("costCodeId", v)}
+            options={costCodes.map((c) => ({ value: c.id!, label: `${c.code} — ${c.name}` }))} />
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <TextField fullWidth label="Effective From" type="date" InputLabelProps={{ shrink: true }}
+            value={form.effectiveFrom} onChange={(e) => set("effectiveFrom", e.target.value)} />
+        </Grid>
+        <Grid item xs={12} sm={4}>
+          <SelectField label="Primary?" value={form.primaryAssignment ? "Y" : "N"} onChange={(v) => set("primaryAssignment", v === "Y")}
+            options={[{ value: "Y", label: "Yes" }, { value: "N", label: "No" }]} allowEmpty={false} />
+        </Grid>
+        <Grid item xs={12}>
+          <Stack direction="row" spacing={1}>
+            <Button variant="contained" disabled={!form.organizationUnitId || save.isPending} onClick={() => save.mutate(form)}>
+              {form.id ? "Update" : "Add"}
+            </Button>
+            {form.id && <Button onClick={() => setForm(EMPTY_ASSIGNMENT(employeeId))}>Cancel</Button>}
+          </Stack>
+        </Grid>
+      </Grid>
+    </Stack>
+  );
+}
+
+// =======================================================================
 // Page
 // =======================================================================
 export default function EmployeesPage() {
@@ -887,6 +989,7 @@ export default function EmployeesPage() {
             <Tab label="Documents" />
             <Tab label="Bank" />
             <Tab label="Contracts" />
+            <Tab label="Assignment" />
             <Tab label="Legacy Data" />
           </Tabs>
 
@@ -900,7 +1003,8 @@ export default function EmployeesPage() {
           {tab === 1 && isSaved && <DocumentsTab employeeId={form.id!} />}
           {tab === 2 && isSaved && <BankTab employeeId={form.id!} />}
           {tab === 3 && isSaved && <ContractsTab employeeId={form.id!} />}
-          {tab === 4 && isSaved && <LegacyTab employeeId={form.id!} />}
+          {tab === 4 && isSaved && <AssignmentTab employeeId={form.id!} />}
+          {tab === 5 && isSaved && <LegacyTab employeeId={form.id!} />}
 
           {save.isError && <Alert severity="error" sx={{ mt: 2 }}>Could not save. Check the fields and try again.</Alert>}
           {save.isSuccess && tab === 0 && <Alert severity="success" sx={{ mt: 2 }}>Saved.</Alert>}

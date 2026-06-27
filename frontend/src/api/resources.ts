@@ -1,5 +1,6 @@
 import { api } from "./client";
 import type {
+  Assignment,
   Bank,
   Contract,
   ContractPayItem,
@@ -21,6 +22,15 @@ import type {
   Rule,
   RulePackage,
 } from "./types";
+
+// --- Assignments ---
+export const assignmentApi = {
+  byEmployee: (employeeId: string) =>
+    api.get<Assignment[]>("/assignments", { params: { employeeId } }).then((r) => r.data),
+  create: (d: Assignment) => api.post<Assignment>("/assignments", d).then((r) => r.data),
+  update: (id: string, d: Assignment) => api.put<Assignment>(`/assignments/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/assignments/${id}`).then(() => undefined),
+};
 
 // --- Projects & cost codes ---
 export const projectApi = {

@@ -213,6 +213,20 @@ export interface ContractPayItem {
   actionSheetNo?: string;
 }
 
+export interface Assignment {
+  id?: string;
+  employeeId: string;
+  organizationUnitId: string;
+  positionTitle?: string;
+  supervisorEmployeeId?: string;
+  projectId?: string;
+  costCodeId?: string;
+  primaryAssignment?: boolean;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  status?: string;
+}
+
 export interface Project {
   id?: string;
   companyId?: string;
