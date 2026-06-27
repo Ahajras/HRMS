@@ -366,7 +366,7 @@ public class LegacyImportService {
             return new ArrayList<>();
         }
         try {
-            return json.readValue(s, new TypeReference<List<LinkedHashMap<String, String>>>() {});
+            return json.readValue(s, new TypeReference<List<Map<String, String>>>() {});
         } catch (Exception e) {
             return new ArrayList<>();
         }
