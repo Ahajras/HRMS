@@ -38,6 +38,20 @@ public class Contract extends AuditableEntity implements EffectiveDated {
     @Column(name = "status", nullable = false, length = 20)
     private String status = "ACTIVE";
 
+    // Standard/reference employment terms (NOT actual worked hours — those come
+    // from the timesheet/shift in Phase 4). Carried from the legacy employee file.
+    @Column(name = "working_hours_per_week")
+    private java.math.BigDecimal workingHoursPerWeek;
+
+    @Column(name = "working_days_per_week")
+    private Integer workingDaysPerWeek;
+
+    @Column(name = "overtime_category", length = 10)
+    private String overtimeCategory;
+
+    @Column(name = "overtime_category_desc", length = 60)
+    private String overtimeCategoryDesc;
+
     public UUID getEmployeeId() { return employeeId; }
     public void setEmployeeId(UUID employeeId) { this.employeeId = employeeId; }
 
@@ -60,4 +74,16 @@ public class Contract extends AuditableEntity implements EffectiveDated {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public java.math.BigDecimal getWorkingHoursPerWeek() { return workingHoursPerWeek; }
+    public void setWorkingHoursPerWeek(java.math.BigDecimal workingHoursPerWeek) { this.workingHoursPerWeek = workingHoursPerWeek; }
+
+    public Integer getWorkingDaysPerWeek() { return workingDaysPerWeek; }
+    public void setWorkingDaysPerWeek(Integer workingDaysPerWeek) { this.workingDaysPerWeek = workingDaysPerWeek; }
+
+    public String getOvertimeCategory() { return overtimeCategory; }
+    public void setOvertimeCategory(String overtimeCategory) { this.overtimeCategory = overtimeCategory; }
+
+    public String getOvertimeCategoryDesc() { return overtimeCategoryDesc; }
+    public void setOvertimeCategoryDesc(String overtimeCategoryDesc) { this.overtimeCategoryDesc = overtimeCategoryDesc; }
 }

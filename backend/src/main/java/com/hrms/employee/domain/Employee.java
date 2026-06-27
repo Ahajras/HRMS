@@ -67,6 +67,18 @@ public class Employee extends AuditableEntity {
     @Column(name = "status", nullable = false, length = 20)
     private String status = "ACTIVE";
 
+    @Column(name = "job_title", length = 150)
+    private String jobTitle;
+
+    @Column(name = "job_title_code", length = 20)
+    private String jobTitleCode;
+
+    @Column(name = "pay_status", length = 30)
+    private String payStatus;
+
+    @Column(name = "arabic_name", length = 150)
+    private String arabicName;
+
     public UUID getCompanyId() { return companyId; }
     public void setCompanyId(UUID companyId) { this.companyId = companyId; }
 
@@ -117,4 +129,16 @@ public class Employee extends AuditableEntity {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getJobTitle() { return jobTitle; }
+    public void setJobTitle(String jobTitle) { this.jobTitle = jobTitle; }
+
+    public String getJobTitleCode() { return jobTitleCode; }
+    public void setJobTitleCode(String jobTitleCode) { this.jobTitleCode = jobTitleCode; }
+
+    public String getPayStatus() { return payStatus; }
+    public void setPayStatus(String payStatus) { this.payStatus = payStatus; }
+
+    public String getArabicName() { return arabicName; }
+    public void setArabicName(String arabicName) { this.arabicName = arabicName; }
 }

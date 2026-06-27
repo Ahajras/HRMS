@@ -147,6 +147,10 @@ export interface Employee {
   email?: string;
   phone?: string;
   status?: string;
+  jobTitle?: string;
+  jobTitleCode?: string;
+  payStatus?: string;
+  arabicName?: string;
 }
 
 export interface LookupValue {
@@ -178,6 +182,11 @@ export interface Contract {
   effectiveTo?: string;
   baseCurrencyCode?: string;
   status?: string;
+  // Reference-only standard terms (actual worked hours come from the timesheet/shift).
+  workingHoursPerWeek?: number;
+  workingDaysPerWeek?: number;
+  overtimeCategory?: string;
+  overtimeCategoryDesc?: string;
 }
 
 export interface ContractPayItem {

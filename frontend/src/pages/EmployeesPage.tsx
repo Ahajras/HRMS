@@ -170,6 +170,21 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
           value={form.terminationDate ?? ""} onChange={(e) => set("terminationDate", e.target.value)} />
       </Grid>
 
+      <Grid item xs={12}><Divider textAlign="left"><Typography variant="caption">Employment Classification</Typography></Divider></Grid>
+
+      <Grid item xs={12} sm={4}>
+        <TextField fullWidth label="Job Title" value={form.jobTitle ?? ""} onChange={(e) => set("jobTitle", e.target.value)} />
+      </Grid>
+      <Grid item xs={12} sm={4}>
+        <TextField fullWidth label="Job Title Code" value={form.jobTitleCode ?? ""} onChange={(e) => set("jobTitleCode", e.target.value)} />
+      </Grid>
+      <Grid item xs={12} sm={4}>
+        <TextField fullWidth label="Pay Status" value={form.payStatus ?? ""} onChange={(e) => set("payStatus", e.target.value)} />
+      </Grid>
+      <Grid item xs={12} sm={4}>
+        <TextField fullWidth label="Arabic Name" value={form.arabicName ?? ""} onChange={(e) => set("arabicName", e.target.value)} />
+      </Grid>
+
       <Grid item xs={12}><Divider textAlign="left"><Typography variant="caption">Contact & Address</Typography></Divider></Grid>
 
       <Grid item xs={12} sm={6}>
@@ -521,6 +536,7 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
   });
 
   const set = (k: keyof Contract, v: string) => setForm({ ...form, [k]: v });
+  const setNum = (k: keyof Contract, v: string) => setForm({ ...form, [k]: v === "" ? undefined : Number(v) });
   const [openItems, setOpenItems] = useState<string | null>(null);
 
   return (
@@ -533,6 +549,9 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
               <Typography variant="caption" color="text.secondary">
                 {c.effectiveFrom}{c.effectiveTo ? ` → ${c.effectiveTo}` : " → open"}
                 {c.baseCurrencyCode ? ` · ${c.baseCurrencyCode}` : ""} · {c.status}
+                {c.workingHoursPerWeek != null ? ` · ${c.workingHoursPerWeek}h/wk` : ""}
+                {c.workingDaysPerWeek != null ? ` · ${c.workingDaysPerWeek}d/wk` : ""}
+                {c.overtimeCategory ? ` · OT ${c.overtimeCategory}` : ""}
               </Typography>
             </Box>
             <Box>
@@ -574,6 +593,25 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
         <Grid item xs={12} sm={4}>
           <SelectField label="Status" value={form.status} onChange={(v) => set("status", v)}
             options={statuses.map((s) => ({ value: s.code, label: s.label }))} allowEmpty={false} />
+        </Grid>
+        <Grid item xs={12}>
+          <Divider textAlign="left"><Typography variant="caption">Reference terms (نظري فقط — الساعات الفعلية من التايم شيت)</Typography></Divider>
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField fullWidth label="Working Hours / Week" type="number" value={form.workingHoursPerWeek ?? ""}
+            onChange={(e) => setNum("workingHoursPerWeek", e.target.value)} />
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField fullWidth label="Working Days / Week" type="number" value={form.workingDaysPerWeek ?? ""}
+            onChange={(e) => setNum("workingDaysPerWeek", e.target.value)} />
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField fullWidth label="Overtime Category" value={form.overtimeCategory ?? ""}
+            onChange={(e) => set("overtimeCategory", e.target.value)} />
+        </Grid>
+        <Grid item xs={12} sm={3}>
+          <TextField fullWidth label="Overtime Category Desc" value={form.overtimeCategoryDesc ?? ""}
+            onChange={(e) => set("overtimeCategoryDesc", e.target.value)} />
         </Grid>
         <Grid item xs={12}>
           <Stack direction="row" spacing={1}>

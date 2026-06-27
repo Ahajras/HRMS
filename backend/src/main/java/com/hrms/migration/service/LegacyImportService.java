@@ -182,14 +182,7 @@ public class LegacyImportService {
             if (!empIsNew) {
                 Employee e = existingEmp.get();
                 if (commit) {
-                    e.setFirstName(name[0]);
-                    e.setLastName(name[1]);
-                    e.setNationalityCountryCode(iso2);
-                    e.setDateOfBirth(date(h.get("DTBIRTH")));
-                    e.setGender(gender(s(h.get("SEX"))));
-                    e.setHireDate(hire);
-                    e.setTerminationDate(date(h.get("DTERMINATE")));
-                    e.setStatus(truthy(h.get("ACTIVE")) ? "ACTIVE" : "TERMINATED");
+                    applyEmployee(e, h, name, iso2, hire);
                     employeeRepo.save(e);
                 }
                 sum.bump("employee_updated");
@@ -198,14 +191,7 @@ public class LegacyImportService {
                     Employee e = new Employee();
                     e.setCompanyId(companyId);
                     e.setEmployeeNumber(badge);
-                    e.setFirstName(name[0]);
-                    e.setLastName(name[1]);
-                    e.setNationalityCountryCode(iso2);
-                    e.setDateOfBirth(date(h.get("DTBIRTH")));
-                    e.setGender(gender(s(h.get("SEX"))));
-                    e.setHireDate(hire);
-                    e.setTerminationDate(date(h.get("DTERMINATE")));
-                    e.setStatus(truthy(h.get("ACTIVE")) ? "ACTIVE" : "TERMINATED");
+                    applyEmployee(e, h, name, iso2, hire);
                     empId = employeeRepo.save(e).getId();
                 }
                 sum.bump("employee_inserted");
@@ -221,10 +207,7 @@ public class LegacyImportService {
                 Contract ct = existingCt.get();
                 contractId = ct.getId();
                 if (commit) {
-                    ct.setContractType("PERMANENT");
-                    ct.setEffectiveFrom(hire);
-                    ct.setEffectiveTo(date(h.get("CONTR_END")));
-                    ct.setBaseCurrencyCode(baseCcy);
+                    applyContract(ct, h, hire, baseCcy);
                     contractRepo.save(ct);
                 }
                 sum.bump("contract_updated");
@@ -233,36 +216,23 @@ public class LegacyImportService {
                     Contract ct = new Contract();
                     ct.setEmployeeId(empId);
                     ct.setContractNumber(contractNumber);
-                    ct.setContractType("PERMANENT");
-                    ct.setEffectiveFrom(hire);
-                    ct.setEffectiveTo(date(h.get("CONTR_END")));
-                    ct.setBaseCurrencyCode(baseCcy);
+                    applyContract(ct, h, hire, baseCcy);
                     contractId = contractRepo.save(ct).getId();
                 }
                 sum.bump("contract_inserted");
             }
 
-            // document: PERSONALNO -> PERSONAL_NO
-            String personalNo = s(h.get("PERSONALNO"));
-            if (personalNo != null) {
-                String docNum = trunc(personalNo, 100);
-                Optional<EmployeeDocument> existingDoc = empId != null
-                        ? documentRepo.findByEmployeeIdAndDocumentTypeAndDocumentNumber(empId, "PERSONAL_NO", docNum)
-                        : Optional.empty();
-                if (existingDoc.isPresent()) {
-                    sum.bump("document_skipped");
-                } else {
-                    if (commit && empId != null) {
-                        EmployeeDocument doc = new EmployeeDocument();
-                        doc.setEmployeeId(empId);
-                        doc.setDocumentType("PERSONAL_NO");
-                        doc.setDocumentNumber(docNum);
-                        doc.setIssuingCountryCode(iso2);
-                        documentRepo.save(doc);
-                    }
-                    sum.bump("document_inserted");
-                }
-            }
+            // identity documents (only created when the legacy field carries a value)
+            upsertDocument(commit, empId, "PERSONAL_NO", s(h.get("PERSONALNO")),
+                    iso2, null, null, null, sum);
+            upsertDocument(commit, empId, "WORK_PERMIT", s(h.get("WP_NO")),
+                    iso2, date(h.get("WP_ISS")), date(h.get("WP_EXP")), s(h.get("WP_AUTHISS")), sum);
+            upsertDocument(commit, empId, "NATIONAL_ID", s(h.get("ID_NUM")),
+                    iso2, null, null, null, sum);
+            upsertDocument(commit, empId, "RESIDENCE_PERMIT", s(h.get("RP_NUM")),
+                    iso2, null, null, null, sum);
+            upsertDocument(commit, empId, "SOCIAL_SECURITY", s(h.get("SOCSECNO")),
+                    iso2, null, null, null, sum);
 
             // pay items
             String payPreview = null;
@@ -352,6 +322,66 @@ public class LegacyImportService {
 
     // ---- helpers -----------------------------------------------------------
 
+    /** Apply legacy header fields onto an employee (used for both insert and update). */
+    private static void applyEmployee(Employee e, Map<String, Object> h, String[] name,
+                                      String iso2, LocalDate hire) {
+        e.setFirstName(name[0]);
+        e.setLastName(name[1]);
+        e.setNationalityCountryCode(iso2);
+        e.setMaritalStatus(marital(s(h.get("MARITAL"))));
+        e.setDateOfBirth(date(h.get("DTBIRTH")));
+        e.setGender(gender(s(h.get("SEX"))));
+        e.setHireDate(hire);
+        e.setTerminationDate(date(h.get("DTERMINATE")));
+        e.setJobTitle(trunc(s(h.get("TITLEDESC")), 150));
+        e.setJobTitleCode(trunc(s(h.get("TITLECODE")), 20));
+        e.setPayStatus(trunc(s(h.get("PAY_STATUS")), 30));
+        e.setArabicName(trunc(s(h.get("ARB_NAME")), 150));
+        e.setStatus(truthy(h.get("ACTIVE")) ? "ACTIVE" : "TERMINATED");
+    }
+
+    /** Apply legacy header fields onto a contract (used for both insert and update). */
+    private static void applyContract(Contract ct, Map<String, Object> h, LocalDate hire, String baseCcy) {
+        ct.setContractType(contractType(s(h.get("CONTR_TYPE"))));
+        ct.setEffectiveFrom(hire);
+        ct.setEffectiveTo(date(h.get("CONTR_END")));
+        ct.setBaseCurrencyCode(baseCcy);
+        // Reference-only standard terms; actual worked hours come from the timesheet (Phase 4).
+        ct.setWorkingHoursPerWeek(decimal(h.get("WORKING_HR")));
+        ct.setWorkingDaysPerWeek(intval(h.get("WORKING_DY")));
+        ct.setOvertimeCategory(trunc(s(h.get("OT_CAT")), 10));
+        ct.setOvertimeCategoryDesc(trunc(s(h.get("OT_CATDESC")), 60));
+    }
+
+    /** Idempotent identity-document upsert; no-op when the number is blank. */
+    private void upsertDocument(boolean commit, UUID empId, String type, String number,
+                                String issuingCountry, LocalDate issueDate, LocalDate expiryDate,
+                                String issuingAuthority, ImportSummary sum) {
+        if (number == null) {
+            return;
+        }
+        String docNum = trunc(number, 100);
+        Optional<EmployeeDocument> existing = empId != null
+                ? documentRepo.findByEmployeeIdAndDocumentTypeAndDocumentNumber(empId, type, docNum)
+                : Optional.empty();
+        if (existing.isPresent()) {
+            sum.bump("document_skipped");
+            return;
+        }
+        if (commit && empId != null) {
+            EmployeeDocument doc = new EmployeeDocument();
+            doc.setEmployeeId(empId);
+            doc.setDocumentType(type);
+            doc.setDocumentNumber(docNum);
+            doc.setIssuingCountryCode(issuingCountry);
+            doc.setIssueDate(issueDate);
+            doc.setExpiryDate(expiryDate);
+            doc.setIssuingAuthority(trunc(issuingAuthority, 150));
+            documentRepo.save(doc);
+        }
+        sum.bump("document_inserted");
+    }
+
     private static Map<String, List<Map<String, Object>>> groupByBadge(List<Map<String, Object>> rows) {
         Map<String, List<Map<String, Object>>> by = new LinkedHashMap<>();
         for (Map<String, Object> r : rows) {
@@ -418,6 +448,29 @@ public class LegacyImportService {
             case "F": return "FEMALE";
             default: return null;
         }
+    }
+
+    private static String marital(String v) {
+        if (v == null) {
+            return null;
+        }
+        switch (v.toUpperCase()) {
+            case "S": return "SINGLE";
+            case "M": return "MARRIED";
+            case "D": return "DIVORCED";
+            case "W": return "WIDOWED";
+            default: return trunc(v.toUpperCase(), 20);
+        }
+    }
+
+    /** Real legacy contract type when present, else default PERMANENT. */
+    private static String contractType(String v) {
+        return v == null ? "PERMANENT" : trunc(v.toUpperCase(), 30);
+    }
+
+    private static Integer intval(Object o) {
+        BigDecimal d = decimal(o);
+        return d == null ? null : d.intValue();
     }
 
     private static String[] splitName(String full) {
