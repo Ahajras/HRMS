@@ -16,9 +16,28 @@ import type {
   OrganizationUnit,
   PageResponse,
   PayrollComponent,
+  Project,
+  CostCode,
   Rule,
   RulePackage,
 } from "./types";
+
+// --- Projects & cost codes ---
+export const projectApi = {
+  list: () => api.get<Project[]>("/projects").then((r) => r.data),
+  create: (d: Project) => api.post<Project>("/projects", d).then((r) => r.data),
+  update: (id: string, d: Project) => api.put<Project>(`/projects/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/projects/${id}`).then(() => undefined),
+};
+
+export const costCodeApi = {
+  list: () => api.get<CostCode[]>("/cost-codes").then((r) => r.data),
+  byProject: (projectId: string) =>
+    api.get<CostCode[]>("/cost-codes", { params: { projectId } }).then((r) => r.data),
+  create: (d: CostCode) => api.post<CostCode>("/cost-codes", d).then((r) => r.data),
+  update: (id: string, d: CostCode) => api.put<CostCode>(`/cost-codes/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/cost-codes/${id}`).then(() => undefined),
+};
 
 // --- Rule engine (country law) ---
 export const rulePackageApi = {

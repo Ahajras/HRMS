@@ -128,6 +128,7 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
   const genders = useLookup("GENDER");
   const maritals = useLookup("MARITAL_STATUS");
   const statuses = useLookup("EMPLOYEE_STATUS");
+  const payStatuses = useLookup("PAY_STATUS");
   const countries = useCountries();
 
   const countryOpts = countries.map((c) => ({ value: c.code, label: c.name }));
@@ -164,6 +165,9 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
       </Grid>
       <Grid item xs={12} sm={4}>
         <SelectField label="Status" value={form.status} onChange={(v) => set("status", v)} options={lk(statuses)} allowEmpty={false} />
+      </Grid>
+      <Grid item xs={12} sm={4}>
+        <SelectField label="Pay Status" value={form.payStatus} onChange={(v) => set("payStatus", v)} options={lk(payStatuses)} />
       </Grid>
       <Grid item xs={12} sm={4}>
         <TextField fullWidth label="Hire Date" type="date" InputLabelProps={{ shrink: true }}
@@ -436,8 +440,16 @@ function PayItemsPanel({ contractId, employeeId, defaultCurrency }: {
   });
 
   const today = new Date().toISOString().slice(0, 10);
-  const isCurrent = (i: ContractPayItem) => i.status === "ACTIVE" && (!i.effectiveTo || i.effectiveTo >= today);
-  const active = data.filter(isCurrent);
+  // Current value of each component = its latest active row (handles legacy
+  // imports that leave an older row ACTIVE, so a component is never double-counted).
+  const latestByComp = new Map<string, ContractPayItem>();
+  for (const i of data) {
+    if (i.status !== "ACTIVE") continue;
+    if (i.effectiveTo && i.effectiveTo < today) continue;
+    const cur = latestByComp.get(i.payComponentId);
+    if (!cur || i.effectiveFrom > cur.effectiveFrom) latestByComp.set(i.payComponentId, i);
+  }
+  const active = Array.from(latestByComp.values());
 
   const net = active.reduce((sum, i) => {
     const type = compById(i.payComponentId)?.componentType;

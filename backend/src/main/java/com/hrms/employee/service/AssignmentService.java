@@ -60,6 +60,8 @@ public class AssignmentService {
         entity.setOrganizationUnitId(dto.getOrganizationUnitId());
         entity.setPositionTitle(dto.getPositionTitle());
         entity.setSupervisorEmployeeId(dto.getSupervisorEmployeeId());
+        entity.setProjectId(dto.getProjectId());
+        entity.setCostCodeId(dto.getCostCodeId());
         entity.setPrimaryAssignment(dto.isPrimaryAssignment());
         entity.setEffectiveFrom(dto.getEffectiveFrom());
         entity.setEffectiveTo(dto.getEffectiveTo());
@@ -75,6 +77,8 @@ public class AssignmentService {
         dto.setOrganizationUnitId(entity.getOrganizationUnitId());
         dto.setPositionTitle(entity.getPositionTitle());
         dto.setSupervisorEmployeeId(entity.getSupervisorEmployeeId());
+        dto.setProjectId(entity.getProjectId());
+        dto.setCostCodeId(entity.getCostCodeId());
         dto.setPrimaryAssignment(entity.isPrimaryAssignment());
         dto.setEffectiveFrom(entity.getEffectiveFrom());
         dto.setEffectiveTo(entity.getEffectiveTo());

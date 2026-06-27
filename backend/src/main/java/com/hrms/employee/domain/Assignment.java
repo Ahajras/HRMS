@@ -30,6 +30,12 @@ public class Assignment extends AuditableEntity implements EffectiveDated {
     @Column(name = "supervisor_employee_id")
     private UUID supervisorEmployeeId;
 
+    @Column(name = "project_id")
+    private UUID projectId;
+
+    @Column(name = "cost_code_id")
+    private UUID costCodeId;
+
     @Column(name = "primary_assignment", nullable = false)
     private boolean primaryAssignment = true;
 
@@ -53,6 +59,12 @@ public class Assignment extends AuditableEntity implements EffectiveDated {
 
     public UUID getSupervisorEmployeeId() { return supervisorEmployeeId; }
     public void setSupervisorEmployeeId(UUID supervisorEmployeeId) { this.supervisorEmployeeId = supervisorEmployeeId; }
+
+    public UUID getProjectId() { return projectId; }
+    public void setProjectId(UUID projectId) { this.projectId = projectId; }
+
+    public UUID getCostCodeId() { return costCodeId; }
+    public void setCostCodeId(UUID costCodeId) { this.costCodeId = costCodeId; }
 
     public boolean isPrimaryAssignment() { return primaryAssignment; }
     public void setPrimaryAssignment(boolean primaryAssignment) { this.primaryAssignment = primaryAssignment; }

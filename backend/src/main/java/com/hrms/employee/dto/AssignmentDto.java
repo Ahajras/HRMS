@@ -24,6 +24,10 @@ public class AssignmentDto {
 
     private UUID supervisorEmployeeId;
 
+    private UUID projectId;
+
+    private UUID costCodeId;
+
     private boolean primaryAssignment = true;
 
     @NotNull
@@ -47,6 +51,12 @@ public class AssignmentDto {
 
     public UUID getSupervisorEmployeeId() { return supervisorEmployeeId; }
     public void setSupervisorEmployeeId(UUID supervisorEmployeeId) { this.supervisorEmployeeId = supervisorEmployeeId; }
+
+    public UUID getProjectId() { return projectId; }
+    public void setProjectId(UUID projectId) { this.projectId = projectId; }
+
+    public UUID getCostCodeId() { return costCodeId; }
+    public void setCostCodeId(UUID costCodeId) { this.costCodeId = costCodeId; }
 
     public boolean isPrimaryAssignment() { return primaryAssignment; }
     public void setPrimaryAssignment(boolean primaryAssignment) { this.primaryAssignment = primaryAssignment; }

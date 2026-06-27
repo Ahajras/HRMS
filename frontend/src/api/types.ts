@@ -213,6 +213,24 @@ export interface ContractPayItem {
   actionSheetNo?: string;
 }
 
+export interface Project {
+  id?: string;
+  companyId?: string;
+  code: string;
+  name: string;
+  managerEmployeeId?: string;
+  status?: string;
+}
+
+export interface CostCode {
+  id?: string;
+  companyId?: string;
+  projectId: string;
+  code: string;
+  name: string;
+  status?: string;
+}
+
 export interface RulePackage {
   id?: string;
   companyId?: string;
