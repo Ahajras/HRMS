@@ -4,6 +4,7 @@ import com.hrms.payroll.domain.PayrollComponent;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public interface PayrollComponentRepository extends JpaRepository<PayrollComponent, UUID> {
@@ -13,4 +14,6 @@ public interface PayrollComponentRepository extends JpaRepository<PayrollCompone
     List<PayrollComponent> findByCompanyIdAndCategoryOrderByPriority(UUID companyId, String category);
 
     boolean existsByCompanyIdAndCode(UUID companyId, String code);
+
+    Optional<PayrollComponent> findByCompanyIdAndCode(UUID companyId, String code);
 }

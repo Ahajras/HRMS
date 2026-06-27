@@ -23,6 +23,7 @@ import PublicIcon from "@mui/icons-material/Public";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
 import SecurityIcon from "@mui/icons-material/Security";
+import ImportExportIcon from "@mui/icons-material/ImportExport";
 import LogoutIcon from "@mui/icons-material/Logout";
 import { COMPANY_STORAGE_KEY, getCompanyId, setCompanyId } from "../api/client";
 import { useAuth } from "../auth/AuthContext";
@@ -45,6 +46,7 @@ const NAV: NavItem[] = [
   { to: "/currencies", label: "Currencies", icon: <AttachMoneyIcon />, authority: "reference.read" },
   { to: "/users", label: "Users", icon: <ManageAccountsIcon />, authority: "security.user.read" },
   { to: "/roles", label: "Roles", icon: <SecurityIcon />, authority: "security.role.read" },
+  { to: "/legacy-import", label: "Legacy Import", icon: <ImportExportIcon />, authority: "employee.read" },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {

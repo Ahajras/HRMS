@@ -8,6 +8,7 @@ import type {
   Employee,
   EmployeeBankAccount,
   EmployeeDocument,
+  ImportSummary,
   LookupValue,
   OrgUnitTreeNode,
   OrgUnitType,
@@ -113,6 +114,20 @@ export const employeeApi = {
   update: (id: string, d: Employee) => api.put<Employee>(`/employees/${id}`, d).then((r) => r.data),
   remove: (id: string) => api.delete(`/employees/${id}`).then(() => undefined),
 };
+
+// --- Legacy import (upload the old FoxPro/DBF snapshot; preview then commit) ---
+export const legacyImportApi = {
+  preview: (files: File[]) => post("/legacy-import/preview", files),
+  commit: (files: File[]) => post("/legacy-import", files),
+};
+
+function post(url: string, files: File[]) {
+  const form = new FormData();
+  files.forEach((f) => form.append("files", f));
+  return api
+    .post<ImportSummary>(url, form, { headers: { "Content-Type": "multipart/form-data" } })
+    .then((r) => r.data);
+}
 
 // --- Payroll components ---
 export const payrollComponentApi = {

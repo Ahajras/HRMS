@@ -90,6 +90,13 @@
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
 
+        <!-- Legacy FoxPro/DBF reader (web import of the old HR snapshot) -->
+        <dependency>
+            <groupId>com.github.albfernandez</groupId>
+            <artifactId>javadbf</artifactId>
+            <version>1.14.1</version>
+        </dependency>
+
         <!-- Dev / test -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

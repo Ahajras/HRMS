@@ -9,6 +9,7 @@ import CountriesPage from "./pages/CountriesPage";
 import CurrenciesPage from "./pages/CurrenciesPage";
 import UsersPage from "./pages/UsersPage";
 import RolesPage from "./pages/RolesPage";
+import LegacyImportPage from "./pages/LegacyImportPage";
 import LoginPage from "./pages/LoginPage";
 import { useAuth } from "./auth/AuthContext";
 
@@ -45,6 +46,7 @@ export default function App() {
         <Route path="/currencies" element={<CurrenciesPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/roles" element={<RolesPage />} />
+        <Route path="/legacy-import" element={<LegacyImportPage />} />
         <Route path="*" element={<Navigate to="/employees" replace />} />
       </Routes>
     </AppLayout>

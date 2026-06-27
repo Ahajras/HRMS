@@ -1,5 +1,25 @@
 // Mirror of backend DTOs (Phase 1 master data + Phase 2 security).
 
+// --- Legacy import (DBF snapshot -> HRMS) ---
+export interface ImportSamplePreview {
+  employeeNumber: string;
+  name: string;
+  nationality?: string | null;
+  hireDate: string;
+  pay?: string | null;
+  action: "NEW" | "UPDATE";
+}
+
+export interface ImportSummary {
+  committed: boolean;
+  sourceHeaderRows: number;
+  sourceDetailRows: number;
+  sourceDependentRows: number;
+  counts: Record<string, number>;
+  warnings: string[];
+  sample: ImportSamplePreview[];
+}
+
 export interface AuthUser {
   id?: string;
   companyId?: string;
