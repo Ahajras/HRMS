@@ -47,6 +47,9 @@ public class ContractPayItem extends AuditableEntity implements EffectiveDated {
     @Column(name = "remarks", length = 255)
     private String remarks;
 
+    @Column(name = "action_sheet_no", length = 40)
+    private String actionSheetNo;
+
     public UUID getContractId() { return contractId; }
     public void setContractId(UUID contractId) { this.contractId = contractId; }
 
@@ -75,4 +78,7 @@ public class ContractPayItem extends AuditableEntity implements EffectiveDated {
 
     public String getRemarks() { return remarks; }
     public void setRemarks(String remarks) { this.remarks = remarks; }
+
+    public String getActionSheetNo() { return actionSheetNo; }
+    public void setActionSheetNo(String actionSheetNo) { this.actionSheetNo = actionSheetNo; }
 }

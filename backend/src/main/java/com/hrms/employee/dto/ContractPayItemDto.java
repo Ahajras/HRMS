@@ -38,6 +38,9 @@ public class ContractPayItemDto {
     @Size(max = 255)
     private String remarks;
 
+    @Size(max = 40)
+    private String actionSheetNo;
+
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
 
@@ -67,4 +70,7 @@ public class ContractPayItemDto {
 
     public String getRemarks() { return remarks; }
     public void setRemarks(String remarks) { this.remarks = remarks; }
+
+    public String getActionSheetNo() { return actionSheetNo; }
+    public void setActionSheetNo(String actionSheetNo) { this.actionSheetNo = actionSheetNo; }
 }

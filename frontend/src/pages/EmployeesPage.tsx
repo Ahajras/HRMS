@@ -3,6 +3,7 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
   Dialog,
   DialogActions,
   DialogContent,
@@ -392,7 +393,14 @@ const EMPTY_ITEM = (contractId: string, employeeId: string, currency?: string): 
   currencyCode: currency,
   effectiveFrom: new Date().toISOString().slice(0, 10),
   status: "ACTIVE",
+  actionSheetNo: "",
 });
+
+interface SheetGroup {
+  key: string;
+  date: string;
+  items: ContractPayItem[];
+}
 
 function PayItemsPanel({ contractId, employeeId, defaultCurrency }: {
   contractId: string;
@@ -426,9 +434,7 @@ function PayItemsPanel({ contractId, employeeId, defaultCurrency }: {
   });
 
   const active = data.filter((i) => i.status === "ACTIVE");
-  const history = data.filter((i) => i.status !== "ACTIVE");
 
-  // Net of active items: earnings add, deductions subtract.
   const net = active.reduce((sum, i) => {
     const type = compById(i.payComponentId)?.componentType;
     return sum + (type === "DEDUCTION" ? -Number(i.amount) : Number(i.amount));
@@ -436,43 +442,107 @@ function PayItemsPanel({ contractId, employeeId, defaultCurrency }: {
 
   const fmt = (n: number) => n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const set = (k: keyof ContractPayItem, v: string | number) => setForm({ ...form, [k]: v } as ContractPayItem);
+  const sheetOf = (i: ContractPayItem) => i.actionSheetNo?.trim() || i.remarks?.trim() || "—";
 
-  const renderRow = (i: ContractPayItem, faded: boolean) => (
-    <Stack key={i.id} direction="row" alignItems="center" justifyContent="space-between"
-      sx={{ py: 0.75, px: 1, opacity: faded ? 0.55 : 1, borderBottom: 1, borderColor: "divider" }}>
-      <Box>
-        <Typography variant="body2" fontWeight={600}>
-          {compLabel(i.payComponentId)} — {fmt(Number(i.amount))} {i.currencyCode ?? defaultCurrency ?? ""}
-        </Typography>
-        <Typography variant="caption" color="text.secondary">
-          {i.effectiveFrom}{i.effectiveTo ? ` → ${i.effectiveTo}` : " → current"}{i.remarks ? ` · ${i.remarks}` : ""}
-        </Typography>
-      </Box>
-      <IconButton size="small" color="error" onClick={() => i.id && del.mutate(i.id)}><DeleteIcon fontSize="small" /></IconButton>
-    </Stack>
-  );
+  // The action sheet that owns the current values = the one with the latest active effective date.
+  const currentSheet = active
+    .slice()
+    .sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : -1))[0];
+  const currentSheetKey = currentSheet ? sheetOf(currentSheet) : null;
+
+  // Previous amount of the same component (most recent superseded row before this one).
+  const priorAmount = (i: ContractPayItem) => {
+    const prior = data
+      .filter((x) => x.payComponentId === i.payComponentId && x.status !== "ACTIVE" && x.effectiveFrom < i.effectiveFrom)
+      .sort((a, b) => (a.effectiveFrom < b.effectiveFrom ? 1 : -1))[0];
+    return prior ? Number(prior.amount) : null;
+  };
+
+  // Group every row by action sheet, newest first.
+  const groups: SheetGroup[] = Object.values(
+    data.reduce<Record<string, SheetGroup>>((acc, i) => {
+      const k = sheetOf(i);
+      if (!acc[k]) acc[k] = { key: k, date: i.effectiveFrom, items: [] };
+      acc[k].items.push(i);
+      if (i.effectiveFrom < acc[k].date) acc[k].date = i.effectiveFrom;
+      return acc;
+    }, {}),
+  ).sort((a, b) => (a.date < b.date ? 1 : -1));
 
   return (
-    <Box sx={{ mt: 1.5, p: 1.5, bgcolor: "action.hover", borderRadius: 1 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
-        <Typography variant="subtitle2">Pay items</Typography>
-        <Typography variant="subtitle2" color="primary">
-          Net: {fmt(net)} {defaultCurrency ?? ""}
+    <Box sx={{ mt: 1.5 }}>
+      {/* Current salary snapshot */}
+      <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, mb: 1.5 }}>
+        <Stack direction="row" justifyContent="space-between" alignItems="baseline" mb={1}>
+          <Typography variant="subtitle2" color="text.secondary">Current salary</Typography>
+          <Typography variant="h6" color="primary">{fmt(net)} <Typography component="span" variant="caption" color="text.secondary">{defaultCurrency ?? ""}/mo</Typography></Typography>
+        </Stack>
+        {active.length === 0 && <Typography variant="body2" color="text.secondary">No active pay items. Add one below.</Typography>}
+        {active.map((i) => (
+          <Stack key={i.id} direction="row" alignItems="center" justifyContent="space-between" sx={{ py: 0.75, borderTop: 1, borderColor: "divider" }}>
+            <Box>
+              <Typography variant="body2" fontWeight={600}>{compLabel(i.payComponentId)}</Typography>
+              <Typography variant="caption" color="text.secondary">since {i.effectiveFrom}</Typography>
+            </Box>
+            <Stack direction="row" alignItems="center" spacing={1}>
+              <Chip size="small" label={sheetOf(i)}
+                color={sheetOf(i) === currentSheetKey ? "primary" : "default"}
+                variant={sheetOf(i) === currentSheetKey ? "filled" : "outlined"}
+                sx={{ fontFamily: "monospace", fontSize: 11 }} />
+              <Typography variant="body2" fontWeight={600} sx={{ minWidth: 90, textAlign: "right" }}>
+                {fmt(Number(i.amount))}
+              </Typography>
+            </Stack>
+          </Stack>
+        ))}
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
+          Each line shows the action sheet it currently comes from. Unchanged lines keep their original action sheet.
         </Typography>
-      </Stack>
+      </Paper>
 
-      {active.length === 0 && <Typography variant="body2" color="text.secondary">No active pay items. Add one below.</Typography>}
-      {active.map((i) => renderRow(i, false))}
-
-      {history.length > 0 && (
-        <Box mt={1}>
-          <Button size="small" onClick={() => setShowHistory((s) => !s)}>
-            {showHistory ? "Hide history" : `Show history (${history.length})`}
-          </Button>
-          {showHistory && history.map((i) => renderRow(i, true))}
+      {/* Action sheet history timeline */}
+      <Button size="small" onClick={() => setShowHistory((s) => !s)} sx={{ mb: 1 }}>
+        {showHistory ? "Hide action sheet history" : `Action sheet history (${groups.length})`}
+      </Button>
+      {showHistory && (
+        <Box sx={{ position: "relative", pl: 3, mb: 1 }}>
+          <Box sx={{ position: "absolute", left: 7, top: 6, bottom: 6, width: "2px", bgcolor: "divider" }} />
+          {groups.map((g) => {
+            const isCurrent = g.key === currentSheetKey;
+            return (
+              <Box key={g.key} sx={{ position: "relative", mb: 1.5 }}>
+                <Box sx={{ position: "absolute", left: -24, top: 6, width: 14, height: 14, borderRadius: "50%",
+                  bgcolor: isCurrent ? "success.main" : "grey.400", border: 2, borderColor: "background.paper" }} />
+                <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 2, bgcolor: isCurrent ? "transparent" : "action.hover" }}>
+                  <Stack direction="row" alignItems="center" spacing={1} mb={0.5} flexWrap="wrap">
+                    <Typography variant="body2" fontWeight={600} sx={{ fontFamily: "monospace", color: isCurrent ? "primary.main" : "text.secondary" }}>{g.key}</Typography>
+                    <Typography variant="caption" color="text.secondary">· {g.date}</Typography>
+                    <Chip size="small" label={isCurrent ? "Current" : "History"} color={isCurrent ? "success" : "default"}
+                      variant="outlined" sx={{ ml: "auto", fontSize: 10, height: 20 }} />
+                  </Stack>
+                  {g.items.map((i) => {
+                    const prev = priorAmount(i);
+                    return (
+                      <Stack key={i.id} direction="row" alignItems="center" justifyContent="space-between" sx={{ py: 0.5, borderTop: 1, borderColor: "divider" }}>
+                        <Typography variant="caption">{compLabel(i.payComponentId)}</Typography>
+                        <Stack direction="row" alignItems="center" spacing={1}>
+                          {prev !== null && (
+                            <Typography variant="caption" color="text.secondary" sx={{ textDecoration: "line-through" }}>{fmt(prev)}</Typography>
+                          )}
+                          <Typography variant="caption" fontWeight={600}>{fmt(Number(i.amount))} {i.currencyCode ?? defaultCurrency ?? ""}</Typography>
+                          <IconButton size="small" color="error" onClick={() => i.id && del.mutate(i.id)}><DeleteIcon fontSize="small" /></IconButton>
+                        </Stack>
+                      </Stack>
+                    );
+                  })}
+                </Paper>
+              </Box>
+            );
+          })}
         </Box>
       )}
 
+      {/* Add / change a pay item */}
       <Divider sx={{ my: 1.5 }} textAlign="left"><Typography variant="caption">Add / change a pay item</Typography></Divider>
       <Grid container spacing={1.5}>
         <Grid item xs={12} sm={4}>
@@ -489,8 +559,11 @@ function PayItemsPanel({ contractId, employeeId, defaultCurrency }: {
           <TextField fullWidth label="Effective From" type="date" InputLabelProps={{ shrink: true }}
             value={form.effectiveFrom} onChange={(e) => set("effectiveFrom", e.target.value)} />
         </Grid>
-        <Grid item xs={12}>
-          <TextField fullWidth label="Remarks (e.g. action sheet ref)" value={form.remarks ?? ""} onChange={(e) => set("remarks", e.target.value)} />
+        <Grid item xs={12} sm={5}>
+          <TextField fullWidth label="Action Sheet No" value={form.actionSheetNo ?? ""} onChange={(e) => set("actionSheetNo", e.target.value)} inputProps={{ maxLength: 40 }} />
+        </Grid>
+        <Grid item xs={12} sm={7}>
+          <TextField fullWidth label="Remarks (optional note)" value={form.remarks ?? ""} onChange={(e) => set("remarks", e.target.value)} />
         </Grid>
         <Grid item xs={12}>
           <Button variant="contained" size="small"
@@ -502,7 +575,7 @@ function PayItemsPanel({ contractId, employeeId, defaultCurrency }: {
         </Grid>
       </Grid>
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-        Adding a component that already has an active item supersedes the old one — it moves to history, the new one becomes current.
+        Adding a component that already has an active item supersedes the old one — it moves to history under its action sheet, the new one becomes current.
       </Typography>
     </Box>
   );

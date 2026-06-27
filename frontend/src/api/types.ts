@@ -210,6 +210,7 @@ export interface ContractPayItem {
   effectiveTo?: string;
   status?: string;
   remarks?: string;
+  actionSheetNo?: string;
 }
 
 export interface EmployeeDocument {

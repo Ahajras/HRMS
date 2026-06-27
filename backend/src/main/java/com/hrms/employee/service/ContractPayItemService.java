@@ -96,6 +96,7 @@ public class ContractPayItemService {
         entity.setEffectiveFrom(dto.getEffectiveFrom());
         entity.setEffectiveTo(dto.getEffectiveTo());
         entity.setRemarks(dto.getRemarks());
+        entity.setActionSheetNo(dto.getActionSheetNo());
         if (dto.getStatus() != null) {
             entity.setStatus(dto.getStatus());
         }
@@ -113,6 +114,7 @@ public class ContractPayItemService {
         dto.setEffectiveTo(entity.getEffectiveTo());
         dto.setStatus(entity.getStatus());
         dto.setRemarks(entity.getRemarks());
+        dto.setActionSheetNo(entity.getActionSheetNo());
         return dto;
     }
 }
