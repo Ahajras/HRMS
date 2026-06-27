@@ -28,9 +28,11 @@ public class EmployeeService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<EmployeeDto> findAll(Pageable pageable) {
+    public PageResponse<EmployeeDto> findAll(String q, Pageable pageable) {
         UUID companyId = TenantContext.requireCompanyId();
-        Page<EmployeeDto> page = repository.findByCompanyId(companyId, pageable).map(this::toDto);
+        Page<EmployeeDto> page = (q == null || q.isBlank())
+                ? repository.findByCompanyId(companyId, pageable).map(this::toDto)
+                : repository.search(companyId, q.trim(), pageable).map(this::toDto);
         return PageResponse.from(page);
     }
 

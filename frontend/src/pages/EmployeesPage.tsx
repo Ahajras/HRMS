@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Box,
@@ -11,6 +11,7 @@ import {
   Divider,
   Grid,
   IconButton,
+  InputAdornment,
   MenuItem,
   Paper,
   Stack,
@@ -23,6 +24,7 @@ import { DataGrid, type GridColDef, type GridPaginationModel } from "@mui/x-data
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
+import SearchIcon from "@mui/icons-material/Search";
 import {
   bankApi,
   contractApi,
@@ -433,7 +435,9 @@ function PayItemsPanel({ contractId, employeeId, defaultCurrency }: {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["payitems", contractId] }),
   });
 
-  const active = data.filter((i) => i.status === "ACTIVE");
+  const today = new Date().toISOString().slice(0, 10);
+  const isCurrent = (i: ContractPayItem) => i.status === "ACTIVE" && (!i.effectiveTo || i.effectiveTo >= today);
+  const active = data.filter(isCurrent);
 
   const net = active.reduce((sum, i) => {
     const type = compById(i.payComponentId)?.componentType;
@@ -782,9 +786,18 @@ function LegacyTab({ employeeId }: { employeeId: string }) {
 export default function EmployeesPage() {
   const qc = useQueryClient();
   const [pagination, setPagination] = useState<GridPaginationModel>({ page: 0, pageSize: 20 });
+  const [search, setSearch] = useState("");
+  const [debounced, setDebounced] = useState("");
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebounced(search);
+      setPagination((p) => ({ ...p, page: 0 }));
+    }, 350);
+    return () => clearTimeout(t);
+  }, [search]);
   const { data, isLoading } = useQuery({
-    queryKey: ["employees", pagination.page, pagination.pageSize],
-    queryFn: () => employeeApi.list(pagination.page, pagination.pageSize),
+    queryKey: ["employees", pagination.page, pagination.pageSize, debounced],
+    queryFn: () => employeeApi.list(pagination.page, pagination.pageSize, debounced || undefined),
   });
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState(0);
@@ -819,6 +832,25 @@ export default function EmployeesPage() {
         <Typography variant="h5">Employees</Typography>
         <Button startIcon={<AddIcon />} variant="contained" onClick={openNew}>New Employee</Button>
       </Stack>
+
+      <TextField
+        fullWidth
+        size="small"
+        placeholder="Search by employee number, name, or action sheet…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        sx={{ mb: 2 }}
+        InputProps={{
+          startAdornment: (
+            <InputAdornment position="start"><SearchIcon fontSize="small" /></InputAdornment>
+          ),
+          endAdornment: search ? (
+            <InputAdornment position="end">
+              <IconButton size="small" onClick={() => setSearch("")}><DeleteIcon fontSize="small" /></IconButton>
+            </InputAdornment>
+          ) : null,
+        }}
+      />
 
       <div style={{ height: 600, width: "100%" }}>
         <DataGrid

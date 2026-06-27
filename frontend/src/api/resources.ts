@@ -108,8 +108,8 @@ export const organizationUnitApi = {
 
 // --- Employees ---
 export const employeeApi = {
-  list: (page = 0, size = 20) =>
-    api.get<PageResponse<Employee>>("/employees", { params: { page, size } }).then((r) => r.data),
+  list: (page = 0, size = 20, q?: string) =>
+    api.get<PageResponse<Employee>>("/employees", { params: { page, size, ...(q ? { q } : {}) } }).then((r) => r.data),
   get: (id: string) => api.get<Employee>(`/employees/${id}`).then((r) => r.data),
   create: (d: Employee) => api.post<Employee>("/employees", d).then((r) => r.data),
   update: (id: string, d: Employee) => api.put<Employee>(`/employees/${id}`, d).then((r) => r.data),
