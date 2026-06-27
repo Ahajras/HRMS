@@ -4,6 +4,7 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.UUID;
 
@@ -34,6 +35,17 @@ public class ContractDto {
 
     private String status = "ACTIVE";
 
+    // Reference-only standard terms (actual worked hours come from the timesheet, Phase 4).
+    private BigDecimal workingHoursPerWeek;
+
+    private Integer workingDaysPerWeek;
+
+    @Size(max = 10)
+    private String overtimeCategory;
+
+    @Size(max = 60)
+    private String overtimeCategoryDesc;
+
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
 
@@ -57,4 +69,16 @@ public class ContractDto {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public BigDecimal getWorkingHoursPerWeek() { return workingHoursPerWeek; }
+    public void setWorkingHoursPerWeek(BigDecimal workingHoursPerWeek) { this.workingHoursPerWeek = workingHoursPerWeek; }
+
+    public Integer getWorkingDaysPerWeek() { return workingDaysPerWeek; }
+    public void setWorkingDaysPerWeek(Integer workingDaysPerWeek) { this.workingDaysPerWeek = workingDaysPerWeek; }
+
+    public String getOvertimeCategory() { return overtimeCategory; }
+    public void setOvertimeCategory(String overtimeCategory) { this.overtimeCategory = overtimeCategory; }
+
+    public String getOvertimeCategoryDesc() { return overtimeCategoryDesc; }
+    public void setOvertimeCategoryDesc(String overtimeCategoryDesc) { this.overtimeCategoryDesc = overtimeCategoryDesc; }
 }

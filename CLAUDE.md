@@ -206,6 +206,13 @@ future exports populate automatically.
 
 ## Gotchas (learned the hard way)
 
+- **Adding an entity field is NOT enough — there is a DTO layer.** The REST API
+  returns `*Dto` objects, mapped in each `*Service` (`apply()` + `toDto()`). When
+  you add a column/entity field you MUST also add it to the matching DTO and BOTH
+  mapper methods, or the data saves to the DB but never reaches the UI (it looks
+  like "the import didn't populate it" when really it's hidden by the DTO).
+  Example: V11 legacy fields imported fine but showed blank until
+  `EmployeeDto`/`ContractDto` + `EmployeeService`/`ContractService` were updated.
 - **Sandbox bash mount serves STALE repo files.** Use the Read/Edit tools for
   canonical content, not bash `cat`/`grep`, when verifying file contents.
 - **No Maven wrapper** in backend (only pom.xml). Don't try `mvnw.cmd` on PC —

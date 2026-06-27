@@ -62,6 +62,10 @@ public class ContractService {
         entity.setEffectiveFrom(dto.getEffectiveFrom());
         entity.setEffectiveTo(dto.getEffectiveTo());
         entity.setBaseCurrencyCode(dto.getBaseCurrencyCode());
+        entity.setWorkingHoursPerWeek(dto.getWorkingHoursPerWeek());
+        entity.setWorkingDaysPerWeek(dto.getWorkingDaysPerWeek());
+        entity.setOvertimeCategory(dto.getOvertimeCategory());
+        entity.setOvertimeCategoryDesc(dto.getOvertimeCategoryDesc());
         if (dto.getStatus() != null) {
             entity.setStatus(dto.getStatus());
         }
@@ -76,6 +80,10 @@ public class ContractService {
         dto.setEffectiveFrom(entity.getEffectiveFrom());
         dto.setEffectiveTo(entity.getEffectiveTo());
         dto.setBaseCurrencyCode(entity.getBaseCurrencyCode());
+        dto.setWorkingHoursPerWeek(entity.getWorkingHoursPerWeek());
+        dto.setWorkingDaysPerWeek(entity.getWorkingDaysPerWeek());
+        dto.setOvertimeCategory(entity.getOvertimeCategory());
+        dto.setOvertimeCategoryDesc(entity.getOvertimeCategoryDesc());
         dto.setStatus(entity.getStatus());
         return dto;
     }

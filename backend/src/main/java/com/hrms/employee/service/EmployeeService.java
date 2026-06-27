@@ -82,6 +82,10 @@ public class EmployeeService {
         entity.setTerminationDate(dto.getTerminationDate());
         entity.setEmail(dto.getEmail());
         entity.setPhone(dto.getPhone());
+        entity.setJobTitle(dto.getJobTitle());
+        entity.setJobTitleCode(dto.getJobTitleCode());
+        entity.setPayStatus(dto.getPayStatus());
+        entity.setArabicName(dto.getArabicName());
         if (dto.getStatus() != null) {
             entity.setStatus(dto.getStatus());
         }
@@ -106,6 +110,10 @@ public class EmployeeService {
         dto.setTerminationDate(entity.getTerminationDate());
         dto.setEmail(entity.getEmail());
         dto.setPhone(entity.getPhone());
+        dto.setJobTitle(entity.getJobTitle());
+        dto.setJobTitleCode(entity.getJobTitleCode());
+        dto.setPayStatus(entity.getPayStatus());
+        dto.setArabicName(entity.getArabicName());
         dto.setStatus(entity.getStatus());
         return dto;
     }

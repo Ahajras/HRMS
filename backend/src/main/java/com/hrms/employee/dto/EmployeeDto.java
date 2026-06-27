@@ -66,6 +66,18 @@ public class EmployeeDto {
 
     private String status = "ACTIVE";
 
+    @Size(max = 150)
+    private String jobTitle;
+
+    @Size(max = 20)
+    private String jobTitleCode;
+
+    @Size(max = 30)
+    private String payStatus;
+
+    @Size(max = 150)
+    private String arabicName;
+
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
 
@@ -119,4 +131,16 @@ public class EmployeeDto {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getJobTitle() { return jobTitle; }
+    public void setJobTitle(String jobTitle) { this.jobTitle = jobTitle; }
+
+    public String getJobTitleCode() { return jobTitleCode; }
+    public void setJobTitleCode(String jobTitleCode) { this.jobTitleCode = jobTitleCode; }
+
+    public String getPayStatus() { return payStatus; }
+    public void setPayStatus(String payStatus) { this.payStatus = payStatus; }
+
+    public String getArabicName() { return arabicName; }
+    public void setArabicName(String arabicName) { this.arabicName = arabicName; }
 }
