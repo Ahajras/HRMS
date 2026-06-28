@@ -4,17 +4,20 @@ import {
   AppBar,
   Box,
   Button,
-  Divider,
+  Collapse,
   Drawer,
   List,
   ListItemButton,
   ListItemIcon,
   ListItemText,
+  ListSubheader,
   Toolbar,
   Typography,
   TextField,
   Tooltip,
 } from "@mui/material";
+import ExpandLess from "@mui/icons-material/ExpandLess";
+import ExpandMore from "@mui/icons-material/ExpandMore";
 import PeopleIcon from "@mui/icons-material/People";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import LayersIcon from "@mui/icons-material/Layers";
@@ -42,21 +45,46 @@ interface NavItem {
   authority?: string;
 }
 
-const NAV: NavItem[] = [
-  { to: "/employees", label: "Employees", icon: <PeopleIcon />, authority: "employee.read" },
-  { to: "/organization", label: "Organization", icon: <AccountTreeIcon />, authority: "organization.read" },
-  { to: "/projects", label: "Projects", icon: <WorkIcon />, authority: "reference.read" },
-  { to: "/org-unit-types", label: "Org Levels", icon: <LayersIcon />, authority: "organization.read" },
-  { to: "/timesheets", label: "Timesheets", icon: <AccessTimeIcon />, authority: "employee.read" },
-  { to: "/shifts", label: "Shifts", icon: <ScheduleIcon />, authority: "employee.read" },
-  { to: "/time-setup", label: "Time Setup", icon: <EventBusyIcon />, authority: "employee.read" },
-  { to: "/payroll-components", label: "Pay Components", icon: <PaymentsIcon />, authority: "payroll.config.read" },
-  { to: "/countries", label: "Countries", icon: <PublicIcon />, authority: "reference.read" },
-  { to: "/country-law", label: "Country Law", icon: <GavelIcon />, authority: "reference.read" },
-  { to: "/currencies", label: "Currencies", icon: <AttachMoneyIcon />, authority: "reference.read" },
-  { to: "/users", label: "Users", icon: <ManageAccountsIcon />, authority: "security.user.read" },
-  { to: "/roles", label: "Roles", icon: <SecurityIcon />, authority: "security.role.read" },
-  { to: "/legacy-import", label: "Legacy Import", icon: <ImportExportIcon />, authority: "employee.read" },
+interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
+const NAV_GROUPS: NavGroup[] = [
+  {
+    label: "Workforce",
+    items: [
+      { to: "/employees", label: "Employees", icon: <PeopleIcon />, authority: "employee.read" },
+      { to: "/organization", label: "Organization", icon: <AccountTreeIcon />, authority: "organization.read" },
+    ],
+  },
+  {
+    label: "Time & Attendance",
+    items: [
+      { to: "/timesheets", label: "Timesheets", icon: <AccessTimeIcon />, authority: "employee.read" },
+      { to: "/shifts", label: "Shifts", icon: <ScheduleIcon />, authority: "employee.read" },
+      { to: "/time-setup", label: "Time Setup", icon: <EventBusyIcon />, authority: "employee.read" },
+    ],
+  },
+  {
+    label: "Configuration",
+    items: [
+      { to: "/projects", label: "Projects", icon: <WorkIcon />, authority: "reference.read" },
+      { to: "/org-unit-types", label: "Org Levels", icon: <LayersIcon />, authority: "organization.read" },
+      { to: "/payroll-components", label: "Pay Components", icon: <PaymentsIcon />, authority: "payroll.config.read" },
+      { to: "/countries", label: "Countries", icon: <PublicIcon />, authority: "reference.read" },
+      { to: "/country-law", label: "Country Law", icon: <GavelIcon />, authority: "reference.read" },
+      { to: "/currencies", label: "Currencies", icon: <AttachMoneyIcon />, authority: "reference.read" },
+    ],
+  },
+  {
+    label: "Administration",
+    items: [
+      { to: "/users", label: "Users", icon: <ManageAccountsIcon />, authority: "security.user.read" },
+      { to: "/roles", label: "Roles", icon: <SecurityIcon />, authority: "security.role.read" },
+      { to: "/legacy-import", label: "Legacy Import", icon: <ImportExportIcon />, authority: "employee.read" },
+    ],
+  },
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -71,7 +99,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Platform/super-admin accounts have no company in their token; let them target one.
   const isPlatformAdmin = !user?.companyId;
-  const nav = NAV.filter((item) => !item.authority || hasAuthority(item.authority));
+
+  // Keep only groups/items the user is allowed to see.
+  const groups = NAV_GROUPS
+    .map((g) => ({ ...g, items: g.items.filter((i) => !i.authority || hasAuthority(i.authority)) }))
+    .filter((g) => g.items.length > 0);
+
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const toggle = (label: string) => setCollapsed((c) => ({ ...c, [label]: !c[label] }));
 
   return (
     <Box sx={{ display: "flex" }}>
@@ -109,20 +144,41 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         <Toolbar />
         <Box sx={{ overflow: "auto" }}>
-          <List>
-            {nav.map((item) => (
-              <ListItemButton
-                key={item.to}
-                component={RouterLink}
-                to={item.to}
-                selected={location.pathname.startsWith(item.to)}
+          {groups.map((group) => {
+            const hasActive = group.items.some((i) => location.pathname.startsWith(i.to));
+            const isOpen = !collapsed[group.label] || hasActive;
+            return (
+              <List
+                key={group.label}
+                disablePadding
+                subheader={
+                  <ListSubheader
+                    component="div"
+                    onClick={() => toggle(group.label)}
+                    sx={{ cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "space-between", lineHeight: "36px", userSelect: "none" }}
+                  >
+                    {group.label}
+                    {isOpen ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+                  </ListSubheader>
+                }
               >
-                <ListItemIcon>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.label} />
-              </ListItemButton>
-            ))}
-          </List>
-          <Divider />
+                <Collapse in={isOpen} timeout="auto" unmountOnExit>
+                  {group.items.map((item) => (
+                    <ListItemButton
+                      key={item.to}
+                      component={RouterLink}
+                      to={item.to}
+                      selected={location.pathname.startsWith(item.to)}
+                      sx={{ pl: 3 }}
+                    >
+                      <ListItemIcon sx={{ minWidth: 36 }}>{item.icon}</ListItemIcon>
+                      <ListItemText primary={item.label} />
+                    </ListItemButton>
+                  ))}
+                </Collapse>
+              </List>
+            );
+          })}
         </Box>
       </Drawer>
 
