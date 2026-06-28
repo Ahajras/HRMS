@@ -32,9 +32,9 @@ employees, multi-company, multi-country. Built incrementally in **10 phases**,
 - P1 — Employee + Org + Master Data — **Done**
 - P2 — Security + Auth (JWT) — **Done**
 - Legacy import (DBF → Postgres) — **Done**, expanded to full employee file
-- P3 — Rule Engine — **NEXT / not started** (do not start without user's go-ahead)
-- P4 — Timesheet / Shift (actual worked hours come from here)
-- P5 — Leave
+- P3 — Rule Engine — **Done** (V14 + entities + resolver + CountryLawPage; Qatar law deployed)
+- P4 — Timesheet / Shift / Time Type — **Done** (V16 + full backend + frontend; source of actual worked hours)
+- P5 — Leave — **NEXT / not started** (do not start without user's go-ahead)
 - P6 — Overtime
 - P7 — Financial Transactions
 - P8 — Payroll
@@ -92,23 +92,31 @@ All committed to the repo so they travel between machines. Read these to know th
 
 ## ▶ THE NEXT STEP (do not start without the user's go-ahead)
 
-**Phase 3 — Rule Engine** (FTDD Vol.1 Ch 15 + our spec in Vol.2 Ch 23).
+**Phase 5 — Leave Management Engine** (FTDD Vol.1 Ch 8).
 
-Why it's next: it's the configuration-first heart of the system. Every later
-engine (overtime eligibility, proration, daily-vs-monthly pay, deductions,
-settlement) reads its rules from here instead of hardcoding them — that's the
-whole "no hardcoded business logic" principle.
+P3 (Rule Engine) and P4 (Timesheet/Shift/Time Type) are both **done**. P4 is the
+source of actual worked hours and absences; Leave will consume those plus the
+Rule Engine (accrual rates, entitlements). Same build pattern as every phase:
+migration → entities → repos → service → controllers → frontend types/api/pages,
+then update this file + deploy.
 
-Before coding P3, read `docs/FTDD_Volume_2.md` Chapter 23. The build will need:
-the rule/formula language (23.4), evaluation order & dependency resolution (23.5),
-override hierarchy (23.6), conflict resolution (23.7), versioning & activation
-(23.8–23.9), and rule testing/simulation (23.10–23.11). Canonical business rules
-are in 23.12; worked examples in 23.13.
-
-When the user says go: write the V12+ migration(s) for rule/formula tables, the
-`com.hrms.rule` (or payroll-rule) domain entities matching them exactly, repos,
-the evaluation service, REST endpoints, then a frontend admin screen to author
-and simulate rules. Same pattern as every prior phase.
+### P4 Timesheet — key files (done)
+- Migration: `backend/.../db/migration/V16__timesheet.sql` (tables: shift,
+  public_holiday, time_type, timesheet, timesheet_day; seeds for company c1 —
+  DAY shift + 6 time types REGULAR/OVERTIME/REST/HOLIDAY/ABSENCE/LEAVE).
+- Domain: `com.hrms.timesheet.domain` — Shift, PublicHoliday, TimeType,
+  Timesheet, TimesheetDay (plain UUID FKs, no @OneToMany; days via repo).
+- Service: `TimesheetService` (generate classifies each day REST/HOLIDAY/REGULAR;
+  recompute worked/OT from clock punches; lifecycle DRAFT→SUBMITTED→APPROVED→
+  LOCKED, reopen→DRAFT). Plus ShiftService/TimeTypeService/PublicHolidayService.
+- REST: `/api/v1/shifts`, `/time-types`, `/public-holidays`, `/timesheets`
+  (GET ?year&month, GET/{id}, POST /generate, PUT/{id}/days, POST/{id}/{submit|
+  approve|lock|reopen}, DELETE/{id}).
+- Frontend: types in `types.ts`; `shiftApi/timeTypeApi/publicHolidayApi/
+  timesheetApi` in resources.ts; pages TimesheetPage, ShiftsPage, TimeSetupPage;
+  routes in App.tsx + nav in AppLayout.tsx (Timesheets/Shifts/Time Setup).
+- Boundary: Shift CLASSIFIES the day; Rule Engine owns the RATES. Single
+  project/cost-code per day (defaults from latest assignment).
 
 ---
 
@@ -124,8 +132,8 @@ and simulate rules. Same pattern as every prior phase.
 - `ddl-auto=validate` → **entity columns MUST exactly match Flyway migrations.**
   When adding a field: write the migration AND the entity column together.
 - Modular monolith by DDD bounded context: `com.hrms.<context>`
-  (common, reference, organization, employee, payroll, security, migration).
-  Entities live in the `domain` sub-package.
+  (common, reference, organization, employee, payroll, security, migration,
+  rule, timesheet). Entities live in the `domain` sub-package.
 - **Multi-tenancy:** company-scoped via `TenantContext` (ThreadLocal<UUID>).
   JWT carries `cid`; platform admins pass `X-Company-Id`.
   Seeded company UUID: `00000000-0000-0000-0000-0000000000c1`.

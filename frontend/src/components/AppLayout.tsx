@@ -22,6 +22,9 @@ import PaymentsIcon from "@mui/icons-material/Payments";
 import PublicIcon from "@mui/icons-material/Public";
 import GavelIcon from "@mui/icons-material/Gavel";
 import WorkIcon from "@mui/icons-material/Work";
+import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import ScheduleIcon from "@mui/icons-material/Schedule";
+import EventBusyIcon from "@mui/icons-material/EventBusy";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
 import SecurityIcon from "@mui/icons-material/Security";
@@ -44,6 +47,9 @@ const NAV: NavItem[] = [
   { to: "/organization", label: "Organization", icon: <AccountTreeIcon />, authority: "organization.read" },
   { to: "/projects", label: "Projects", icon: <WorkIcon />, authority: "reference.read" },
   { to: "/org-unit-types", label: "Org Levels", icon: <LayersIcon />, authority: "organization.read" },
+  { to: "/timesheets", label: "Timesheets", icon: <AccessTimeIcon />, authority: "employee.read" },
+  { to: "/shifts", label: "Shifts", icon: <ScheduleIcon />, authority: "employee.read" },
+  { to: "/time-setup", label: "Time Setup", icon: <EventBusyIcon />, authority: "employee.read" },
   { to: "/payroll-components", label: "Pay Components", icon: <PaymentsIcon />, authority: "payroll.config.read" },
   { to: "/countries", label: "Countries", icon: <PublicIcon />, authority: "reference.read" },
   { to: "/country-law", label: "Country Law", icon: <GavelIcon />, authority: "reference.read" },

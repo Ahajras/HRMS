@@ -10,6 +10,7 @@ import type {
   EmployeeSummary,
   EmployeeBankAccount,
   EmployeeDocument,
+  GenerateTimesheetRequest,
   ImportSummary,
   LegacyRaw,
   LookupValue,
@@ -20,8 +21,13 @@ import type {
   PayrollComponent,
   Project,
   CostCode,
+  PublicHoliday,
   Rule,
   RulePackage,
+  Shift,
+  TimeType,
+  Timesheet,
+  TimesheetDay,
 } from "./types";
 
 // --- Assignments ---
@@ -199,6 +205,47 @@ function post(url: string, files: File[]) {
     .post<ImportSummary>(url, form, { headers: { "Content-Type": "multipart/form-data" } })
     .then((r) => r.data);
 }
+
+// --- Timesheet: shifts ---
+export const shiftApi = {
+  list: () => api.get<Shift[]>("/shifts").then((r) => r.data),
+  create: (d: Shift) => api.post<Shift>("/shifts", d).then((r) => r.data),
+  update: (id: string, d: Shift) => api.put<Shift>(`/shifts/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/shifts/${id}`).then(() => undefined),
+};
+
+// --- Timesheet: time types ---
+export const timeTypeApi = {
+  list: () => api.get<TimeType[]>("/time-types").then((r) => r.data),
+  create: (d: TimeType) => api.post<TimeType>("/time-types", d).then((r) => r.data),
+  update: (id: string, d: TimeType) => api.put<TimeType>(`/time-types/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/time-types/${id}`).then(() => undefined),
+};
+
+// --- Timesheet: public holidays ---
+export const publicHolidayApi = {
+  list: () => api.get<PublicHoliday[]>("/public-holidays").then((r) => r.data),
+  create: (d: PublicHoliday) => api.post<PublicHoliday>("/public-holidays", d).then((r) => r.data),
+  update: (id: string, d: PublicHoliday) =>
+    api.put<PublicHoliday>(`/public-holidays/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/public-holidays/${id}`).then(() => undefined),
+};
+
+// --- Timesheet: monthly timesheets ---
+export const timesheetApi = {
+  listByPeriod: (year: number, month: number) =>
+    api.get<Timesheet[]>("/timesheets", { params: { year, month } }).then((r) => r.data),
+  get: (id: string) => api.get<Timesheet>(`/timesheets/${id}`).then((r) => r.data),
+  generate: (d: GenerateTimesheetRequest) =>
+    api.post<Timesheet>("/timesheets/generate", d).then((r) => r.data),
+  saveDays: (id: string, days: TimesheetDay[]) =>
+    api.put<Timesheet>(`/timesheets/${id}/days`, days).then((r) => r.data),
+  submit: (id: string) => api.post<Timesheet>(`/timesheets/${id}/submit`).then((r) => r.data),
+  approve: (id: string) => api.post<Timesheet>(`/timesheets/${id}/approve`).then((r) => r.data),
+  lock: (id: string) => api.post<Timesheet>(`/timesheets/${id}/lock`).then((r) => r.data),
+  reopen: (id: string) => api.post<Timesheet>(`/timesheets/${id}/reopen`).then((r) => r.data),
+  remove: (id: string) => api.delete(`/timesheets/${id}`).then(() => undefined),
+};
 
 // --- Payroll components ---
 export const payrollComponentApi = {

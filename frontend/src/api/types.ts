@@ -303,6 +303,89 @@ export interface EmployeeBankAccount {
   status?: string;
 }
 
+// --- Timesheet / Shift / Time Type (Phase 4, FTDD Vol.1 Ch.3-5) ---
+export interface Shift {
+  id?: string;
+  companyId?: string;
+  code: string;
+  name: string;
+  startTime?: string;
+  endTime?: string;
+  breakMinutes: number;
+  standardHours?: number;
+  crossesMidnight: boolean;
+  weeklyOff?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  status?: string;
+}
+
+export interface TimeType {
+  id?: string;
+  companyId?: string;
+  code: string;
+  name: string;
+  category?: string;
+  paid: boolean;
+  countsAsWorked: boolean;
+  affectsLeave: boolean;
+  factor?: number;
+  sortOrder: number;
+  status?: string;
+}
+
+export interface PublicHoliday {
+  id?: string;
+  companyId?: string;
+  holidayDate: string;
+  name: string;
+  status?: string;
+}
+
+export interface TimesheetDay {
+  id?: string;
+  timesheetId?: string;
+  workDate: string;
+  shiftId?: string;
+  timeTypeId?: string;
+  timeTypeCode?: string;
+  plannedHours?: number;
+  actualIn?: string | null;
+  actualOut?: string | null;
+  workedHours?: number;
+  otHours?: number;
+  projectId?: string;
+  costCodeId?: string;
+  remarks?: string;
+}
+
+export interface Timesheet {
+  id?: string;
+  companyId?: string;
+  employeeId: string;
+  employeeName?: string;
+  employeeNumber?: string;
+  periodYear: number;
+  periodMonth: number;
+  shiftId?: string;
+  status?: string;
+  totalWorkedHours?: number;
+  totalOtHours?: number;
+  totalAbsenceDays?: number;
+  submittedAt?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  days: TimesheetDay[];
+}
+
+export interface GenerateTimesheetRequest {
+  employeeId: string;
+  year: number;
+  month: number;
+  shiftId?: string;
+  overwrite?: boolean;
+}
+
 export interface PayrollComponent {
   id?: string;
   companyId?: string;
