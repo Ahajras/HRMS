@@ -2,6 +2,7 @@ package com.hrms.employee.web;
 
 import com.hrms.common.web.PageResponse;
 import com.hrms.employee.dto.EmployeeDto;
+import com.hrms.employee.dto.EmployeeSummaryDto;
 import com.hrms.employee.service.EmployeeService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
@@ -34,8 +35,15 @@ public class EmployeeController {
     @GetMapping
     public PageResponse<EmployeeDto> findAll(@RequestParam(required = false) String q,
                                              @RequestParam(required = false) String payStatus,
+                                             @RequestParam(required = false) UUID projectId,
                                              @PageableDefault(size = 20) Pageable pageable) {
-        return service.findAll(q, payStatus, pageable);
+        return service.findAll(q, payStatus, projectId, pageable);
+    }
+
+    @GetMapping("/summary")
+    public EmployeeSummaryDto summary(@RequestParam(required = false) String q,
+                                      @RequestParam(required = false) UUID projectId) {
+        return service.summary(q, projectId);
     }
 
     @GetMapping("/{id}")

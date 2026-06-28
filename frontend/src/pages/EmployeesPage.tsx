@@ -903,6 +903,7 @@ export default function EmployeesPage() {
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [payFilter, setPayFilter] = useState(""); // "" = all, MONTHLY, DAILY
+  const [projectId, setProjectId] = useState(""); // "" = all projects
   useEffect(() => {
     const t = setTimeout(() => {
       setDebounced(search);
@@ -910,9 +911,25 @@ export default function EmployeesPage() {
     }, 350);
     return () => clearTimeout(t);
   }, [search]);
+  const { data: projects = [] } = useQuery({
+    queryKey: ["projects"],
+    queryFn: projectApi.list,
+    staleTime: 5 * 60 * 1000,
+  });
   const { data, isLoading } = useQuery({
-    queryKey: ["employees", pagination.page, pagination.pageSize, debounced, payFilter],
-    queryFn: () => employeeApi.list(pagination.page, pagination.pageSize, debounced || undefined, payFilter || undefined),
+    queryKey: ["employees", pagination.page, pagination.pageSize, debounced, payFilter, projectId],
+    queryFn: () =>
+      employeeApi.list(
+        pagination.page,
+        pagination.pageSize,
+        debounced || undefined,
+        payFilter || undefined,
+        projectId || undefined,
+      ),
+  });
+  const { data: summary } = useQuery({
+    queryKey: ["employees-summary", debounced, projectId],
+    queryFn: () => employeeApi.summary(debounced || undefined, projectId || undefined),
   });
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState(0);
@@ -948,6 +965,39 @@ export default function EmployeesPage() {
         <Typography variant="h5">Employees</Typography>
         <Button startIcon={<AddIcon />} variant="contained" onClick={openNew}>New Employee</Button>
       </Stack>
+
+      <TextField
+        select
+        size="small"
+        label="Project"
+        value={projectId}
+        onChange={(e) => { setProjectId(e.target.value); setPagination((p) => ({ ...p, page: 0 })); }}
+        sx={{ minWidth: 260, mb: 2 }}
+      >
+        <MenuItem value="">All projects</MenuItem>
+        {projects.map((p) => (
+          <MenuItem key={p.id} value={p.id}>{p.code} — {p.name}</MenuItem>
+        ))}
+      </TextField>
+
+      <Grid container spacing={2} mb={2}>
+        {[
+          { label: "Total", value: summary?.total, color: "text.primary" },
+          { label: "Active", value: summary?.active, color: "success.main" },
+          { label: "Not Active", value: summary?.notActive, color: "error.main" },
+          { label: "Monthly", value: summary?.monthly, color: "primary.main" },
+          { label: "Daily", value: summary?.daily, color: "warning.main" },
+        ].map((c) => (
+          <Grid item xs={6} sm={4} md={2.4} key={c.label}>
+            <Paper variant="outlined" sx={{ p: 2, textAlign: "center" }}>
+              <Typography variant="h5" sx={{ color: c.color, fontWeight: 600 }}>
+                {c.value ?? "—"}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">{c.label}</Typography>
+            </Paper>
+          </Grid>
+        ))}
+      </Grid>
 
       <Tabs
         value={payFilter}

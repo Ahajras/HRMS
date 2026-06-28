@@ -163,6 +163,14 @@ export interface Employee {
   arabicName?: string;
 }
 
+export interface EmployeeSummary {
+  total: number;
+  active: number;
+  notActive: number;
+  monthly: number;
+  daily: number;
+}
+
 export interface LookupValue {
   id?: string;
   companyId?: string;

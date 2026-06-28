@@ -6,6 +6,7 @@ import com.hrms.common.tenant.TenantContext;
 import com.hrms.common.web.PageResponse;
 import com.hrms.employee.domain.Employee;
 import com.hrms.employee.dto.EmployeeDto;
+import com.hrms.employee.dto.EmployeeSummaryDto;
 import com.hrms.employee.repository.EmployeeRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -28,10 +29,33 @@ public class EmployeeService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<EmployeeDto> findAll(String q, String payStatus, Pageable pageable) {
+    public PageResponse<EmployeeDto> findAll(String q, String payStatus, UUID projectId, Pageable pageable) {
         UUID companyId = TenantContext.requireCompanyId();
-        Page<EmployeeDto> page = repository.searchFiltered(companyId, q, payStatus, pageable).map(this::toDto);
+        Page<EmployeeDto> page = repository.searchFiltered(companyId, q, payStatus, projectId, pageable)
+                .map(this::toDto);
         return PageResponse.from(page);
+    }
+
+    @Transactional(readOnly = true)
+    public EmployeeSummaryDto summary(String q, UUID projectId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        Object[] row = repository.summaryCounts(companyId, q, projectId);
+        // Single-row aggregate; some JPA providers wrap it as Object[]{Object[]}.
+        if (row != null && row.length == 1 && row[0] instanceof Object[]) {
+            row = (Object[]) row[0];
+        }
+        long total = asLong(row, 0);
+        long active = asLong(row, 1);
+        long monthly = asLong(row, 2);
+        long daily = asLong(row, 3);
+        return new EmployeeSummaryDto(total, active, total - active, monthly, daily);
+    }
+
+    private static long asLong(Object[] row, int idx) {
+        if (row == null || idx >= row.length || row[idx] == null) {
+            return 0L;
+        }
+        return ((Number) row[idx]).longValue();
     }
 
     @Transactional(readOnly = true)

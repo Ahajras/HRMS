@@ -7,6 +7,7 @@ import type {
   Country,
   Currency,
   Employee,
+  EmployeeSummary,
   EmployeeBankAccount,
   EmployeeDocument,
   ImportSummary,
@@ -155,10 +156,22 @@ export const organizationUnitApi = {
 
 // --- Employees ---
 export const employeeApi = {
-  list: (page = 0, size = 20, q?: string, payStatus?: string) =>
+  list: (page = 0, size = 20, q?: string, payStatus?: string, projectId?: string) =>
     api
       .get<PageResponse<Employee>>("/employees", {
-        params: { page, size, ...(q ? { q } : {}), ...(payStatus ? { payStatus } : {}) },
+        params: {
+          page,
+          size,
+          ...(q ? { q } : {}),
+          ...(payStatus ? { payStatus } : {}),
+          ...(projectId ? { projectId } : {}),
+        },
+      })
+      .then((r) => r.data),
+  summary: (q?: string, projectId?: string) =>
+    api
+      .get<EmployeeSummary>("/employees/summary", {
+        params: { ...(q ? { q } : {}), ...(projectId ? { projectId } : {}) },
       })
       .then((r) => r.data),
   get: (id: string) => api.get<Employee>(`/employees/${id}`).then((r) => r.data),
