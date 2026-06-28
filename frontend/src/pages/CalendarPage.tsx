@@ -108,7 +108,7 @@ export default function CalendarPage() {
                     </TableCell>
                   </TableRow>
                 )}
-              </>
+              </Fragment>
             ))}
             {periods.length === 0 && (
               <TableRow><TableCell colSpan={5}><Typography variant="body2" color="text.secondary" p={1}>No periods for {year}. Click "Initialize / generate year".</Typography></TableCell></TableRow>
