@@ -33,6 +33,9 @@ public class Timesheet extends AuditableEntity {
     @Column(name = "shift_id")
     private UUID shiftId;
 
+    @Column(name = "period_id")
+    private UUID periodId;
+
     @Column(name = "status", nullable = false, length = 20)
     private String status = "DRAFT";
 
@@ -68,6 +71,9 @@ public class Timesheet extends AuditableEntity {
 
     public UUID getShiftId() { return shiftId; }
     public void setShiftId(UUID shiftId) { this.shiftId = shiftId; }
+
+    public UUID getPeriodId() { return periodId; }
+    public void setPeriodId(UUID periodId) { this.periodId = periodId; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

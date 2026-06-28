@@ -6,6 +6,8 @@ import java.util.UUID;
 public class GenerateTimesheetRequest {
 
     private UUID employeeId;
+    /** The payroll period this timesheet belongs to (must be OPEN). */
+    private UUID periodId;
     private int year;
     private int month;
     private UUID shiftId;
@@ -14,6 +16,9 @@ public class GenerateTimesheetRequest {
 
     public UUID getEmployeeId() { return employeeId; }
     public void setEmployeeId(UUID employeeId) { this.employeeId = employeeId; }
+
+    public UUID getPeriodId() { return periodId; }
+    public void setPeriodId(UUID periodId) { this.periodId = periodId; }
 
     public int getYear() { return year; }
     public void setYear(int year) { this.year = year; }

@@ -1,0 +1,100 @@
+package com.hrms.timesheet.service;
+
+import com.hrms.common.exception.ResourceNotFoundException;
+import com.hrms.common.tenant.TenantContext;
+import com.hrms.employee.repository.EmployeeRepository;
+import com.hrms.timesheet.domain.EmployeeShift;
+import com.hrms.timesheet.dto.EmployeeShiftDto;
+import com.hrms.timesheet.repository.EmployeeShiftRepository;
+import com.hrms.timesheet.repository.ShiftRepository;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDate;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.stream.Collectors;
+
+/** Roster: assign employees to shifts, effective-dated (FTDD Vol.1 Ch.4). */
+@Service
+@Transactional
+public class EmployeeShiftService {
+
+    private final EmployeeShiftRepository repository;
+    private final EmployeeRepository employeeRepository;
+    private final ShiftRepository shiftRepository;
+
+    public EmployeeShiftService(EmployeeShiftRepository repository,
+                                EmployeeRepository employeeRepository,
+                                ShiftRepository shiftRepository) {
+        this.repository = repository;
+        this.employeeRepository = employeeRepository;
+        this.shiftRepository = shiftRepository;
+    }
+
+    @Transactional(readOnly = true)
+    public List<EmployeeShiftDto> findAll(UUID employeeId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        List<EmployeeShift> rows = employeeId != null
+                ? repository.findByCompanyIdAndEmployeeIdOrderByEffectiveFromDesc(companyId, employeeId)
+                : repository.findByCompanyIdOrderByEffectiveFromDesc(companyId);
+        Map<UUID, String> shiftCodes = shiftRepository.findByCompanyIdOrderByCode(companyId).stream()
+                .collect(Collectors.toMap(s -> s.getId(), s -> s.getCode()));
+        return rows.stream().map(r -> toDto(r, shiftCodes)).toList();
+    }
+
+    public EmployeeShiftDto create(EmployeeShiftDto dto) {
+        UUID companyId = TenantContext.requireCompanyId();
+        EmployeeShift entity = new EmployeeShift();
+        entity.setCompanyId(companyId);
+        apply(dto, entity);
+        return toDto(repository.save(entity), null);
+    }
+
+    public EmployeeShiftDto update(UUID id, EmployeeShiftDto dto) {
+        EmployeeShift entity = getEntity(id);
+        apply(dto, entity);
+        return toDto(repository.save(entity), null);
+    }
+
+    public void delete(UUID id) {
+        repository.delete(getEntity(id));
+    }
+
+    private EmployeeShift getEntity(UUID id) {
+        return repository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Roster entry not found: " + id));
+    }
+
+    private void apply(EmployeeShiftDto dto, EmployeeShift e) {
+        e.setEmployeeId(dto.getEmployeeId());
+        e.setShiftId(dto.getShiftId());
+        e.setEffectiveFrom(dto.getEffectiveFrom() != null ? dto.getEffectiveFrom() : LocalDate.now());
+        e.setEffectiveTo(dto.getEffectiveTo());
+        if (dto.getStatus() != null) {
+            e.setStatus(dto.getStatus());
+        }
+    }
+
+    private EmployeeShiftDto toDto(EmployeeShift e, Map<UUID, String> shiftCodes) {
+        EmployeeShiftDto dto = new EmployeeShiftDto();
+        dto.setId(e.getId());
+        dto.setCompanyId(e.getCompanyId());
+        dto.setEmployeeId(e.getEmployeeId());
+        dto.setShiftId(e.getShiftId());
+        dto.setEffectiveFrom(e.getEffectiveFrom());
+        dto.setEffectiveTo(e.getEffectiveTo());
+        dto.setStatus(e.getStatus());
+        if (shiftCodes != null) {
+            dto.setShiftCode(shiftCodes.get(e.getShiftId()));
+        } else {
+            shiftRepository.findById(e.getShiftId()).ifPresent(s -> dto.setShiftCode(s.getCode()));
+        }
+        employeeRepository.findById(e.getEmployeeId()).ifPresent(emp -> {
+            dto.setEmployeeName((emp.getFirstName() + " " + emp.getLastName()).trim());
+            dto.setEmployeeNumber(emp.getEmployeeNumber());
+        });
+        return dto;
+    }
+}

@@ -33,7 +33,7 @@ employees, multi-company, multi-country. Built incrementally in **10 phases**,
 - P2 — Security + Auth (JWT) — **Done**
 - Legacy import (DBF → Postgres) — **Done**, expanded to full employee file
 - P3 — Rule Engine — **Done** (V14 + entities + resolver + CountryLawPage; Qatar law deployed)
-- P4 — Timesheet / Shift / Time Type — **Done** (V16 + full backend + frontend; source of actual worked hours)
+- P4 — Timesheet / Shift / Time Type / **Calendar & Period** — **Done** (V16+V17; full backend + frontend; source of actual worked hours)
 - P5 — Leave — **NEXT / not started** (do not start without user's go-ahead)
 - P6 — Overtime
 - P7 — Financial Transactions
@@ -117,6 +117,33 @@ then update this file + deploy.
   routes in App.tsx + nav in AppLayout.tsx (Timesheets/Shifts/Time Setup).
 - Boundary: Shift CLASSIFIES the day; Rule Engine owns the RATES. Single
   project/cost-code per day (defaults from latest assignment).
+
+### P4 Calendar & Period engine (done — V17)
+- Migration `V17__payroll_calendar.sql`: tables `payroll_calendar`,
+  `payroll_period` (OPEN→LOCKED→CLOSED), `payroll_week`, `employee_shift`
+  (roster, effective-dated); ALTER `timesheet` ADD `period_id`; seeds DEFAULT
+  monthly calendar (week_start SAT) for company c1.
+- Domain/repos/dto: PayrollCalendar, PayrollPeriod, PayrollWeek, EmployeeShift.
+- Services: **PayrollCalendarService** (calendar CRUD + `resolve`),
+  **PayrollPeriodService** (`generateYear` → 12 periods + weeks; lock/close/reopen;
+  delete guarded if timesheets exist), **EmployeeShiftService** (roster CRUD).
+- REST: `/api/v1/payroll-calendars`, `/payroll-periods` (GET ?year, GET/{id},
+  POST /generate?year[&calendarId], POST/{id}/{lock|close|reopen}, DELETE/{id}),
+  `/employee-shifts` (GET ?employeeId, POST, PUT/{id}, DELETE/{id}).
+- TimesheetService.generate now takes **periodId** (must be OPEN); derives
+  year/month from the period; resolves shift from roster (employee_shift) when
+  none passed, else company default. Timesheet carries period_id.
+- Frontend: types Payroll{Calendar,Period,Week}, EmployeeShift; calendarApi/
+  periodApi/employeeShiftApi; pages **CalendarPage** (init year + lock/close/reopen
+  + weeks), **RosterPage** (assign employees→shifts), TimesheetPage now picks a
+  **Period** (no year/month dropdowns). Nav grouped (AppLayout NAV_GROUPS):
+  Workforce / Time & Attendance / Configuration / Administration.
+- ⚠️ **Bean-name clash gotcha:** `com.hrms.reference` already has a
+  `CalendarService` + `CalendarController`. The timesheet ones were named
+  **PayrollCalendarService / PayrollCalendarController** to avoid duplicate Spring
+  bean names. The old `timesheet/web/CalendarController.java` and
+  `timesheet/service/CalendarService.java` are now deprecated empty stubs (couldn't
+  delete from sandbox — **delete these two files on the PC** when convenient).
 
 ---
 

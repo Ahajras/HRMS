@@ -380,10 +380,59 @@ export interface Timesheet {
 
 export interface GenerateTimesheetRequest {
   employeeId: string;
-  year: number;
-  month: number;
+  periodId: string;
+  year?: number;
+  month?: number;
   shiftId?: string;
   overwrite?: boolean;
+}
+
+// --- Payroll Calendar / Period / Week (FTDD Vol.1 Ch.4) ---
+export interface PayrollCalendar {
+  id?: string;
+  companyId?: string;
+  code: string;
+  name: string;
+  frequency?: string;
+  weekStart?: string;
+  status?: string;
+}
+
+export interface PayrollWeek {
+  id?: string;
+  periodId?: string;
+  weekNo: number;
+  startDate: string;
+  endDate: string;
+}
+
+export interface PayrollPeriod {
+  id?: string;
+  companyId?: string;
+  calendarId?: string;
+  periodYear: number;
+  periodMonth: number;
+  name: string;
+  startDate: string;
+  endDate: string;
+  payDate?: string;
+  status?: string;
+  lockedAt?: string;
+  closedAt?: string;
+  weeks: PayrollWeek[];
+}
+
+export interface EmployeeShift {
+  id?: string;
+  companyId?: string;
+  employeeId: string;
+  employeeName?: string;
+  employeeNumber?: string;
+  shiftId: string;
+  shiftCode?: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  status?: string;
 }
 
 export interface PayrollComponent {

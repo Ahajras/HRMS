@@ -16,13 +16,8 @@ import {
   Typography,
 } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { employeeApi, shiftApi, timeTypeApi, timesheetApi } from "../api/resources";
+import { employeeApi, periodApi, shiftApi, timeTypeApi, timesheetApi } from "../api/resources";
 import type { Timesheet, TimesheetDay } from "../api/types";
-
-const MONTHS = [
-  "January", "February", "March", "April", "May", "June",
-  "July", "August", "September", "October", "November", "December",
-];
 
 const STATUS_COLOR: Record<string, "default" | "info" | "success" | "warning"> = {
   DRAFT: "default",
@@ -31,11 +26,15 @@ const STATUS_COLOR: Record<string, "default" | "info" | "success" | "warning"> =
   LOCKED: "warning",
 };
 
+const PERIOD_COLOR: Record<string, "success" | "warning" | "error"> = {
+  OPEN: "success",
+  LOCKED: "warning",
+  CLOSED: "error",
+};
+
 export default function TimesheetPage() {
   const qc = useQueryClient();
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
+  const [periodId, setPeriodId] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Generate form
@@ -49,9 +48,13 @@ export default function TimesheetPage() {
   });
   const { data: shifts = [] } = useQuery({ queryKey: ["shifts"], queryFn: shiftApi.list });
   const { data: timeTypes = [] } = useQuery({ queryKey: ["timeTypes"], queryFn: timeTypeApi.list });
+  const { data: periods = [] } = useQuery({ queryKey: ["periods"], queryFn: () => periodApi.list() });
+
+  const period = periods.find((p) => p.id === periodId);
   const { data: list = [] } = useQuery({
-    queryKey: ["timesheets", year, month],
-    queryFn: () => timesheetApi.listByPeriod(year, month),
+    queryKey: ["timesheets", periodId],
+    queryFn: () => timesheetApi.listByPeriod(period!.periodYear, period!.periodMonth),
+    enabled: !!period,
   });
   const { data: detail } = useQuery({
     queryKey: ["timesheet", selectedId],
@@ -61,9 +64,9 @@ export default function TimesheetPage() {
 
   const generate = useMutation({
     mutationFn: () =>
-      timesheetApi.generate({ employeeId: genEmployee, year, month, shiftId: genShift || undefined, overwrite }),
+      timesheetApi.generate({ employeeId: genEmployee, periodId, shiftId: genShift || undefined, overwrite }),
     onSuccess: (ts) => {
-      qc.invalidateQueries({ queryKey: ["timesheets", year, month] });
+      qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
       setSelectedId(ts.id ?? null);
     },
   });
@@ -72,17 +75,19 @@ export default function TimesheetPage() {
     mutationFn: ({ id, action }: { id: string; action: "submit" | "approve" | "lock" | "reopen" }) =>
       timesheetApi[action](id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["timesheets", year, month] });
+      qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
       qc.invalidateQueries({ queryKey: ["timesheet", selectedId] });
     },
   });
   const del = useMutation({
     mutationFn: (id: string) => timesheetApi.remove(id),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["timesheets", year, month] });
+      qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
       setSelectedId(null);
     },
   });
+
+  const periodOpen = period?.status === "OPEN";
 
   return (
     <Box>
@@ -90,23 +95,32 @@ export default function TimesheetPage() {
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
         <Grid container spacing={1.5} alignItems="center">
-          <Grid item xs={6} sm={2}>
-            <TextField select fullWidth size="small" label="Year" value={year} onChange={(e) => { setYear(Number(e.target.value)); setSelectedId(null); }}>
-              {Array.from({ length: 7 }, (_, i) => now.getFullYear() - 3 + i).map((y) => (
-                <MenuItem key={y} value={y}>{y}</MenuItem>
+          <Grid item xs={12} sm={5}>
+            <TextField select fullWidth size="small" label="Period" value={periodId} onChange={(e) => { setPeriodId(e.target.value); setSelectedId(null); }}>
+              {periods.length === 0 && <MenuItem value="" disabled>No periods — create them in Payroll Calendar</MenuItem>}
+              {periods.map((p) => (
+                <MenuItem key={p.id} value={p.id}>{p.name} ({p.status})</MenuItem>
               ))}
             </TextField>
           </Grid>
-          <Grid item xs={6} sm={3}>
-            <TextField select fullWidth size="small" label="Month" value={month} onChange={(e) => { setMonth(Number(e.target.value)); setSelectedId(null); }}>
-              {MONTHS.map((m, i) => <MenuItem key={m} value={i + 1}>{m}</MenuItem>)}
-            </TextField>
-          </Grid>
+          {period && (
+            <Grid item xs={12} sm={4}>
+              <Chip size="small" label={period.status} color={PERIOD_COLOR[period.status ?? "OPEN"] ?? "default"} />
+              <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
+                {period.startDate} → {period.endDate}
+              </Typography>
+            </Grid>
+          )}
         </Grid>
       </Paper>
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
         <Typography variant="subtitle2" gutterBottom>Generate timesheet</Typography>
+        {!periodOpen && period && (
+          <Typography variant="body2" color="warning.main" mb={1}>
+            This period is {period.status}. Reopen it in Payroll Calendar to add or edit timesheets.
+          </Typography>
+        )}
         <Grid container spacing={1.5} alignItems="center">
           <Grid item xs={12} sm={4}>
             <TextField select fullWidth size="small" label="Employee" value={genEmployee} onChange={(e) => setGenEmployee(e.target.value)}>
@@ -117,7 +131,7 @@ export default function TimesheetPage() {
           </Grid>
           <Grid item xs={12} sm={3}>
             <TextField select fullWidth size="small" label="Shift" value={genShift} onChange={(e) => setGenShift(e.target.value)}>
-              <MenuItem value="">(default)</MenuItem>
+              <MenuItem value="">(from roster)</MenuItem>
               {shifts.map((s) => <MenuItem key={s.id} value={s.id}>{s.code} — {s.name}</MenuItem>)}
             </TextField>
           </Grid>
@@ -128,7 +142,7 @@ export default function TimesheetPage() {
             </TextField>
           </Grid>
           <Grid item xs={6} sm={3}>
-            <Button variant="contained" disabled={!genEmployee || generate.isPending} onClick={() => generate.mutate()}>
+            <Button variant="contained" disabled={!genEmployee || !periodOpen || generate.isPending} onClick={() => generate.mutate()}>
               Generate
             </Button>
           </Grid>
@@ -200,7 +214,7 @@ function TimesheetDetail({
     mutationFn: () => timesheetApi.saveDays(timesheet.id!, days),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["timesheet", timesheet.id] });
-      qc.invalidateQueries({ queryKey: ["timesheets", timesheet.periodYear, timesheet.periodMonth] });
+      qc.invalidateQueries({ queryKey: ["timesheets"] });
     },
   });
 

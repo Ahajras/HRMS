@@ -22,6 +22,9 @@ import type {
   Project,
   CostCode,
   PublicHoliday,
+  PayrollCalendar,
+  PayrollPeriod,
+  EmployeeShift,
   Rule,
   RulePackage,
   Shift,
@@ -229,6 +232,44 @@ export const publicHolidayApi = {
   update: (id: string, d: PublicHoliday) =>
     api.put<PublicHoliday>(`/public-holidays/${id}`, d).then((r) => r.data),
   remove: (id: string) => api.delete(`/public-holidays/${id}`).then(() => undefined),
+};
+
+// --- Payroll calendars ---
+export const calendarApi = {
+  list: () => api.get<PayrollCalendar[]>("/payroll-calendars").then((r) => r.data),
+  create: (d: PayrollCalendar) => api.post<PayrollCalendar>("/payroll-calendars", d).then((r) => r.data),
+  update: (id: string, d: PayrollCalendar) =>
+    api.put<PayrollCalendar>(`/payroll-calendars/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/payroll-calendars/${id}`).then(() => undefined),
+};
+
+// --- Payroll periods (months) ---
+export const periodApi = {
+  list: (year?: number) =>
+    api.get<PayrollPeriod[]>("/payroll-periods", { params: year ? { year } : {} }).then((r) => r.data),
+  get: (id: string) => api.get<PayrollPeriod>(`/payroll-periods/${id}`).then((r) => r.data),
+  generate: (year: number, calendarId?: string) =>
+    api
+      .post<PayrollPeriod[]>("/payroll-periods/generate", null, {
+        params: { year, ...(calendarId ? { calendarId } : {}) },
+      })
+      .then((r) => r.data),
+  lock: (id: string) => api.post<PayrollPeriod>(`/payroll-periods/${id}/lock`).then((r) => r.data),
+  close: (id: string) => api.post<PayrollPeriod>(`/payroll-periods/${id}/close`).then((r) => r.data),
+  reopen: (id: string) => api.post<PayrollPeriod>(`/payroll-periods/${id}/reopen`).then((r) => r.data),
+  remove: (id: string) => api.delete(`/payroll-periods/${id}`).then(() => undefined),
+};
+
+// --- Shift roster (employee -> shift) ---
+export const employeeShiftApi = {
+  list: (employeeId?: string) =>
+    api
+      .get<EmployeeShift[]>("/employee-shifts", { params: employeeId ? { employeeId } : {} })
+      .then((r) => r.data),
+  create: (d: EmployeeShift) => api.post<EmployeeShift>("/employee-shifts", d).then((r) => r.data),
+  update: (id: string, d: EmployeeShift) =>
+    api.put<EmployeeShift>(`/employee-shifts/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/employee-shifts/${id}`).then(() => undefined),
 };
 
 // --- Timesheet: monthly timesheets ---

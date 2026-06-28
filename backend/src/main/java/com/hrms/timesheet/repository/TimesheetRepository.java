@@ -14,4 +14,6 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
 
     List<Timesheet> findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
             UUID companyId, int periodYear, int periodMonth);
+
+    List<Timesheet> findByPeriodId(UUID periodId);
 }

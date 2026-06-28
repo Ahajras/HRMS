@@ -28,6 +28,8 @@ import WorkIcon from "@mui/icons-material/Work";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import EventBusyIcon from "@mui/icons-material/EventBusy";
+import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
+import GroupsIcon from "@mui/icons-material/Groups";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
 import SecurityIcon from "@mui/icons-material/Security";
@@ -61,7 +63,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     label: "Time & Attendance",
     items: [
+      { to: "/payroll-calendar", label: "Payroll Calendar", icon: <CalendarMonthIcon />, authority: "employee.read" },
       { to: "/timesheets", label: "Timesheets", icon: <AccessTimeIcon />, authority: "employee.read" },
+      { to: "/roster", label: "Shift Roster", icon: <GroupsIcon />, authority: "employee.read" },
       { to: "/shifts", label: "Shifts", icon: <ScheduleIcon />, authority: "employee.read" },
       { to: "/time-setup", label: "Time Setup", icon: <EventBusyIcon />, authority: "employee.read" },
     ],

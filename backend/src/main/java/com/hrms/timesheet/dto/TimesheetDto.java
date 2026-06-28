@@ -13,6 +13,7 @@ public class TimesheetDto {
     private UUID employeeId;
     private String employeeName;
     private String employeeNumber;
+    private UUID periodId;
     private int periodYear;
     private int periodMonth;
     private UUID shiftId;
@@ -39,6 +40,9 @@ public class TimesheetDto {
 
     public String getEmployeeNumber() { return employeeNumber; }
     public void setEmployeeNumber(String employeeNumber) { this.employeeNumber = employeeNumber; }
+
+    public UUID getPeriodId() { return periodId; }
+    public void setPeriodId(UUID periodId) { this.periodId = periodId; }
 
     public int getPeriodYear() { return periodYear; }
     public void setPeriodYear(int periodYear) { this.periodYear = periodYear; }

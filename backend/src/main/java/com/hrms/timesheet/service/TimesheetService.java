@@ -7,6 +7,8 @@ import com.hrms.employee.domain.Assignment;
 import com.hrms.employee.domain.Employee;
 import com.hrms.employee.repository.AssignmentRepository;
 import com.hrms.employee.repository.EmployeeRepository;
+import com.hrms.timesheet.domain.EmployeeShift;
+import com.hrms.timesheet.domain.PayrollPeriod;
 import com.hrms.timesheet.domain.PublicHoliday;
 import com.hrms.timesheet.domain.Shift;
 import com.hrms.timesheet.domain.TimeType;
@@ -15,6 +17,8 @@ import com.hrms.timesheet.domain.TimesheetDay;
 import com.hrms.timesheet.dto.GenerateTimesheetRequest;
 import com.hrms.timesheet.dto.TimesheetDayDto;
 import com.hrms.timesheet.dto.TimesheetDto;
+import com.hrms.timesheet.repository.EmployeeShiftRepository;
+import com.hrms.timesheet.repository.PayrollPeriodRepository;
 import com.hrms.timesheet.repository.PublicHolidayRepository;
 import com.hrms.timesheet.repository.ShiftRepository;
 import com.hrms.timesheet.repository.TimeTypeRepository;
@@ -63,11 +67,14 @@ public class TimesheetService {
     private final PublicHolidayRepository holidayRepo;
     private final EmployeeRepository employeeRepo;
     private final AssignmentRepository assignmentRepo;
+    private final PayrollPeriodRepository periodRepo;
+    private final EmployeeShiftRepository employeeShiftRepo;
 
     public TimesheetService(TimesheetRepository timesheetRepo, TimesheetDayRepository dayRepo,
                             ShiftRepository shiftRepo, TimeTypeRepository timeTypeRepo,
                             PublicHolidayRepository holidayRepo, EmployeeRepository employeeRepo,
-                            AssignmentRepository assignmentRepo) {
+                            AssignmentRepository assignmentRepo, PayrollPeriodRepository periodRepo,
+                            EmployeeShiftRepository employeeShiftRepo) {
         this.timesheetRepo = timesheetRepo;
         this.dayRepo = dayRepo;
         this.shiftRepo = shiftRepo;
@@ -75,6 +82,8 @@ public class TimesheetService {
         this.holidayRepo = holidayRepo;
         this.employeeRepo = employeeRepo;
         this.assignmentRepo = assignmentRepo;
+        this.periodRepo = periodRepo;
+        this.employeeShiftRepo = employeeShiftRepo;
     }
 
     // --- queries -----------------------------------------------------
@@ -96,14 +105,30 @@ public class TimesheetService {
 
     public TimesheetDto generate(GenerateTimesheetRequest req) {
         UUID companyId = TenantContext.requireCompanyId();
-        Employee emp = employeeRepo.findById(req.getEmployeeId())
+        employeeRepo.findById(req.getEmployeeId())
                 .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + req.getEmployeeId()));
 
-        Shift shift = resolveShift(companyId, req.getShiftId());
+        // A timesheet must live inside an OPEN payroll period.
+        PayrollPeriod period = periodRepo.findById(req.getPeriodId())
+                .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + req.getPeriodId()));
+        if (!"OPEN".equals(period.getStatus())) {
+            throw new BusinessRuleException("period.not.open",
+                    "The period is " + period.getStatus() + ". Reopen it to edit timesheets.");
+        }
+        int year = period.getPeriodYear();
+        int month = period.getPeriodMonth();
+
+        // Resolve the shift: explicit > roster (effective on period start) > company default.
+        Shift shift = req.getShiftId() != null
+                ? resolveShift(companyId, req.getShiftId())
+                : resolveRosterShift(companyId, req.getEmployeeId(), period.getStartDate());
+        if (shift == null) {
+            shift = resolveShift(companyId, null);
+        }
 
         Timesheet existing = timesheetRepo
                 .findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(
-                        companyId, req.getEmployeeId(), req.getYear(), req.getMonth())
+                        companyId, req.getEmployeeId(), year, month)
                 .orElse(null);
         if (existing != null) {
             if (!req.isOverwrite()) {
@@ -120,8 +145,9 @@ public class TimesheetService {
         Timesheet ts = existing != null ? existing : new Timesheet();
         ts.setCompanyId(companyId);
         ts.setEmployeeId(req.getEmployeeId());
-        ts.setPeriodYear(req.getYear());
-        ts.setPeriodMonth(req.getMonth());
+        ts.setPeriodId(period.getId());
+        ts.setPeriodYear(year);
+        ts.setPeriodMonth(month);
         ts.setShiftId(shift != null ? shift.getId() : null);
         ts.setStatus(DRAFT);
         ts = timesheetRepo.save(ts);
@@ -131,7 +157,7 @@ public class TimesheetService {
         for (TimeType tt : timeTypeRepo.findByCompanyIdOrderBySortOrderAscNameAsc(companyId)) {
             typesByCode.put(tt.getCode(), tt);
         }
-        YearMonth ym = YearMonth.of(req.getYear(), req.getMonth());
+        YearMonth ym = YearMonth.of(year, month);
         Set<LocalDate> holidays = new HashSet<>();
         for (PublicHoliday h : holidayRepo.findByCompanyIdAndHolidayDateBetween(
                 companyId, ym.atDay(1), ym.atEndOfMonth())) {
@@ -375,6 +401,16 @@ public class TimesheetService {
         return shifts.isEmpty() ? null : shifts.get(0);
     }
 
+    /** The shift the employee is rostered on, effective on the given date. */
+    private Shift resolveRosterShift(UUID companyId, UUID employeeId, LocalDate onDate) {
+        for (EmployeeShift es : employeeShiftRepo.findByCompanyIdAndEmployeeIdOrderByEffectiveFromDesc(companyId, employeeId)) {
+            if (es.isEffectiveOn(onDate)) {
+                return shiftRepo.findById(es.getShiftId()).orElse(null);
+            }
+        }
+        return null;
+    }
+
     private Shift resolveDayShift(TimesheetDay day, Timesheet ts, Map<UUID, Shift> cache) {
         UUID sid = day.getShiftId() != null ? day.getShiftId() : ts.getShiftId();
         if (sid == null) {
@@ -431,6 +467,7 @@ public class TimesheetService {
         dto.setId(t.getId());
         dto.setCompanyId(t.getCompanyId());
         dto.setEmployeeId(t.getEmployeeId());
+        dto.setPeriodId(t.getPeriodId());
         dto.setPeriodYear(t.getPeriodYear());
         dto.setPeriodMonth(t.getPeriodMonth());
         dto.setShiftId(t.getShiftId());
