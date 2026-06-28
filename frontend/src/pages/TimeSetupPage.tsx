@@ -6,7 +6,6 @@ import {
   FormControlLabel,
   Grid,
   IconButton,
-  MenuItem,
   Paper,
   Stack,
   TextField,
