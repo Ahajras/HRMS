@@ -34,6 +34,7 @@ import type {
   TimeType,
   Timesheet,
   TimesheetDay,
+  TimesheetSummary,
 } from "./types";
 
 // --- Assignments ---
@@ -305,6 +306,7 @@ export const timesheetApi = {
   listByPeriod: (year: number, month: number) =>
     api.get<Timesheet[]>("/timesheets", { params: { year, month } }).then((r) => r.data),
   get: (id: string) => api.get<Timesheet>(`/timesheets/${id}`).then((r) => r.data),
+  summary: (id: string) => api.get<TimesheetSummary>(`/timesheets/${id}/summary`).then((r) => r.data),
   generate: (d: GenerateTimesheetRequest) =>
     api.post<Timesheet>("/timesheets/generate", d).then((r) => r.data),
   generateBulk: (periodId: string) =>

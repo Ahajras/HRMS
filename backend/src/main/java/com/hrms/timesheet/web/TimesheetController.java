@@ -3,6 +3,7 @@ package com.hrms.timesheet.web;
 import com.hrms.timesheet.dto.GenerateTimesheetRequest;
 import com.hrms.timesheet.dto.TimesheetDayDto;
 import com.hrms.timesheet.dto.TimesheetDto;
+import com.hrms.timesheet.dto.TimesheetSummaryDto;
 import com.hrms.timesheet.service.TimesheetService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -41,6 +42,11 @@ public class TimesheetController {
     @GetMapping("/{id}")
     public TimesheetDto get(@PathVariable UUID id) {
         return service.get(id);
+    }
+
+    @GetMapping("/{id}/summary")
+    public TimesheetSummaryDto summary(@PathVariable UUID id) {
+        return service.summarize(id);
     }
 
     @PostMapping("/generate")

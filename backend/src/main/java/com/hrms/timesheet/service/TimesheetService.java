@@ -25,6 +25,7 @@ import com.hrms.timesheet.domain.TimesheetDayCost;
 import com.hrms.timesheet.dto.GenerateTimesheetRequest;
 import com.hrms.timesheet.dto.TimesheetDayCostDto;
 import com.hrms.timesheet.dto.TimesheetDayDto;
+import com.hrms.timesheet.dto.TimesheetSummaryDto;
 import com.hrms.timesheet.dto.TimesheetDto;
 import com.hrms.timesheet.repository.EmployeeShiftRepository;
 import com.hrms.timesheet.repository.PayrollPeriodRepository;
@@ -46,6 +47,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -693,6 +695,98 @@ public class TimesheetService {
             return new UUID[]{a.getProjectId(), a.getCostCodeId()};
         }
         return new UUID[]{null, null};
+    }
+
+    /**
+     * Roll a timesheet's daily records up into a per-category summary (worked /
+     * overtime / absence / leave hours and day counts) — the figures the payroll
+     * engine will consume, surfaced for review.
+     */
+    @Transactional(readOnly = true)
+    public TimesheetSummaryDto summarize(UUID timesheetId) {
+        Timesheet ts = getEntity(timesheetId);
+        TimesheetSummaryDto dto = new TimesheetSummaryDto();
+        dto.setTimesheetId(ts.getId());
+        dto.setEmployeeId(ts.getEmployeeId());
+        dto.setPeriodYear(ts.getPeriodYear());
+        dto.setPeriodMonth(ts.getPeriodMonth());
+        dto.setStatus(ts.getStatus());
+        employeeRepo.findById(ts.getEmployeeId())
+                .ifPresent(e -> dto.setEmployeeName((e.getFirstName() + " " + e.getLastName()).trim()));
+
+        Map<UUID, TimeType> typeCache = new HashMap<>();
+        // category -> [days, hours, paid]
+        Map<String, int[]> daysByCat = new HashMap<>();
+        Map<String, BigDecimal> hoursByCat = new HashMap<>();
+        Map<String, Boolean> paidByCat = new HashMap<>();
+
+        BigDecimal normal = BigDecimal.ZERO;
+        BigDecimal ot = BigDecimal.ZERO;
+        BigDecimal absenceHours = BigDecimal.ZERO;
+        BigDecimal leaveHours = BigDecimal.ZERO;
+        int worked = 0, absence = 0, leave = 0, rest = 0, holiday = 0, total = 0;
+
+        for (TimesheetDay day : dayRepo.findByTimesheetIdOrderByWorkDate(timesheetId)) {
+            total++;
+            String category = "REGULAR";
+            boolean paid = true;
+            if (day.getTimeTypeId() != null) {
+                TimeType tt = typeCache.computeIfAbsent(day.getTimeTypeId(),
+                        id -> timeTypeRepo.findById(id).orElse(null));
+                if (tt != null) {
+                    category = tt.getCategory();
+                    paid = tt.isPaid();
+                }
+            }
+            BigDecimal dayNormal = nz(day.getNormalHours());
+            BigDecimal dayOt = nz(day.getOtHours());
+            BigDecimal dayWorked = nz(day.getWorkedHours());
+            BigDecimal dayPlanned = nz(day.getPlannedHours());
+            normal = normal.add(dayNormal);
+            ot = ot.add(dayOt);
+
+            // category lines: worked categories accrue worked hours, non-working
+            // categories (absence/leave) accrue the planned (would-have-worked) hours.
+            BigDecimal lineHours = (dayWorked.signum() > 0) ? dayWorked : dayPlanned;
+            daysByCat.computeIfAbsent(category, k -> new int[1])[0]++;
+            hoursByCat.merge(category, lineHours, BigDecimal::add);
+            paidByCat.putIfAbsent(category, paid);
+
+            switch (category) {
+                case "ABSENCE", "UNPAID" -> { absence++; absenceHours = absenceHours.add(dayPlanned); }
+                case "LEAVE", "SICK", "ACCIDENT" -> { leave++; leaveHours = leaveHours.add(dayPlanned); }
+                case "REST" -> rest++;
+                case "HOLIDAY" -> holiday++;
+                default -> { if (dayWorked.signum() > 0) worked++; }
+            }
+        }
+
+        dto.setNormalHours(normal);
+        dto.setOvertimeHours(ot);
+        dto.setWorkedHours(normal.add(ot));
+        dto.setAbsenceHours(absenceHours);
+        dto.setLeaveHours(leaveHours);
+        dto.setWorkedDays(worked);
+        dto.setAbsenceDays(absence);
+        dto.setLeaveDays(leave);
+        dto.setRestDays(rest);
+        dto.setHolidayDays(holiday);
+        dto.setTotalDays(total);
+
+        List<TimesheetSummaryDto.CategoryLine> lines = new ArrayList<>();
+        for (String cat : daysByCat.keySet()) {
+            lines.add(new TimesheetSummaryDto.CategoryLine(
+                    cat, daysByCat.get(cat)[0],
+                    hoursByCat.getOrDefault(cat, BigDecimal.ZERO),
+                    paidByCat.getOrDefault(cat, true)));
+        }
+        lines.sort((a, b) -> a.getCategory().compareTo(b.getCategory()));
+        dto.setLines(lines);
+        return dto;
+    }
+
+    private static BigDecimal nz(BigDecimal v) {
+        return v != null ? v : BigDecimal.ZERO;
     }
 
     private Timesheet getEntity(UUID id) {

@@ -260,6 +260,15 @@ export default function TimesheetPage() {
   );
 }
 
+function SummaryStat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <Box>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>{label}</Typography>
+      <Typography variant="body2" fontWeight={600}>{value}</Typography>
+    </Box>
+  );
+}
+
 function TimesheetDetail({
   timesheet,
   timeTypes,
@@ -278,6 +287,11 @@ function TimesheetDetail({
 
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
   const { data: costCodes = [] } = useQuery({ queryKey: ["costCodesAll"], queryFn: costCodeApi.list });
+  const { data: summary } = useQuery({
+    queryKey: ["timesheetSummary", timesheet.id],
+    queryFn: () => timesheetApi.summary(timesheet.id!),
+    enabled: !!timesheet.id,
+  });
 
   useEffect(() => setDays(timesheet.days), [timesheet]);
 
@@ -285,6 +299,7 @@ function TimesheetDetail({
     mutationFn: () => timesheetApi.saveDays(timesheet.id!, days),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["timesheet", timesheet.id] });
+      qc.invalidateQueries({ queryKey: ["timesheetSummary", timesheet.id] });
       qc.invalidateQueries({ queryKey: ["timesheets"] });
     },
   });
@@ -326,6 +341,28 @@ function TimesheetDetail({
         <Alert severity="error" sx={{ mb: 1 }}>
           {(save.error as any)?.response?.data?.message ?? "Save failed."}
         </Alert>
+      )}
+
+      {summary && (
+        <Box sx={{ mb: 1.5, p: 1.5, bgcolor: "action.hover", borderRadius: 1 }}>
+          <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap>
+            <SummaryStat label="Normal" value={`${summary.normalHours}h`} />
+            <SummaryStat label="Overtime" value={`${summary.overtimeHours}h`} />
+            <SummaryStat label="Worked days" value={summary.workedDays} />
+            <SummaryStat label="Absence" value={`${summary.absenceDays}d · ${summary.absenceHours}h`} />
+            <SummaryStat label="Leave" value={`${summary.leaveDays}d · ${summary.leaveHours}h`} />
+            <SummaryStat label="Rest/Holiday" value={`${summary.restDays + summary.holidayDays}d`} />
+          </Stack>
+          {summary.lines.length > 0 && (
+            <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+              {summary.lines.map((l) => (
+                <Chip key={l.category} size="small" variant="outlined"
+                  color={l.paid ? "default" : "warning"}
+                  label={`${l.category}: ${l.days}d · ${l.hours}h${l.paid ? "" : " (unpaid)"}`} />
+              ))}
+            </Stack>
+          )}
+        </Box>
       )}
 
       <Box sx={{ overflowX: "auto" }}>

@@ -355,6 +355,34 @@ export interface PublicHoliday {
   status?: string;
 }
 
+export interface TimesheetSummaryLine {
+  category: string;
+  days: number;
+  hours: number;
+  paid: boolean;
+}
+
+export interface TimesheetSummary {
+  timesheetId: string;
+  employeeId: string;
+  employeeName?: string;
+  periodYear: number;
+  periodMonth: number;
+  status: string;
+  normalHours: number;
+  overtimeHours: number;
+  workedHours: number;
+  absenceHours: number;
+  leaveHours: number;
+  workedDays: number;
+  absenceDays: number;
+  leaveDays: number;
+  restDays: number;
+  holidayDays: number;
+  totalDays: number;
+  lines: TimesheetSummaryLine[];
+}
+
 export interface TimesheetDayCost {
   id?: string;
   projectId?: string;
