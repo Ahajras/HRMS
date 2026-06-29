@@ -292,11 +292,32 @@ public class TimesheetService {
             day.setCostCodeId(dto.getCostCodeId());
             day.setRemarks(dto.getRemarks());
             recomputeDay(day, ts, shiftCache, typeCache, weekCache);
+            validateCostSplit(day, dto.getCosts());
             dayRepo.save(day);
             saveDayCosts(day.getId(), dto.getCosts());
         }
         recomputeTotals(ts);
         return toFullDto(timesheetRepo.save(ts));
+    }
+
+    /** When a day is split across cost codes, the split must add up to the worked hours. */
+    private void validateCostSplit(TimesheetDay day, List<TimesheetDayCostDto> costs) {
+        if (costs == null || costs.isEmpty()) {
+            return;
+        }
+        BigDecimal sum = BigDecimal.ZERO;
+        for (TimesheetDayCostDto c : costs) {
+            if (c.getCostCodeId() == null && c.getProjectId() == null) {
+                continue;
+            }
+            sum = sum.add(c.getHours() != null ? c.getHours() : BigDecimal.ZERO);
+        }
+        BigDecimal worked = day.getWorkedHours() != null ? day.getWorkedHours() : BigDecimal.ZERO;
+        if (sum.subtract(worked).abs().compareTo(new BigDecimal("0.01")) > 0) {
+            throw new BusinessRuleException("timesheet.cost.split.mismatch",
+                    "Day " + day.getWorkDate() + ": cost-code hours (" + sum
+                            + ") must equal the worked hours (" + worked + ").");
+        }
     }
 
     /** Replace a day's cost-code allocation rows (legacy PAYIN HR_CC1..8). */

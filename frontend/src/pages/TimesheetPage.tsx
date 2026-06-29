@@ -295,6 +295,12 @@ function TimesheetDetail({
         </Stack>
       </Stack>
 
+      {save.isError && (
+        <Alert severity="error" sx={{ mb: 1 }}>
+          {(save.error as any)?.response?.data?.message ?? "Save failed."}
+        </Alert>
+      )}
+
       <Box sx={{ overflowX: "auto" }}>
         <Table size="small">
           <TableHead>
@@ -378,6 +384,16 @@ function TimesheetDetail({
                       </Stack>
                     ))}
                     {editable && <Button size="small" sx={{ mt: 0.5 }} onClick={() => addCost(idx)}>+ Add cost code</Button>}
+                    {(d.costs?.length ?? 0) > 0 && (() => {
+                      const sum = (d.costs ?? []).reduce((a, c) => a + (Number(c.hours) || 0), 0);
+                      const worked = Number(d.workedHours) || 0;
+                      const ok = Math.abs(sum - worked) < 0.01;
+                      return (
+                        <Typography variant="caption" sx={{ ml: 1 }} color={ok ? "success.main" : "error.main"}>
+                          Σ {sum} / worked {worked} {ok ? "✓" : "✗ must match"}
+                        </Typography>
+                      );
+                    })()}
                   </TableCell>
                 </TableRow>
               )}
