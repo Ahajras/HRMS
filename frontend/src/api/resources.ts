@@ -285,6 +285,7 @@ export const crewApi = {
   create: (d: Crew) => api.post<Crew>("/crews", d).then((r) => r.data),
   update: (id: string, d: Crew) => api.put<Crew>(`/crews/${id}`, d).then((r) => r.data),
   remove: (id: string) => api.delete(`/crews/${id}`).then(() => undefined),
+  byEmployee: (employeeId: string) => api.get<Crew | null>(`/crews/by-employee/${employeeId}`).then((r) => r.data),
   members: (id: string) => api.get<CrewMember[]>(`/crews/${id}/members`).then((r) => r.data),
   addMember: (id: string, d: CrewMember) => api.post<CrewMember>(`/crews/${id}/members`, d).then((r) => r.data),
   bulkAddMembers: (id: string, shiftId: string | undefined, effectiveFrom: string, employeeIds: string[]) =>

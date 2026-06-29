@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import {
   Alert,
+  Avatar,
   Box,
   Button,
   Chip,
   Dialog,
   DialogActions,
   DialogContent,
-  DialogTitle,
   Divider,
   Grid,
   IconButton,
@@ -25,6 +25,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import SearchIcon from "@mui/icons-material/Search";
+import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import {
   assignmentApi,
   bankApi,
@@ -32,6 +33,7 @@ import {
   contractPayItemApi,
   costCodeApi,
   countryApi,
+  crewApi,
   currencyApi,
   employeeApi,
   employeeBankAccountApi,
@@ -139,6 +141,17 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
   const countryOpts = countries.map((c) => ({ value: c.code, label: c.name }));
   const lk = (rows: { code: string; label: string }[]) => rows.map((r) => ({ value: r.code, label: r.label }));
 
+  // Supervisor candidates + the employee's current crew (read-only).
+  const { data: empPage } = useQuery({ queryKey: ["employeesAll"], queryFn: () => employeeApi.list(0, 500) });
+  const supervisorOpts = (empPage?.content ?? [])
+    .filter((e) => e.id !== form.id)
+    .map((e) => ({ value: e.id!, label: `${e.employeeNumber} — ${e.firstName} ${e.lastName}` }));
+  const { data: crew } = useQuery({
+    queryKey: ["crewByEmp", form.id],
+    queryFn: () => crewApi.byEmployee(form.id!),
+    enabled: !!form.id,
+  });
+
   return (
     <Grid container spacing={2} mt={0}>
       <Grid item xs={12} sm={4}>
@@ -196,6 +209,20 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
       </Grid>
       <Grid item xs={12} sm={4}>
         <TextField fullWidth label="Arabic Name" value={form.arabicName ?? ""} onChange={(e) => set("arabicName", e.target.value)} />
+      </Grid>
+
+      <Grid item xs={12}><Divider textAlign="left"><Typography variant="caption">Crew & Supervisor</Typography></Divider></Grid>
+
+      <Grid item xs={12} sm={4}>
+        <SelectField label="Supervisor (for approvals)" value={form.supervisorEmployeeId}
+          onChange={(v) => set("supervisorEmployeeId", v)} options={supervisorOpts} />
+      </Grid>
+      <Grid item xs={12} sm={4}>
+        <TextField fullWidth label="Crew" value={crew ? `${crew.code} — ${crew.name}` : "—"}
+          InputProps={{ readOnly: true }} helperText="Assigned in the Crews screen" />
+      </Grid>
+      <Grid item xs={12} sm={4}>
+        <TextField fullWidth label="Foreman" value={crew?.foremanName ?? "—"} InputProps={{ readOnly: true }} />
       </Grid>
 
       <Grid item xs={12}><Divider textAlign="left"><Typography variant="caption">Contact & Address</Typography></Divider></Grid>
@@ -959,6 +986,19 @@ export default function EmployeesPage() {
 
   const isSaved = Boolean(form.id);
 
+  const { data: headerCrew } = useQuery({
+    queryKey: ["crewByEmp", form.id],
+    queryFn: () => crewApi.byEmployee(form.id!),
+    enabled: open && isSaved,
+  });
+  const onPhoto = (file?: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => setForm((f) => ({ ...f, photoUrl: String(reader.result) }));
+    reader.readAsDataURL(file);
+  };
+  const initials = `${form.firstName?.[0] ?? ""}${form.lastName?.[0] ?? ""}`.toUpperCase();
+
   return (
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
@@ -1048,7 +1088,36 @@ export default function EmployeesPage() {
       </div>
 
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="md">
-        <DialogTitle>{isSaved ? `${form.firstName} ${form.lastName}` : "New Employee"}</DialogTitle>
+        <Box sx={{
+          p: 2.5,
+          display: "flex",
+          alignItems: "center",
+          gap: 2,
+          color: "common.white",
+          background: "linear-gradient(120deg, #1565c0 0%, #1e88e5 60%, #42a5f5 100%)",
+        }}>
+          <Box sx={{ position: "relative" }}>
+            <Avatar src={form.photoUrl || undefined} sx={{ width: 76, height: 76, fontSize: 28, bgcolor: "rgba(255,255,255,0.25)", border: "2px solid rgba(255,255,255,0.7)" }}>
+              {initials || "?"}
+            </Avatar>
+            <IconButton component="label" size="small"
+              sx={{ position: "absolute", right: -6, bottom: -6, bgcolor: "common.white", boxShadow: 1, "&:hover": { bgcolor: "grey.100" } }}>
+              <PhotoCameraIcon fontSize="small" color="primary" />
+              <input hidden type="file" accept="image/*" onChange={(e) => onPhoto(e.target.files?.[0])} />
+            </IconButton>
+          </Box>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography variant="h6" noWrap>{isSaved ? `${form.firstName} ${form.lastName}` : "New Employee"}</Typography>
+            {isSaved && <Typography variant="body2" sx={{ opacity: 0.85 }}>#{form.employeeNumber}{form.jobTitle ? ` · ${form.jobTitle}` : ""}</Typography>}
+            <Stack direction="row" spacing={0.75} mt={0.75} flexWrap="wrap" useFlexGap>
+              {headerCrew?.code && <Chip size="small" label={`Crew ${headerCrew.code}`} sx={{ bgcolor: "#7b1fa2", color: "#fff", fontWeight: 600 }} />}
+              {headerCrew?.foremanName && <Chip size="small" label={`Foreman: ${headerCrew.foremanName}`} sx={{ bgcolor: "rgba(255,255,255,0.22)", color: "#fff" }} />}
+              {form.supervisorName && <Chip size="small" label={`Supervisor: ${form.supervisorName}`} sx={{ bgcolor: "#00897b", color: "#fff", fontWeight: 600 }} />}
+              {form.payStatus && <Chip size="small" label={form.payStatus} sx={{ bgcolor: "rgba(255,255,255,0.22)", color: "#fff" }} />}
+              {form.status && <Chip size="small" label={form.status} sx={{ bgcolor: form.status === "ACTIVE" ? "#2e7d32" : "#c62828", color: "#fff" }} />}
+            </Stack>
+          </Box>
+        </Box>
         <DialogContent>
           <Tabs value={tab} onChange={(_, v) => setTab(v)} variant="scrollable" sx={{ borderBottom: 1, borderColor: "divider" }}>
             <Tab label="Personal" />

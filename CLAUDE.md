@@ -202,6 +202,17 @@ then update this file + deploy.
 - **NEXT (slice 2b):** Crew **trades** (job title planned vs assigned, red/green);
   **Timecard report** (per-employee monthly card, printable/PDF).
 
+### Employee card polish (done — V21)
+- V21: `employee` ADD `supervisor_employee_id` (FK employee, for future
+  timesheet/leave approval) + `photo_url` TEXT (stores a data-URI avatar).
+- Employee entity/EmployeeDto/EmployeeService updated (+ derived `supervisorName`).
+  GET `/crews/by-employee/{employeeId}` returns the employee's current crew (code +
+  foreman) — shown read-only on the employee card.
+- EmployeesPage dialog: gradient header with **avatar + photo upload**, name, and
+  colored chips (Crew = purple, Supervisor = teal, status green/red). Personal tab
+  gained a **Crew & Supervisor** section (supervisor dropdown + read-only crew/foreman)
+  before Contact & Address. Crew membership itself is still managed in the Crews screen.
+
 ### ▶ Still NOT built from the legacy timesheet (deferred — confirm before doing)
 - **VAKHTA** rotation engine (28/28 rotations, field-break F days, employee
   exceptions: recall/extension/shift-change/leave/engagement, back-to-back crews).
