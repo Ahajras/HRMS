@@ -3,6 +3,8 @@ package com.hrms.timesheet.dto;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public class ShiftDto {
@@ -20,6 +22,8 @@ public class ShiftDto {
     private LocalDate effectiveFrom;
     private LocalDate effectiveTo;
     private String status;
+    /** The sample week (per day-of-week normal hours / declared OT / weekly-off). */
+    private List<ShiftDayDto> days = new ArrayList<>();
 
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
@@ -59,4 +63,7 @@ public class ShiftDto {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public List<ShiftDayDto> getDays() { return days; }
+    public void setDays(List<ShiftDayDto> days) { this.days = days; }
 }

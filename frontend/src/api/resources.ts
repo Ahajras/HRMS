@@ -270,6 +270,10 @@ export const employeeShiftApi = {
   update: (id: string, d: EmployeeShift) =>
     api.put<EmployeeShift>(`/employee-shifts/${id}`, d).then((r) => r.data),
   remove: (id: string) => api.delete(`/employee-shifts/${id}`).then(() => undefined),
+  bulkAssign: (shiftId: string, effectiveFrom: string, employeeIds: string[]) =>
+    api
+      .post<{ created: number }>("/employee-shifts/bulk", { shiftId, effectiveFrom, employeeIds })
+      .then((r) => r.data),
 };
 
 // --- Timesheet: monthly timesheets ---

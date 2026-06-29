@@ -46,6 +46,15 @@ public class TimesheetDay extends AuditableEntity {
     @Column(name = "ot_hours", nullable = false, precision = 5, scale = 2)
     private BigDecimal otHours = BigDecimal.ZERO;
 
+    @Column(name = "normal_hours", nullable = false, precision = 5, scale = 2)
+    private BigDecimal normalHours = BigDecimal.ZERO;
+
+    @Column(name = "declared_ot_hours", nullable = false, precision = 5, scale = 2)
+    private BigDecimal declaredOtHours = BigDecimal.ZERO;
+
+    @Column(name = "undeclared_ot_hours", nullable = false, precision = 5, scale = 2)
+    private BigDecimal undeclaredOtHours = BigDecimal.ZERO;
+
     @Column(name = "project_id")
     private UUID projectId;
 
@@ -81,6 +90,15 @@ public class TimesheetDay extends AuditableEntity {
 
     public BigDecimal getOtHours() { return otHours; }
     public void setOtHours(BigDecimal otHours) { this.otHours = otHours; }
+
+    public BigDecimal getNormalHours() { return normalHours; }
+    public void setNormalHours(BigDecimal normalHours) { this.normalHours = normalHours; }
+
+    public BigDecimal getDeclaredOtHours() { return declaredOtHours; }
+    public void setDeclaredOtHours(BigDecimal declaredOtHours) { this.declaredOtHours = declaredOtHours; }
+
+    public BigDecimal getUndeclaredOtHours() { return undeclaredOtHours; }
+    public void setUndeclaredOtHours(BigDecimal undeclaredOtHours) { this.undeclaredOtHours = undeclaredOtHours; }
 
     public UUID getProjectId() { return projectId; }
     public void setProjectId(UUID projectId) { this.projectId = projectId; }

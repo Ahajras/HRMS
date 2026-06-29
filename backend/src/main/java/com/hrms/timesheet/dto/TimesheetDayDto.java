@@ -3,6 +3,8 @@ package com.hrms.timesheet.dto;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public class TimesheetDayDto {
@@ -18,9 +20,14 @@ public class TimesheetDayDto {
     private LocalTime actualOut;
     private BigDecimal workedHours;
     private BigDecimal otHours;
+    private BigDecimal normalHours;
+    private BigDecimal declaredOtHours;
+    private BigDecimal undeclaredOtHours;
     private UUID projectId;
     private UUID costCodeId;
     private String remarks;
+    /** Optional split of worked hours across cost codes. */
+    private List<TimesheetDayCostDto> costs = new ArrayList<>();
 
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
@@ -54,6 +61,18 @@ public class TimesheetDayDto {
 
     public BigDecimal getOtHours() { return otHours; }
     public void setOtHours(BigDecimal otHours) { this.otHours = otHours; }
+
+    public BigDecimal getNormalHours() { return normalHours; }
+    public void setNormalHours(BigDecimal normalHours) { this.normalHours = normalHours; }
+
+    public BigDecimal getDeclaredOtHours() { return declaredOtHours; }
+    public void setDeclaredOtHours(BigDecimal declaredOtHours) { this.declaredOtHours = declaredOtHours; }
+
+    public BigDecimal getUndeclaredOtHours() { return undeclaredOtHours; }
+    public void setUndeclaredOtHours(BigDecimal undeclaredOtHours) { this.undeclaredOtHours = undeclaredOtHours; }
+
+    public List<TimesheetDayCostDto> getCosts() { return costs; }
+    public void setCosts(List<TimesheetDayCostDto> costs) { this.costs = costs; }
 
     public UUID getProjectId() { return projectId; }
     public void setProjectId(UUID projectId) { this.projectId = projectId; }

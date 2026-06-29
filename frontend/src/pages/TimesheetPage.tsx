@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   Box,
   Button,
@@ -16,8 +16,8 @@ import {
   Typography,
 } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { employeeApi, periodApi, shiftApi, timeTypeApi, timesheetApi } from "../api/resources";
-import type { Timesheet, TimesheetDay } from "../api/types";
+import { costCodeApi, employeeApi, periodApi, projectApi, shiftApi, timeTypeApi, timesheetApi } from "../api/resources";
+import type { Timesheet, TimesheetDay, TimesheetDayCost } from "../api/types";
 
 const STATUS_COLOR: Record<string, "default" | "info" | "success" | "warning"> = {
   DRAFT: "default",
@@ -206,7 +206,11 @@ function TimesheetDetail({
 }) {
   const qc = useQueryClient();
   const [days, setDays] = useState<TimesheetDay[]>(timesheet.days);
+  const [costOpen, setCostOpen] = useState<number | null>(null);
   const editable = timesheet.status === "DRAFT";
+
+  const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
+  const { data: costCodes = [] } = useQuery({ queryKey: ["costCodesAll"], queryFn: costCodeApi.list });
 
   useEffect(() => setDays(timesheet.days), [timesheet]);
 
@@ -220,6 +224,16 @@ function TimesheetDetail({
 
   const setDay = (idx: number, patch: Partial<TimesheetDay>) =>
     setDays((prev) => prev.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
+
+  const setCost = (idx: number, ci: number, patch: Partial<TimesheetDayCost>) =>
+    setDays((prev) => prev.map((d, i) =>
+      i === idx ? { ...d, costs: (d.costs ?? []).map((c, j) => (j === ci ? { ...c, ...patch } : c)) } : d));
+  const addCost = (idx: number) =>
+    setDays((prev) => prev.map((d, i) =>
+      i === idx ? { ...d, costs: [...(d.costs ?? []), { projectId: d.projectId, costCodeId: d.costCodeId, hours: 0 }] } : d));
+  const removeCost = (idx: number, ci: number) =>
+    setDays((prev) => prev.map((d, i) =>
+      i === idx ? { ...d, costs: (d.costs ?? []).filter((_, j) => j !== ci) } : d));
 
   return (
     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
@@ -251,13 +265,18 @@ function TimesheetDetail({
               <TableCell>Out</TableCell>
               <TableCell align="right">Planned</TableCell>
               <TableCell align="right">Worked</TableCell>
+              <TableCell align="right">Normal</TableCell>
               <TableCell align="right">OT</TableCell>
+              <TableCell align="right">Decl</TableCell>
+              <TableCell align="right">Undecl</TableCell>
+              <TableCell>Cost split</TableCell>
               <TableCell>Remarks</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {days.map((d, idx) => (
-              <TableRow key={d.id ?? d.workDate}>
+              <Fragment key={d.id ?? d.workDate}>
+              <TableRow>
                 <TableCell>{d.workDate}</TableCell>
                 <TableCell>
                   {editable ? (
@@ -282,13 +301,47 @@ function TimesheetDetail({
                     <TextField type="number" size="small" value={d.workedHours ?? 0} onChange={(e) => setDay(idx, { workedHours: Number(e.target.value) })} sx={{ width: 80 }} />
                   ) : (d.workedHours ?? 0)}
                 </TableCell>
+                <TableCell align="right">{d.normalHours ?? 0}</TableCell>
                 <TableCell align="right">{d.otHours ?? 0}</TableCell>
+                <TableCell align="right">{d.declaredOtHours ?? 0}</TableCell>
+                <TableCell align="right">{d.undeclaredOtHours ?? 0}</TableCell>
+                <TableCell>
+                  <Button size="small" onClick={() => setCostOpen(costOpen === idx ? null : idx)}>
+                    {(d.costs?.length ?? 0) > 0 ? `${d.costs!.length} code(s)` : "split"}
+                  </Button>
+                </TableCell>
                 <TableCell>
                   {editable ? (
                     <TextField size="small" value={d.remarks ?? ""} onChange={(e) => setDay(idx, { remarks: e.target.value })} sx={{ minWidth: 140 }} />
                   ) : (d.remarks ?? "")}
                 </TableCell>
               </TableRow>
+              {costOpen === idx && (
+                <TableRow>
+                  <TableCell colSpan={12} sx={{ bgcolor: "action.hover" }}>
+                    <Typography variant="caption" color="text.secondary">Split {d.workDate} hours across cost codes</Typography>
+                    {(d.costs ?? []).map((c, ci) => (
+                      <Stack key={ci} direction="row" spacing={1} alignItems="center" mt={0.5}>
+                        <TextField select size="small" label="Project" value={c.projectId ?? ""} disabled={!editable}
+                          onChange={(e) => setCost(idx, ci, { projectId: e.target.value, costCodeId: undefined })} sx={{ minWidth: 140 }}>
+                          {projects.map((p) => <MenuItem key={p.id} value={p.id}>{p.code}</MenuItem>)}
+                        </TextField>
+                        <TextField select size="small" label="Cost code" value={c.costCodeId ?? ""} disabled={!editable}
+                          onChange={(e) => setCost(idx, ci, { costCodeId: e.target.value })} sx={{ minWidth: 160 }}>
+                          {costCodes.filter((cc) => !c.projectId || cc.projectId === c.projectId).map((cc) => (
+                            <MenuItem key={cc.id} value={cc.id}>{cc.code} — {cc.name}</MenuItem>
+                          ))}
+                        </TextField>
+                        <TextField type="number" size="small" label="Hours" value={c.hours ?? 0} disabled={!editable}
+                          onChange={(e) => setCost(idx, ci, { hours: Number(e.target.value) })} sx={{ width: 90 }} />
+                        {editable && <Button size="small" color="error" onClick={() => removeCost(idx, ci)}>Remove</Button>}
+                      </Stack>
+                    ))}
+                    {editable && <Button size="small" sx={{ mt: 0.5 }} onClick={() => addCost(idx)}>+ Add cost code</Button>}
+                  </TableCell>
+                </TableRow>
+              )}
+              </Fragment>
             ))}
           </TableBody>
         </Table>

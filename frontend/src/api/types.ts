@@ -304,6 +304,14 @@ export interface EmployeeBankAccount {
 }
 
 // --- Timesheet / Shift / Time Type (Phase 4, FTDD Vol.1 Ch.3-5) ---
+export interface ShiftDay {
+  id?: string;
+  dayOfWeek: string;
+  normalHours?: number;
+  declaredOt?: number;
+  weeklyOff: boolean;
+}
+
 export interface Shift {
   id?: string;
   companyId?: string;
@@ -318,6 +326,7 @@ export interface Shift {
   effectiveFrom?: string;
   effectiveTo?: string;
   status?: string;
+  days?: ShiftDay[];
 }
 
 export interface TimeType {
@@ -342,6 +351,13 @@ export interface PublicHoliday {
   status?: string;
 }
 
+export interface TimesheetDayCost {
+  id?: string;
+  projectId?: string;
+  costCodeId?: string;
+  hours?: number;
+}
+
 export interface TimesheetDay {
   id?: string;
   timesheetId?: string;
@@ -354,9 +370,13 @@ export interface TimesheetDay {
   actualOut?: string | null;
   workedHours?: number;
   otHours?: number;
+  normalHours?: number;
+  declaredOtHours?: number;
+  undeclaredOtHours?: number;
   projectId?: string;
   costCodeId?: string;
   remarks?: string;
+  costs?: TimesheetDayCost[];
 }
 
 export interface Timesheet {

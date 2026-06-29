@@ -1,7 +1,9 @@
 import { useState } from "react";
 import {
+  Alert,
   Box,
   Button,
+  Checkbox,
   Grid,
   IconButton,
   MenuItem,
@@ -41,12 +43,78 @@ export default function RosterPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["roster"] }),
   });
 
+  // --- bulk assign ---
+  const [bulkShift, setBulkShift] = useState("");
+  const [bulkDate, setBulkDate] = useState(today());
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
+
+  const empList = employees?.content ?? [];
+  const toggle = (id: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
+  const allSelected = empList.length > 0 && empList.every((e) => e.id && selected.has(e.id));
+  const toggleAll = () =>
+    setSelected(allSelected ? new Set() : new Set(empList.map((e) => e.id!).filter(Boolean)));
+
+  const bulk = useMutation({
+    mutationFn: () => employeeShiftApi.bulkAssign(bulkShift, bulkDate, Array.from(selected)),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["roster"] });
+      setBulkMsg(`Assigned ${r.created} employee(s).`);
+      setSelected(new Set());
+    },
+  });
+
   return (
     <Box>
       <Typography variant="h5" mb={2}>Shift Roster</Typography>
       <Typography variant="body2" color="text.secondary" mb={2}>
         Assign each employee to a shift. Timesheet generation uses the shift that is in effect for the period.
       </Typography>
+
+      <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
+        <Typography variant="subtitle2" gutterBottom>Bulk assign (fast)</Typography>
+        <Grid container spacing={1.5} alignItems="center" mb={1}>
+          <Grid item xs={12} sm={4}>
+            <TextField select fullWidth size="small" label="Shift" value={bulkShift} onChange={(e) => setBulkShift(e.target.value)}>
+              {shifts.map((s) => <MenuItem key={s.id} value={s.id}>{s.code} — {s.name}</MenuItem>)}
+            </TextField>
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <TextField fullWidth size="small" type="date" label="From" InputLabelProps={{ shrink: true }} value={bulkDate} onChange={(e) => setBulkDate(e.target.value)} />
+          </Grid>
+          <Grid item xs={6} sm={5}>
+            <Button variant="contained" disabled={!bulkShift || selected.size === 0 || bulk.isPending} onClick={() => bulk.mutate()}>
+              Assign {selected.size} selected
+            </Button>
+          </Grid>
+        </Grid>
+        {bulkMsg && <Alert severity="success" sx={{ mb: 1 }} onClose={() => setBulkMsg(null)}>{bulkMsg}</Alert>}
+        <Box sx={{ maxHeight: 260, overflow: "auto", border: 1, borderColor: "divider", borderRadius: 1 }}>
+          <Table size="small" stickyHeader>
+            <TableHead>
+              <TableRow>
+                <TableCell padding="checkbox"><Checkbox size="small" checked={allSelected} onChange={toggleAll} /></TableCell>
+                <TableCell>Emp #</TableCell>
+                <TableCell>Name</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {empList.map((e) => (
+                <TableRow key={e.id} hover onClick={() => e.id && toggle(e.id)} sx={{ cursor: "pointer" }}>
+                  <TableCell padding="checkbox"><Checkbox size="small" checked={!!e.id && selected.has(e.id)} /></TableCell>
+                  <TableCell>{e.employeeNumber}</TableCell>
+                  <TableCell>{e.firstName} {e.lastName}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Box>
+      </Paper>
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
         <Typography variant="subtitle2" gutterBottom>{form.id ? "Edit assignment" : "Assign employee to shift"}</Typography>

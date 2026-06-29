@@ -145,6 +145,39 @@ then update this file + deploy.
   `timesheet/service/CalendarService.java` are now deprecated empty stubs (couldn't
   delete from sandbox — **delete these two files on the PC** when convenient).
 
+### P4 legacy-parity additions (done — V18) — from CCC old timesheet manual
+- Migration `V18__sample_week_day_hours.sql`:
+  - `shift_day` = **sample week** per shift (per day-of-week: normal_hours,
+    declared_ot, weekly_off). This is the legacy PAYCAL per-day calendar.
+  - ALTER `timesheet_day` ADD `normal_hours`, `declared_ot_hours`,
+    `undeclared_ot_hours` (declared-vs-undeclared OT split, legacy nDec/nUndec).
+  - `timesheet_day_cost` = split a day's hours across cost codes (legacy PAYIN
+    HR_CC1..HR_CC8). Empty ⇒ the day's own project/cost is the single target.
+  - seeds time types **SICK / ACCIDENT / RR / UNPAID** (legacy CM S/A/R/U) +
+    sample week for the DAY shift (Sat–Thu 8h+2h OT, Fri off).
+- Entities: ShiftDay, TimesheetDayCost; TimesheetDay gained the 3 hours columns.
+- ShiftService now manages the sample week (replace-all on save, keeps the
+  `weekly_off` CSV in sync). TimesheetService.recomputeDay reads the sample week:
+  normal = min(worked, sampleNormal); OT = worked−sampleNormal; declared =
+  min(OT, day's declaredOt); undeclared = remainder. Non-working categories
+  (ABSENCE/LEAVE/SICK/ACCIDENT/RR/UNPAID) ⇒ 0 worked/OT. saveDays persists costs.
+- **Bulk roster assign**: `EmployeeShiftService.bulkAssign` + POST
+  `/employee-shifts/bulk` { shiftId, effectiveFrom, employeeIds[] } (skips
+  employees already open-ended on that shift). Frontend RosterPage has a
+  multi-select "Bulk assign (fast)" panel.
+- Frontend: ShiftsPage sample-week table; TimesheetPage shows
+  Normal/Decl/Undecl columns + per-day "Cost split" expander.
+
+### ▶ Still NOT built from the legacy timesheet (deferred — confirm before doing)
+- **Crew / Foreman hierarchy** (parent/child crews, crew trades w/ planned vs
+  assigned counts, timesheet entry organised by foreman).
+- **VAKHTA** rotation engine (28/28 rotations, field-break F days, employee
+  exceptions: recall/extension/shift-change/leave/engagement, back-to-back crews).
+- Full **hours breakdown for payroll** (weekend-normal Hr_fri, holiday-normal
+  Hr_hol, sick/accident/leave/RR/unpaid split, totals per legacy Ch.5) — belongs
+  to P6 Overtime + P8 Payroll, driven by the Rule Engine rates.
+- Excel/Papyrus import, manhour reports, asset/PMV billing.
+
 ---
 
 ## Stack

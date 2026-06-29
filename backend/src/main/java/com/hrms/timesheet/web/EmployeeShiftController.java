@@ -1,5 +1,6 @@
 package com.hrms.timesheet.web;
 
+import com.hrms.timesheet.dto.BulkAssignRequest;
 import com.hrms.timesheet.dto.EmployeeShiftDto;
 import com.hrms.timesheet.service.EmployeeShiftService;
 import jakarta.validation.Valid;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** REST API for the shift roster — employee-to-shift assignment (FTDD Vol.1 Ch.4). */
@@ -39,6 +41,12 @@ public class EmployeeShiftController {
     @ResponseStatus(HttpStatus.CREATED)
     public EmployeeShiftDto create(@Valid @RequestBody EmployeeShiftDto dto) {
         return service.create(dto);
+    }
+
+    @PostMapping("/bulk")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Map<String, Integer> bulkAssign(@RequestBody BulkAssignRequest req) {
+        return Map.of("created", service.bulkAssign(req));
     }
 
     @PutMapping("/{id}")

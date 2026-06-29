@@ -11,17 +11,22 @@ import com.hrms.timesheet.domain.EmployeeShift;
 import com.hrms.timesheet.domain.PayrollPeriod;
 import com.hrms.timesheet.domain.PublicHoliday;
 import com.hrms.timesheet.domain.Shift;
+import com.hrms.timesheet.domain.ShiftDay;
 import com.hrms.timesheet.domain.TimeType;
 import com.hrms.timesheet.domain.Timesheet;
 import com.hrms.timesheet.domain.TimesheetDay;
+import com.hrms.timesheet.domain.TimesheetDayCost;
 import com.hrms.timesheet.dto.GenerateTimesheetRequest;
+import com.hrms.timesheet.dto.TimesheetDayCostDto;
 import com.hrms.timesheet.dto.TimesheetDayDto;
 import com.hrms.timesheet.dto.TimesheetDto;
 import com.hrms.timesheet.repository.EmployeeShiftRepository;
 import com.hrms.timesheet.repository.PayrollPeriodRepository;
 import com.hrms.timesheet.repository.PublicHolidayRepository;
+import com.hrms.timesheet.repository.ShiftDayRepository;
 import com.hrms.timesheet.repository.ShiftRepository;
 import com.hrms.timesheet.repository.TimeTypeRepository;
+import com.hrms.timesheet.repository.TimesheetDayCostRepository;
 import com.hrms.timesheet.repository.TimesheetDayRepository;
 import com.hrms.timesheet.repository.TimesheetRepository;
 import org.springframework.security.core.Authentication;
@@ -69,12 +74,15 @@ public class TimesheetService {
     private final AssignmentRepository assignmentRepo;
     private final PayrollPeriodRepository periodRepo;
     private final EmployeeShiftRepository employeeShiftRepo;
+    private final ShiftDayRepository shiftDayRepo;
+    private final TimesheetDayCostRepository dayCostRepo;
 
     public TimesheetService(TimesheetRepository timesheetRepo, TimesheetDayRepository dayRepo,
                             ShiftRepository shiftRepo, TimeTypeRepository timeTypeRepo,
                             PublicHolidayRepository holidayRepo, EmployeeRepository employeeRepo,
                             AssignmentRepository assignmentRepo, PayrollPeriodRepository periodRepo,
-                            EmployeeShiftRepository employeeShiftRepo) {
+                            EmployeeShiftRepository employeeShiftRepo, ShiftDayRepository shiftDayRepo,
+                            TimesheetDayCostRepository dayCostRepo) {
         this.timesheetRepo = timesheetRepo;
         this.dayRepo = dayRepo;
         this.shiftRepo = shiftRepo;
@@ -82,6 +90,8 @@ public class TimesheetService {
         this.holidayRepo = holidayRepo;
         this.employeeRepo = employeeRepo;
         this.assignmentRepo = assignmentRepo;
+        this.shiftDayRepo = shiftDayRepo;
+        this.dayCostRepo = dayCostRepo;
         this.periodRepo = periodRepo;
         this.employeeShiftRepo = employeeShiftRepo;
     }
@@ -215,6 +225,7 @@ public class TimesheetService {
         }
         Map<UUID, Shift> shiftCache = new HashMap<>();
         Map<UUID, TimeType> typeCache = new HashMap<>();
+        Map<UUID, Map<String, ShiftDay>> weekCache = new HashMap<>();
 
         for (TimesheetDayDto dto : dayDtos) {
             TimesheetDay day = byId.get(dto.getId());
@@ -234,11 +245,31 @@ public class TimesheetService {
             day.setProjectId(dto.getProjectId());
             day.setCostCodeId(dto.getCostCodeId());
             day.setRemarks(dto.getRemarks());
-            recomputeDay(day, ts, shiftCache, typeCache);
+            recomputeDay(day, ts, shiftCache, typeCache, weekCache);
             dayRepo.save(day);
+            saveDayCosts(day.getId(), dto.getCosts());
         }
         recomputeTotals(ts);
         return toFullDto(timesheetRepo.save(ts));
+    }
+
+    /** Replace a day's cost-code allocation rows (legacy PAYIN HR_CC1..8). */
+    private void saveDayCosts(UUID dayId, List<TimesheetDayCostDto> costs) {
+        dayCostRepo.deleteByTimesheetDayId(dayId);
+        if (costs == null) {
+            return;
+        }
+        for (TimesheetDayCostDto c : costs) {
+            if (c.getCostCodeId() == null && c.getProjectId() == null) {
+                continue;
+            }
+            TimesheetDayCost e = new TimesheetDayCost();
+            e.setTimesheetDayId(dayId);
+            e.setProjectId(c.getProjectId());
+            e.setCostCodeId(c.getCostCodeId());
+            e.setHours(c.getHours() != null ? c.getHours() : BigDecimal.ZERO);
+            dayCostRepo.save(e);
+        }
     }
 
     // --- lifecycle ---------------------------------------------------
@@ -308,8 +339,8 @@ public class TimesheetService {
 
     // --- computation -------------------------------------------------
 
-    private void recomputeDay(TimesheetDay day, Timesheet ts,
-                              Map<UUID, Shift> shiftCache, Map<UUID, TimeType> typeCache) {
+    private void recomputeDay(TimesheetDay day, Timesheet ts, Map<UUID, Shift> shiftCache,
+                              Map<UUID, TimeType> typeCache, Map<UUID, Map<String, ShiftDay>> weekCache) {
         Shift shift = resolveDayShift(day, ts, shiftCache);
 
         // Worked hours from clock when both punches are present.
@@ -329,27 +360,62 @@ public class TimesheetService {
             }
         }
 
+        // Sample-week values for this weekday (legacy PAYCAL normal + declared OT).
+        ShiftDay sample = sampleDay(shift, day.getWorkDate(), weekCache);
+        BigDecimal sampleNormal = sample != null ? sample.getNormalHours()
+                : (shift != null && shift.getStandardHours() != null ? shift.getStandardHours() : BigDecimal.ZERO);
+        BigDecimal declaredLimit = sample != null ? sample.getDeclaredOt() : BigDecimal.ZERO;
+
+        BigDecimal normal;
         BigDecimal ot;
         if ("REST".equals(category) || "HOLIDAY".equals(category)) {
+            normal = BigDecimal.ZERO;
             ot = worked; // every hour worked on a rest/holiday day is premium time
-        } else if ("ABSENCE".equals(category) || "LEAVE".equals(category)) {
+        } else if (isNonWorking(category)) {
+            normal = BigDecimal.ZERO;
             ot = BigDecimal.ZERO;
         } else {
-            BigDecimal standard = shift != null && shift.getStandardHours() != null
-                    ? shift.getStandardHours() : BigDecimal.ZERO;
-            ot = worked.subtract(standard).max(BigDecimal.ZERO);
+            normal = worked.min(sampleNormal);
+            ot = worked.subtract(sampleNormal).max(BigDecimal.ZERO);
         }
+        BigDecimal declared = ot.min(declaredLimit);
+        BigDecimal undeclared = ot.subtract(declared).max(BigDecimal.ZERO);
+
+        day.setNormalHours(normal);
         day.setOtHours(ot);
+        day.setDeclaredOtHours(declared);
+        day.setUndeclaredOtHours(undeclared);
+    }
+
+    private static boolean isNonWorking(String category) {
+        return "ABSENCE".equals(category) || "LEAVE".equals(category) || "SICK".equals(category)
+                || "ACCIDENT".equals(category) || "RR".equals(category) || "UNPAID".equals(category);
+    }
+
+    /** Sample-week row for the weekday of {@code date} on the given shift. */
+    private ShiftDay sampleDay(Shift shift, LocalDate date, Map<UUID, Map<String, ShiftDay>> weekCache) {
+        if (shift == null || date == null) {
+            return null;
+        }
+        Map<String, ShiftDay> week = weekCache.computeIfAbsent(shift.getId(), id -> {
+            Map<String, ShiftDay> m = new HashMap<>();
+            for (ShiftDay sd : shiftDayRepo.findByShiftId(id)) {
+                m.put(sd.getDayOfWeek(), sd);
+            }
+            return m;
+        });
+        return week.get(date.getDayOfWeek().name().substring(0, 3));
     }
 
     private void recomputeTotals(Timesheet ts) {
         Map<UUID, Shift> shiftCache = new HashMap<>();
         Map<UUID, TimeType> typeCache = new HashMap<>();
+        Map<UUID, Map<String, ShiftDay>> weekCache = new HashMap<>();
         BigDecimal worked = BigDecimal.ZERO;
         BigDecimal ot = BigDecimal.ZERO;
         BigDecimal absence = BigDecimal.ZERO;
         for (TimesheetDay day : dayRepo.findByTimesheetIdOrderByWorkDate(ts.getId())) {
-            recomputeDay(day, ts, shiftCache, typeCache);
+            recomputeDay(day, ts, shiftCache, typeCache, weekCache);
             dayRepo.save(day);
             worked = worked.add(day.getWorkedHours() != null ? day.getWorkedHours() : BigDecimal.ZERO);
             ot = ot.add(day.getOtHours() != null ? day.getOtHours() : BigDecimal.ZERO);
@@ -494,9 +560,20 @@ public class TimesheetService {
         dto.setActualOut(d.getActualOut());
         dto.setWorkedHours(d.getWorkedHours());
         dto.setOtHours(d.getOtHours());
+        dto.setNormalHours(d.getNormalHours());
+        dto.setDeclaredOtHours(d.getDeclaredOtHours());
+        dto.setUndeclaredOtHours(d.getUndeclaredOtHours());
         dto.setProjectId(d.getProjectId());
         dto.setCostCodeId(d.getCostCodeId());
         dto.setRemarks(d.getRemarks());
+        for (TimesheetDayCost c : dayCostRepo.findByTimesheetDayId(d.getId())) {
+            TimesheetDayCostDto cd = new TimesheetDayCostDto();
+            cd.setId(c.getId());
+            cd.setProjectId(c.getProjectId());
+            cd.setCostCodeId(c.getCostCodeId());
+            cd.setHours(c.getHours());
+            dto.getCosts().add(cd);
+        }
         return dto;
     }
 }

@@ -4,6 +4,7 @@ import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
 import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.timesheet.domain.EmployeeShift;
+import com.hrms.timesheet.dto.BulkAssignRequest;
 import com.hrms.timesheet.dto.EmployeeShiftDto;
 import com.hrms.timesheet.repository.EmployeeShiftRepository;
 import com.hrms.timesheet.repository.ShiftRepository;
@@ -60,6 +61,33 @@ public class EmployeeShiftService {
 
     public void delete(UUID id) {
         repository.delete(getEntity(id));
+    }
+
+    /** Assign many employees to one shift at once. Skips employees already on that
+     *  shift with an open-ended assignment. Returns the count created. */
+    public int bulkAssign(BulkAssignRequest req) {
+        UUID companyId = TenantContext.requireCompanyId();
+        if (req.getShiftId() == null || req.getEmployeeIds() == null || req.getEmployeeIds().isEmpty()) {
+            return 0;
+        }
+        LocalDate from = req.getEffectiveFrom() != null ? req.getEffectiveFrom() : LocalDate.now();
+        int created = 0;
+        for (UUID employeeId : req.getEmployeeIds()) {
+            boolean already = repository
+                    .findByCompanyIdAndEmployeeIdOrderByEffectiveFromDesc(companyId, employeeId).stream()
+                    .anyMatch(es -> req.getShiftId().equals(es.getShiftId()) && es.getEffectiveTo() == null);
+            if (already) {
+                continue;
+            }
+            EmployeeShift e = new EmployeeShift();
+            e.setCompanyId(companyId);
+            e.setEmployeeId(employeeId);
+            e.setShiftId(req.getShiftId());
+            e.setEffectiveFrom(from);
+            repository.save(e);
+            created++;
+        }
+        return created;
     }
 
     private EmployeeShift getEntity(UUID id) {

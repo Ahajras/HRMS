@@ -4,24 +4,34 @@ import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
 import com.hrms.timesheet.domain.Shift;
+import com.hrms.timesheet.domain.ShiftDay;
+import com.hrms.timesheet.dto.ShiftDayDto;
 import com.hrms.timesheet.dto.ShiftDto;
+import com.hrms.timesheet.repository.ShiftDayRepository;
 import com.hrms.timesheet.repository.ShiftRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
-/** CRUD for working shifts (FTDD Vol.1 Ch.4). Company-scoped. */
+/** CRUD for working shifts + their sample week (FTDD Vol.1 Ch.4). Company-scoped. */
 @Service
 @Transactional
 public class ShiftService {
 
-    private final ShiftRepository repository;
+    private static final List<String> DOW = List.of("SAT", "SUN", "MON", "TUE", "WED", "THU", "FRI");
 
-    public ShiftService(ShiftRepository repository) {
+    private final ShiftRepository repository;
+    private final ShiftDayRepository dayRepository;
+
+    public ShiftService(ShiftRepository repository, ShiftDayRepository dayRepository) {
         this.repository = repository;
+        this.dayRepository = dayRepository;
     }
 
     @Transactional(readOnly = true)
@@ -38,17 +48,49 @@ public class ShiftService {
         Shift entity = new Shift();
         entity.setCompanyId(companyId);
         apply(dto, entity);
-        return toDto(repository.save(entity));
+        Shift saved = repository.save(entity);
+        saveDays(saved, dto.getDays());
+        return toDto(saved);
     }
 
     public ShiftDto update(UUID id, ShiftDto dto) {
         Shift entity = getEntity(id);
         apply(dto, entity);
-        return toDto(repository.save(entity));
+        Shift saved = repository.save(entity);
+        saveDays(saved, dto.getDays());
+        return toDto(saved);
     }
 
     public void delete(UUID id) {
-        repository.delete(getEntity(id));
+        repository.delete(getEntity(id)); // shift_day cascades in DB
+    }
+
+    /** Persist the sample week (replace-all) and keep the weekly_off string in sync. */
+    private void saveDays(Shift shift, List<ShiftDayDto> days) {
+        if (days == null) {
+            return;
+        }
+        dayRepository.deleteByShiftId(shift.getId());
+        List<String> off = new ArrayList<>();
+        for (ShiftDayDto d : days) {
+            if (d.getDayOfWeek() == null) {
+                continue;
+            }
+            ShiftDay e = new ShiftDay();
+            e.setCompanyId(shift.getCompanyId());
+            e.setShiftId(shift.getId());
+            e.setDayOfWeek(d.getDayOfWeek());
+            e.setNormalHours(d.getNormalHours() != null ? d.getNormalHours() : BigDecimal.ZERO);
+            e.setDeclaredOt(d.getDeclaredOt() != null ? d.getDeclaredOt() : BigDecimal.ZERO);
+            e.setWeeklyOff(d.isWeeklyOff());
+            dayRepository.save(e);
+            if (d.isWeeklyOff()) {
+                off.add(d.getDayOfWeek());
+            }
+        }
+        // Keep the legacy weekly_off CSV in sync so day classification still works.
+        shift.setWeeklyOff(String.join(",", off));
+        repository.save(shift);
     }
 
     private Shift getEntity(UUID id) {
@@ -87,6 +129,28 @@ public class ShiftService {
         dto.setEffectiveFrom(e.getEffectiveFrom());
         dto.setEffectiveTo(e.getEffectiveTo());
         dto.setStatus(e.getStatus());
+        dto.setDays(loadDays(e.getId()));
         return dto;
+    }
+
+    /** Sample-week rows ordered Sat..Fri. */
+    private List<ShiftDayDto> loadDays(UUID shiftId) {
+        var byDow = dayRepository.findByShiftId(shiftId).stream()
+                .collect(Collectors.toMap(ShiftDay::getDayOfWeek, d -> d));
+        List<ShiftDayDto> out = new ArrayList<>();
+        for (String dow : DOW) {
+            ShiftDay d = byDow.get(dow);
+            if (d == null) {
+                continue;
+            }
+            ShiftDayDto dd = new ShiftDayDto();
+            dd.setId(d.getId());
+            dd.setDayOfWeek(d.getDayOfWeek());
+            dd.setNormalHours(d.getNormalHours());
+            dd.setDeclaredOt(d.getDeclaredOt());
+            dd.setWeeklyOff(d.isWeeklyOff());
+            out.add(dd);
+        }
+        return out;
     }
 }
