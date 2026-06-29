@@ -58,6 +58,8 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/employees", label: "Employees", icon: <PeopleIcon />, authority: "employee.read" },
       { to: "/organization", label: "Organization", icon: <AccountTreeIcon />, authority: "organization.read" },
+      { to: "/crews", label: "Crews", icon: <GroupsIcon />, authority: "employee.read" },
+      { to: "/timekeepers", label: "Timekeepers", icon: <ManageAccountsIcon />, authority: "employee.read" },
     ],
   },
   {

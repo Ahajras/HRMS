@@ -168,11 +168,35 @@ then update this file + deploy.
 - Frontend: ShiftsPage sample-week table; TimesheetPage shows
   Normal/Decl/Undecl columns + per-day "Cost split" expander.
 
+### P4 Crew + Timekeeper scoping (slice 1 done — V19) — new `com.hrms.crew` context
+- Migration `V19__crew.sql`: `crew` (company_id, code, name, project_id,
+  foreman_employee_id, parent_crew_id, status), `crew_member` (crew_id, employee_id,
+  **shift_id** so one crew can split across shifts, effective-dated),
+  `timekeeper_project` (employee_id ↔ project_id, many-to-many).
+- Entities/repos/dtos under `com.hrms.crew.*`; plain-UUID FKs.
+- **CrewService**: crew CRUD + members (add / **bulkAddMembers** / remove); enriches
+  project code, foreman name, member count. **TimekeeperService**: assign/list
+  timekeeper→projects + `allowedProjectIds(employeeId)` helper (for slice-2 enforcement).
+- REST: `/api/v1/crews` (+ `/{id}/members`, `/{id}/members/bulk`, `/members/{id}`),
+  `/api/v1/timekeeper-projects`.
+- Frontend: **CrewsPage** (CRUD + expandable members panel w/ bulk add + search),
+  **TimekeepersPage** (assign employee→project). Nav under Workforce.
+- ⚠️ Cost-split validation added to TimesheetService.saveDays: when a day is split
+  across cost codes, the split must equal the worked hours (rejects + clear error;
+  frontend shows error + live Σ/worked indicator).
+
+### ▶ Crew slice 2 (NEXT — not yet built)
+- **Enforce timekeeper project scope on the backend**: a timekeeper user only
+  sees/enters timesheets for employees in their `timekeeper_project` projects
+  (use TimekeeperService.allowedProjectIds + current user's employeeId).
+- **Timesheet generate/submit by crew** (pick a crew → bulk for its members).
+- **Crew trades** (job title + planned vs assigned counts, red/green shortage view).
+- **Timecard report** generation (per-employee monthly card: days + hours breakdown).
+
 ### ▶ Still NOT built from the legacy timesheet (deferred — confirm before doing)
-- **Crew / Foreman hierarchy** (parent/child crews, crew trades w/ planned vs
-  assigned counts, timesheet entry organised by foreman).
 - **VAKHTA** rotation engine (28/28 rotations, field-break F days, employee
   exceptions: recall/extension/shift-change/leave/engagement, back-to-back crews).
+  (The crew hierarchy basics now exist; this is the rotation depth on top.)
 - Full **hours breakdown for payroll** (weekend-normal Hr_fri, holiday-normal
   Hr_hol, sick/accident/leave/RR/unpaid split, totals per legacy Ch.5) — belongs
   to P6 Overtime + P8 Payroll, driven by the Rule Engine rates.

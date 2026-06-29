@@ -25,6 +25,9 @@ import type {
   PayrollCalendar,
   PayrollPeriod,
   EmployeeShift,
+  Crew,
+  CrewMember,
+  TimekeeperProject,
   Rule,
   RulePackage,
   Shift,
@@ -274,6 +277,26 @@ export const employeeShiftApi = {
     api
       .post<{ created: number }>("/employee-shifts/bulk", { shiftId, effectiveFrom, employeeIds })
       .then((r) => r.data),
+};
+
+// --- Crews + members ---
+export const crewApi = {
+  list: () => api.get<Crew[]>("/crews").then((r) => r.data),
+  create: (d: Crew) => api.post<Crew>("/crews", d).then((r) => r.data),
+  update: (id: string, d: Crew) => api.put<Crew>(`/crews/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/crews/${id}`).then(() => undefined),
+  members: (id: string) => api.get<CrewMember[]>(`/crews/${id}/members`).then((r) => r.data),
+  addMember: (id: string, d: CrewMember) => api.post<CrewMember>(`/crews/${id}/members`, d).then((r) => r.data),
+  bulkAddMembers: (id: string, shiftId: string | undefined, effectiveFrom: string, employeeIds: string[]) =>
+    api.post<{ created: number }>(`/crews/${id}/members/bulk`, { shiftId, effectiveFrom, employeeIds }).then((r) => r.data),
+  removeMember: (memberId: string) => api.delete(`/crews/members/${memberId}`).then(() => undefined),
+};
+
+// --- Timekeeper -> project assignment ---
+export const timekeeperApi = {
+  list: () => api.get<TimekeeperProject[]>("/timekeeper-projects").then((r) => r.data),
+  create: (d: TimekeeperProject) => api.post<TimekeeperProject>("/timekeeper-projects", d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/timekeeper-projects/${id}`).then(() => undefined),
 };
 
 // --- Timesheet: monthly timesheets ---

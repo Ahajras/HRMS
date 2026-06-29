@@ -17,6 +17,8 @@ import TimeSetupPage from "./pages/TimeSetupPage";
 import TimesheetPage from "./pages/TimesheetPage";
 import CalendarPage from "./pages/CalendarPage";
 import RosterPage from "./pages/RosterPage";
+import CrewsPage from "./pages/CrewsPage";
+import TimekeepersPage from "./pages/TimekeepersPage";
 import LoginPage from "./pages/LoginPage";
 import { useAuth } from "./auth/AuthContext";
 
@@ -58,6 +60,8 @@ export default function App() {
         <Route path="/timesheets" element={<TimesheetPage />} />
         <Route path="/payroll-calendar" element={<CalendarPage />} />
         <Route path="/roster" element={<RosterPage />} />
+        <Route path="/crews" element={<CrewsPage />} />
+        <Route path="/timekeepers" element={<TimekeepersPage />} />
         <Route path="/shifts" element={<ShiftsPage />} />
         <Route path="/time-setup" element={<TimeSetupPage />} />
         <Route path="/legacy-import" element={<LegacyImportPage />} />

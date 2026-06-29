@@ -398,6 +398,44 @@ export interface Timesheet {
   days: TimesheetDay[];
 }
 
+// --- Crew / Foreman + Timekeeper (FTDD Vol.1 Ch.4) ---
+export interface Crew {
+  id?: string;
+  companyId?: string;
+  code: string;
+  name: string;
+  projectId?: string;
+  projectCode?: string;
+  foremanEmployeeId?: string;
+  foremanName?: string;
+  parentCrewId?: string;
+  status?: string;
+  memberCount?: number;
+}
+
+export interface CrewMember {
+  id?: string;
+  crewId?: string;
+  employeeId: string;
+  employeeName?: string;
+  employeeNumber?: string;
+  shiftId?: string;
+  shiftCode?: string;
+  effectiveFrom?: string;
+  effectiveTo?: string;
+  status?: string;
+}
+
+export interface TimekeeperProject {
+  id?: string;
+  employeeId: string;
+  employeeName?: string;
+  employeeNumber?: string;
+  projectId: string;
+  projectCode?: string;
+  status?: string;
+}
+
 export interface GenerateTimesheetRequest {
   employeeId: string;
   periodId: string;
