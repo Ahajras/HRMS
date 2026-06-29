@@ -75,6 +75,10 @@ public class EmployeeDto {
     @Size(max = 30)
     private String payStatus;
 
+    private String overtimeCategoryCode;
+
+    private String band;
+
     @Size(max = 150)
     private String arabicName;
 
@@ -153,6 +157,12 @@ public class EmployeeDto {
 
     public String getPayStatus() { return payStatus; }
     public void setPayStatus(String payStatus) { this.payStatus = payStatus; }
+
+    public String getOvertimeCategoryCode() { return overtimeCategoryCode; }
+    public void setOvertimeCategoryCode(String overtimeCategoryCode) { this.overtimeCategoryCode = overtimeCategoryCode; }
+
+    public String getBand() { return band; }
+    public void setBand(String band) { this.band = band; }
 
     public String getArabicName() { return arabicName; }
     public void setArabicName(String arabicName) { this.arabicName = arabicName; }

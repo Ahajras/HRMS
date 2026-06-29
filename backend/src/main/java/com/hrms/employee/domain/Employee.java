@@ -76,6 +76,12 @@ public class Employee extends AuditableEntity {
     @Column(name = "pay_status", length = 30)
     private String payStatus;
 
+    @Column(name = "overtime_category_code", length = 20)
+    private String overtimeCategoryCode;
+
+    @Column(name = "band", length = 20)
+    private String band;
+
     @Column(name = "arabic_name", length = 150)
     private String arabicName;
 
@@ -150,6 +156,12 @@ public class Employee extends AuditableEntity {
 
     public String getPayStatus() { return payStatus; }
     public void setPayStatus(String payStatus) { this.payStatus = payStatus; }
+
+    public String getOvertimeCategoryCode() { return overtimeCategoryCode; }
+    public void setOvertimeCategoryCode(String overtimeCategoryCode) { this.overtimeCategoryCode = overtimeCategoryCode; }
+
+    public String getBand() { return band; }
+    public void setBand(String band) { this.band = band; }
 
     public String getArabicName() { return arabicName; }
     public void setArabicName(String arabicName) { this.arabicName = arabicName; }

@@ -40,6 +40,7 @@ import {
   employeeDocumentApi,
   legacyRawApi,
   lookupApi,
+  overtimeCategoryApi,
   organizationUnitApi,
   payrollComponentApi,
   projectApi,
@@ -136,6 +137,12 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
   const maritals = useLookup("MARITAL_STATUS");
   const statuses = useLookup("EMPLOYEE_STATUS");
   const payStatuses = useLookup("PAY_STATUS");
+  const bands = useLookup("BAND");
+  const { data: otCategories = [] } = useQuery({ queryKey: ["overtimeCategories"], queryFn: overtimeCategoryApi.list });
+  const otCategoryOpts = otCategories.map((c) => ({
+    value: c.code,
+    label: `${c.code} — ${c.name}${c.otEligible ? "" : " (no OT)"}`,
+  }));
   const countries = useCountries();
 
   const countryOpts = countries.map((c) => ({ value: c.code, label: c.name }));
@@ -186,6 +193,13 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
       </Grid>
       <Grid item xs={12} sm={4}>
         <SelectField label="Pay Status" value={form.payStatus} onChange={(v) => set("payStatus", v)} options={lk(payStatuses)} />
+      </Grid>
+      <Grid item xs={12} sm={4}>
+        <SelectField label="Band" value={form.band} onChange={(v) => set("band", v)} options={lk(bands)} />
+      </Grid>
+      <Grid item xs={12} sm={4}>
+        <SelectField label="Overtime Category" value={form.overtimeCategoryCode}
+          onChange={(v) => set("overtimeCategoryCode", v)} options={otCategoryOpts} />
       </Grid>
       <Grid item xs={12} sm={4}>
         <TextField fullWidth label="Hire Date" type="date" InputLabelProps={{ shrink: true }}

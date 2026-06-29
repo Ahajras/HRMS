@@ -109,6 +109,8 @@ public class EmployeeService {
         entity.setJobTitle(dto.getJobTitle());
         entity.setJobTitleCode(dto.getJobTitleCode());
         entity.setPayStatus(dto.getPayStatus());
+        entity.setOvertimeCategoryCode(dto.getOvertimeCategoryCode());
+        entity.setBand(dto.getBand());
         entity.setArabicName(dto.getArabicName());
         entity.setSupervisorEmployeeId(dto.getSupervisorEmployeeId());
         entity.setPhotoUrl(dto.getPhotoUrl());
@@ -139,6 +141,8 @@ public class EmployeeService {
         dto.setJobTitle(entity.getJobTitle());
         dto.setJobTitleCode(entity.getJobTitleCode());
         dto.setPayStatus(entity.getPayStatus());
+        dto.setOvertimeCategoryCode(entity.getOvertimeCategoryCode());
+        dto.setBand(entity.getBand());
         dto.setArabicName(entity.getArabicName());
         dto.setSupervisorEmployeeId(entity.getSupervisorEmployeeId());
         dto.setPhotoUrl(entity.getPhotoUrl());

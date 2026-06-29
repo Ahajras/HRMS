@@ -30,6 +30,7 @@ import type {
   TimekeeperProject,
   Rule,
   RulePackage,
+  OvertimeCategory,
   Shift,
   TimeType,
   Timesheet,
@@ -61,6 +62,14 @@ export const costCodeApi = {
   create: (d: CostCode) => api.post<CostCode>("/cost-codes", d).then((r) => r.data),
   update: (id: string, d: CostCode) => api.put<CostCode>(`/cost-codes/${id}`, d).then((r) => r.data),
   remove: (id: string) => api.delete(`/cost-codes/${id}`).then(() => undefined),
+};
+
+// --- Overtime categories (reference) ---
+export const overtimeCategoryApi = {
+  list: () => api.get<OvertimeCategory[]>("/overtime-categories").then((r) => r.data),
+  create: (d: OvertimeCategory) => api.post<OvertimeCategory>("/overtime-categories", d).then((r) => r.data),
+  update: (id: string, d: OvertimeCategory) => api.put<OvertimeCategory>(`/overtime-categories/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/overtime-categories/${id}`).then(() => undefined),
 };
 
 // --- Rule engine (country law) ---

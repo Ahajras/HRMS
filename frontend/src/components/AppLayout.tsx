@@ -26,6 +26,7 @@ import LayersIcon from "@mui/icons-material/Layers";
 import PaymentsIcon from "@mui/icons-material/Payments";
 import PublicIcon from "@mui/icons-material/Public";
 import GavelIcon from "@mui/icons-material/Gavel";
+import TimerIcon from "@mui/icons-material/Timer";
 import WorkIcon from "@mui/icons-material/Work";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ScheduleIcon from "@mui/icons-material/Schedule";
@@ -82,6 +83,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/payroll-components", label: "Pay Components", icon: <PaymentsIcon />, authority: "payroll.config.read" },
       { to: "/countries", label: "Countries", icon: <PublicIcon />, authority: "reference.read" },
       { to: "/country-law", label: "Country Law", icon: <GavelIcon />, authority: "reference.read" },
+      { to: "/overtime-categories", label: "Overtime Categories", icon: <TimerIcon />, authority: "reference.read" },
       { to: "/currencies", label: "Currencies", icon: <AttachMoneyIcon />, authority: "reference.read" },
     ],
   },

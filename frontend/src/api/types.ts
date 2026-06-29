@@ -160,6 +160,8 @@ export interface Employee {
   jobTitle?: string;
   jobTitleCode?: string;
   payStatus?: string;
+  overtimeCategoryCode?: string;
+  band?: string;
   arabicName?: string;
   supervisorEmployeeId?: string;
   supervisorName?: string;
@@ -352,6 +354,14 @@ export interface PublicHoliday {
   companyId?: string;
   holidayDate: string;
   name: string;
+  status?: string;
+}
+
+export interface OvertimeCategory {
+  id?: string;
+  code: string;
+  name: string;
+  otEligible: boolean;
   status?: string;
 }
 

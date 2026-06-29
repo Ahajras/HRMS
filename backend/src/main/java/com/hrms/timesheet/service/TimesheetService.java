@@ -26,6 +26,7 @@ import com.hrms.timesheet.dto.GenerateTimesheetRequest;
 import com.hrms.timesheet.dto.TimesheetDayCostDto;
 import com.hrms.timesheet.dto.TimesheetDayDto;
 import com.hrms.timesheet.dto.TimesheetSummaryDto;
+import com.hrms.reference.repository.OvertimeCategoryRepository;
 import com.hrms.timesheet.dto.TimesheetDto;
 import com.hrms.timesheet.repository.EmployeeShiftRepository;
 import com.hrms.timesheet.repository.PayrollPeriodRepository;
@@ -87,6 +88,7 @@ public class TimesheetService {
     private final AppUserRepository appUserRepo;
     private final TimekeeperService timekeeperService;
     private final CrewMemberRepository crewMemberRepo;
+    private final OvertimeCategoryRepository overtimeCategoryRepo;
 
     public TimesheetService(TimesheetRepository timesheetRepo, TimesheetDayRepository dayRepo,
                             ShiftRepository shiftRepo, TimeTypeRepository timeTypeRepo,
@@ -94,7 +96,8 @@ public class TimesheetService {
                             AssignmentRepository assignmentRepo, PayrollPeriodRepository periodRepo,
                             EmployeeShiftRepository employeeShiftRepo, ShiftDayRepository shiftDayRepo,
                             TimesheetDayCostRepository dayCostRepo, AppUserRepository appUserRepo,
-                            TimekeeperService timekeeperService, CrewMemberRepository crewMemberRepo) {
+                            TimekeeperService timekeeperService, CrewMemberRepository crewMemberRepo,
+                            OvertimeCategoryRepository overtimeCategoryRepo) {
         this.timesheetRepo = timesheetRepo;
         this.dayRepo = dayRepo;
         this.shiftRepo = shiftRepo;
@@ -109,6 +112,7 @@ public class TimesheetService {
         this.crewMemberRepo = crewMemberRepo;
         this.periodRepo = periodRepo;
         this.employeeShiftRepo = employeeShiftRepo;
+        this.overtimeCategoryRepo = overtimeCategoryRepo;
     }
 
     // --- queries -----------------------------------------------------
@@ -396,6 +400,7 @@ public class TimesheetService {
         Map<UUID, TimeType> typeCache = new HashMap<>();
         Map<UUID, Map<String, ShiftDay>> weekCache = new HashMap<>();
         boolean monthly = isMonthlyPaid(ts);
+        boolean otEligibleSave = isOtEligible(ts);
 
         for (TimesheetDayDto dto : dayDtos) {
             TimesheetDay day = byId.get(dto.getId());
@@ -415,7 +420,7 @@ public class TimesheetService {
             day.setProjectId(dto.getProjectId());
             day.setCostCodeId(dto.getCostCodeId());
             day.setRemarks(dto.getRemarks());
-            recomputeDay(day, ts, shiftCache, typeCache, weekCache, monthly);
+            recomputeDay(day, ts, shiftCache, typeCache, weekCache, monthly, otEligibleSave);
             validateCostSplit(day, dto.getCosts());
             dayRepo.save(day);
             saveDayCosts(day.getId(), dto.getCosts());
@@ -532,7 +537,7 @@ public class TimesheetService {
 
     private void recomputeDay(TimesheetDay day, Timesheet ts, Map<UUID, Shift> shiftCache,
                               Map<UUID, TimeType> typeCache, Map<UUID, Map<String, ShiftDay>> weekCache,
-                              boolean isMonthly) {
+                              boolean isMonthly, boolean otEligible) {
         Shift shift = resolveDayShift(day, ts, shiftCache);
 
         // Worked hours from clock when both punches are present.
@@ -575,10 +580,28 @@ public class TimesheetService {
         BigDecimal declared = ot.min(declaredLimit);
         BigDecimal undeclared = ot.subtract(declared).max(BigDecimal.ZERO);
 
+        // Overtime eligibility gate: if the employee's overtime category is not
+        // eligible, overtime worked is NOT counted (hours beyond normal are dropped).
+        if (!otEligible) {
+            ot = BigDecimal.ZERO;
+            declared = BigDecimal.ZERO;
+            undeclared = BigDecimal.ZERO;
+        }
+
         day.setNormalHours(normal);
         day.setOtHours(ot);
         day.setDeclaredOtHours(declared);
         day.setUndeclaredOtHours(undeclared);
+    }
+
+    /** True unless the employee's overtime category is explicitly not eligible. */
+    private boolean isOtEligible(Timesheet ts) {
+        return employeeRepo.findById(ts.getEmployeeId())
+                .map(com.hrms.employee.domain.Employee::getOvertimeCategoryCode)
+                .filter(code -> code != null && !code.isBlank())
+                .flatMap(code -> overtimeCategoryRepo.findByCompanyIdAndCode(ts.getCompanyId(), code))
+                .map(com.hrms.reference.domain.OvertimeCategory::isOtEligible)
+                .orElse(true);
     }
 
     private static boolean isNonWorking(String category) {
@@ -613,11 +636,12 @@ public class TimesheetService {
         Map<UUID, TimeType> typeCache = new HashMap<>();
         Map<UUID, Map<String, ShiftDay>> weekCache = new HashMap<>();
         boolean monthly = isMonthlyPaid(ts);
+        boolean otEligible = isOtEligible(ts);
         BigDecimal worked = BigDecimal.ZERO;
         BigDecimal ot = BigDecimal.ZERO;
         BigDecimal absence = BigDecimal.ZERO;
         for (TimesheetDay day : dayRepo.findByTimesheetIdOrderByWorkDate(ts.getId())) {
-            recomputeDay(day, ts, shiftCache, typeCache, weekCache, monthly);
+            recomputeDay(day, ts, shiftCache, typeCache, weekCache, monthly, otEligible);
             dayRepo.save(day);
             worked = worked.add(day.getWorkedHours() != null ? day.getWorkedHours() : BigDecimal.ZERO);
             ot = ot.add(day.getOtHours() != null ? day.getOtHours() : BigDecimal.ZERO);

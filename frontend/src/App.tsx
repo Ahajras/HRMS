@@ -7,6 +7,7 @@ import OrgUnitTypesPage from "./pages/OrgUnitTypesPage";
 import PayrollComponentsPage from "./pages/PayrollComponentsPage";
 import CountriesPage from "./pages/CountriesPage";
 import CountryLawPage from "./pages/CountryLawPage";
+import OvertimeCategoriesPage from "./pages/OvertimeCategoriesPage";
 import ProjectsPage from "./pages/ProjectsPage";
 import CurrenciesPage from "./pages/CurrenciesPage";
 import UsersPage from "./pages/UsersPage";
@@ -53,6 +54,7 @@ export default function App() {
         <Route path="/payroll-components" element={<PayrollComponentsPage />} />
         <Route path="/countries" element={<CountriesPage />} />
         <Route path="/country-law" element={<CountryLawPage />} />
+        <Route path="/overtime-categories" element={<OvertimeCategoriesPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
         <Route path="/currencies" element={<CurrenciesPage />} />
         <Route path="/users" element={<UsersPage />} />
