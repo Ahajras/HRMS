@@ -283,6 +283,10 @@ export const timesheetApi = {
   get: (id: string) => api.get<Timesheet>(`/timesheets/${id}`).then((r) => r.data),
   generate: (d: GenerateTimesheetRequest) =>
     api.post<Timesheet>("/timesheets/generate", d).then((r) => r.data),
+  generateBulk: (periodId: string) =>
+    api.post<{ created: number; skipped: number }>("/timesheets/generate-bulk", null, { params: { periodId } }).then((r) => r.data),
+  submitAll: (year: number, month: number) =>
+    api.post<{ submitted: number }>("/timesheets/submit-all", null, { params: { year, month } }).then((r) => r.data),
   saveDays: (id: string, days: TimesheetDay[]) =>
     api.put<Timesheet>(`/timesheets/${id}/days`, days).then((r) => r.data),
   submit: (id: string) => api.post<Timesheet>(`/timesheets/${id}/submit`).then((r) => r.data),

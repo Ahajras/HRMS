@@ -70,7 +70,10 @@ public class ShiftService {
         if (days == null) {
             return;
         }
+        // Flush the delete before re-inserting so Hibernate doesn't order the new
+        // inserts ahead of the deletes and trip the (shift_id, day_of_week) unique index.
         dayRepository.deleteByShiftId(shift.getId());
+        dayRepository.flush();
         List<String> off = new ArrayList<>();
         for (ShiftDayDto d : days) {
             if (d.getDayOfWeek() == null) {

@@ -1,5 +1,6 @@
 import { Fragment, useEffect, useState } from "react";
 import {
+  Alert,
   Box,
   Button,
   Chip,
@@ -87,7 +88,30 @@ export default function TimesheetPage() {
     },
   });
 
+  const [q, setQ] = useState("");
+  const [bulkMsg, setBulkMsg] = useState<string | null>(null);
+
+  const generateAll = useMutation({
+    mutationFn: () => timesheetApi.generateBulk(periodId),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
+      setBulkMsg(`Generated ${r.created}, skipped ${r.skipped} (already existed).`);
+    },
+  });
+  const submitAll = useMutation({
+    mutationFn: () => timesheetApi.submitAll(period!.periodYear, period!.periodMonth),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
+      setBulkMsg(`Submitted ${r.submitted} draft timesheet(s).`);
+    },
+  });
+
   const periodOpen = period?.status === "OPEN";
+  const filtered = list.filter((t) => {
+    const s = q.trim().toLowerCase();
+    if (!s) return true;
+    return (t.employeeName ?? "").toLowerCase().includes(s) || (t.employeeNumber ?? "").toLowerCase().includes(s);
+  });
 
   return (
     <Box>
@@ -109,6 +133,19 @@ export default function TimesheetPage() {
               <Typography variant="caption" color="text.secondary" sx={{ ml: 1 }}>
                 {period.startDate} → {period.endDate}
               </Typography>
+            </Grid>
+          )}
+          {period && (
+            <Grid item xs={12}>
+              <Stack direction="row" spacing={1} flexWrap="wrap">
+                <Button size="small" variant="outlined" disabled={!periodOpen || generateAll.isPending} onClick={() => generateAll.mutate()}>
+                  Generate all (roster)
+                </Button>
+                <Button size="small" variant="outlined" disabled={list.every((t) => t.status !== "DRAFT") || submitAll.isPending} onClick={() => submitAll.mutate()}>
+                  Submit all drafts
+                </Button>
+              </Stack>
+              {bulkMsg && <Alert severity="success" sx={{ mt: 1 }} onClose={() => setBulkMsg(null)}>{bulkMsg}</Alert>}
             </Grid>
           )}
         </Grid>
@@ -150,7 +187,10 @@ export default function TimesheetPage() {
         {generate.isError && <Typography color="error" variant="body2" mt={1}>{(generate.error as any)?.response?.data?.message ?? "Generate failed."}</Typography>}
       </Paper>
 
-      <Paper variant="outlined" sx={{ p: 0, borderRadius: 2, mb: 2 }}>
+      <Paper variant="outlined" sx={{ borderRadius: 2, mb: 2 }}>
+        <Box sx={{ p: 1.5 }}>
+          <TextField size="small" fullWidth placeholder="Search employee (name or number)" value={q} onChange={(e) => setQ(e.target.value)} />
+        </Box>
         <Table size="small">
           <TableHead>
             <TableRow>
@@ -163,7 +203,7 @@ export default function TimesheetPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {list.map((t) => (
+            {filtered.map((t) => (
               <TableRow key={t.id} hover selected={t.id === selectedId}>
                 <TableCell>{t.employeeNumber} — {t.employeeName}</TableCell>
                 <TableCell><Chip size="small" label={t.status} color={STATUS_COLOR[t.status ?? "DRAFT"] ?? "default"} /></TableCell>
@@ -173,8 +213,8 @@ export default function TimesheetPage() {
                 <TableCell align="right"><Button size="small" onClick={() => setSelectedId(t.id ?? null)}>Open</Button></TableCell>
               </TableRow>
             ))}
-            {list.length === 0 && (
-              <TableRow><TableCell colSpan={6}><Typography variant="body2" color="text.secondary" p={1}>No timesheets for this period. Generate one above.</Typography></TableCell></TableRow>
+            {filtered.length === 0 && (
+              <TableRow><TableCell colSpan={6}><Typography variant="body2" color="text.secondary" p={1}>No timesheets match. Generate above or clear the search.</Typography></TableCell></TableRow>
             )}
           </TableBody>
         </Table>

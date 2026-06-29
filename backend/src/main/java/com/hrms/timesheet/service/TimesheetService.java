@@ -212,6 +212,52 @@ public class TimesheetService {
         return toFullDto(timesheetRepo.save(ts));
     }
 
+    /** Generate timesheets for every employee rostered in the period (skips existing). */
+    public Map<String, Integer> generateBulk(UUID periodId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        PayrollPeriod period = periodRepo.findById(periodId)
+                .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
+        if (!"OPEN".equals(period.getStatus())) {
+            throw new BusinessRuleException("period.not.open",
+                    "The period is " + period.getStatus() + ". Reopen it to add timesheets.");
+        }
+        Set<UUID> emps = new java.util.LinkedHashSet<>();
+        for (EmployeeShift es : employeeShiftRepo.findByCompanyIdOrderByEffectiveFromDesc(companyId)) {
+            if (es.isEffectiveOn(period.getStartDate())) {
+                emps.add(es.getEmployeeId());
+            }
+        }
+        int created = 0;
+        int skipped = 0;
+        for (UUID empId : emps) {
+            boolean exists = timesheetRepo.findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(
+                    companyId, empId, period.getPeriodYear(), period.getPeriodMonth()).isPresent();
+            if (exists) {
+                skipped++;
+                continue;
+            }
+            GenerateTimesheetRequest req = new GenerateTimesheetRequest();
+            req.setEmployeeId(empId);
+            req.setPeriodId(periodId);
+            generate(req);
+            created++;
+        }
+        return Map.of("created", created, "skipped", skipped);
+    }
+
+    /** Submit every DRAFT timesheet in the period. */
+    public Map<String, Integer> submitAll(int year, int month) {
+        UUID companyId = TenantContext.requireCompanyId();
+        int submitted = 0;
+        for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month)) {
+            if (DRAFT.equals(t.getStatus())) {
+                submit(t.getId());
+                submitted++;
+            }
+        }
+        return Map.of("submitted", submitted);
+    }
+
     // --- editing -----------------------------------------------------
 
     /** Replace the editable fields of every supplied day, then recompute. DRAFT only. */

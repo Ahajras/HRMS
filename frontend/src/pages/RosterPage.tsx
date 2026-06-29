@@ -48,8 +48,16 @@ export default function RosterPage() {
   const [bulkDate, setBulkDate] = useState(today());
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [bulkMsg, setBulkMsg] = useState<string | null>(null);
+  const [q, setQ] = useState("");
 
-  const empList = employees?.content ?? [];
+  const match = (s: string) => {
+    const t = q.trim().toLowerCase();
+    return !t || s.toLowerCase().includes(t);
+  };
+  const empList = (employees?.content ?? []).filter((e) =>
+    match(`${e.employeeNumber ?? ""} ${e.firstName ?? ""} ${e.lastName ?? ""}`));
+  const filteredRoster = roster.filter((r) =>
+    match(`${r.employeeNumber ?? ""} ${r.employeeName ?? ""} ${r.shiftCode ?? ""}`));
   const toggle = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -75,6 +83,8 @@ export default function RosterPage() {
       <Typography variant="body2" color="text.secondary" mb={2}>
         Assign each employee to a shift. Timesheet generation uses the shift that is in effect for the period.
       </Typography>
+
+      <TextField size="small" fullWidth placeholder="Search employee or shift" value={q} onChange={(e) => setQ(e.target.value)} sx={{ mb: 2 }} />
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
         <Typography variant="subtitle2" gutterBottom>Bulk assign (fast)</Typography>
@@ -160,7 +170,7 @@ export default function RosterPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {roster.map((r) => (
+            {filteredRoster.map((r) => (
               <TableRow key={r.id} hover>
                 <TableCell>{r.employeeNumber} — {r.employeeName}</TableCell>
                 <TableCell>{r.shiftCode}</TableCell>
@@ -172,7 +182,7 @@ export default function RosterPage() {
                 </TableCell>
               </TableRow>
             ))}
-            {roster.length === 0 && (
+            {filteredRoster.length === 0 && (
               <TableRow><TableCell colSpan={5}><Typography variant="body2" color="text.secondary" p={1}>No assignments yet.</Typography></TableCell></TableRow>
             )}
           </TableBody>

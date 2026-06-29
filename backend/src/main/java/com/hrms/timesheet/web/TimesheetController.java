@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** REST API for monthly timesheets (FTDD Vol.1 Ch.3). */
@@ -46,6 +47,17 @@ public class TimesheetController {
     @ResponseStatus(HttpStatus.CREATED)
     public TimesheetDto generate(@Valid @RequestBody GenerateTimesheetRequest req) {
         return service.generate(req);
+    }
+
+    @PostMapping("/generate-bulk")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Map<String, Integer> generateBulk(@RequestParam UUID periodId) {
+        return service.generateBulk(periodId);
+    }
+
+    @PostMapping("/submit-all")
+    public Map<String, Integer> submitAll(@RequestParam int year, @RequestParam int month) {
+        return service.submitAll(year, month);
     }
 
     @PutMapping("/{id}/days")
