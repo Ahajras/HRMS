@@ -3,10 +3,16 @@ package com.hrms.timesheet.service;
 import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
+import com.hrms.crew.domain.CrewMember;
+import com.hrms.crew.repository.CrewMemberRepository;
+import com.hrms.crew.service.TimekeeperService;
 import com.hrms.employee.domain.Assignment;
 import com.hrms.employee.domain.Employee;
 import com.hrms.employee.repository.AssignmentRepository;
 import com.hrms.employee.repository.EmployeeRepository;
+import com.hrms.security.AuthenticatedUser;
+import com.hrms.security.domain.AppUser;
+import com.hrms.security.repository.AppUserRepository;
 import com.hrms.timesheet.domain.EmployeeShift;
 import com.hrms.timesheet.domain.PayrollPeriod;
 import com.hrms.timesheet.domain.PublicHoliday;
@@ -76,13 +82,17 @@ public class TimesheetService {
     private final EmployeeShiftRepository employeeShiftRepo;
     private final ShiftDayRepository shiftDayRepo;
     private final TimesheetDayCostRepository dayCostRepo;
+    private final AppUserRepository appUserRepo;
+    private final TimekeeperService timekeeperService;
+    private final CrewMemberRepository crewMemberRepo;
 
     public TimesheetService(TimesheetRepository timesheetRepo, TimesheetDayRepository dayRepo,
                             ShiftRepository shiftRepo, TimeTypeRepository timeTypeRepo,
                             PublicHolidayRepository holidayRepo, EmployeeRepository employeeRepo,
                             AssignmentRepository assignmentRepo, PayrollPeriodRepository periodRepo,
                             EmployeeShiftRepository employeeShiftRepo, ShiftDayRepository shiftDayRepo,
-                            TimesheetDayCostRepository dayCostRepo) {
+                            TimesheetDayCostRepository dayCostRepo, AppUserRepository appUserRepo,
+                            TimekeeperService timekeeperService, CrewMemberRepository crewMemberRepo) {
         this.timesheetRepo = timesheetRepo;
         this.dayRepo = dayRepo;
         this.shiftRepo = shiftRepo;
@@ -92,6 +102,9 @@ public class TimesheetService {
         this.assignmentRepo = assignmentRepo;
         this.shiftDayRepo = shiftDayRepo;
         this.dayCostRepo = dayCostRepo;
+        this.appUserRepo = appUserRepo;
+        this.timekeeperService = timekeeperService;
+        this.crewMemberRepo = crewMemberRepo;
         this.periodRepo = periodRepo;
         this.employeeShiftRepo = employeeShiftRepo;
     }
@@ -101,8 +114,46 @@ public class TimesheetService {
     @Transactional(readOnly = true)
     public List<TimesheetDto> listByPeriod(int year, int month) {
         UUID companyId = TenantContext.requireCompanyId();
+        Set<UUID> allowed = restrictedProjects();
         return timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month)
-                .stream().map(t -> toHeaderDto(t)).toList();
+                .stream()
+                .filter(t -> allowed == null || allowed.contains(employeeProject(t.getEmployeeId())))
+                .map(t -> toHeaderDto(t)).toList();
+    }
+
+    // --- timekeeper project scoping ----------------------------------
+
+    /** employeeId of the logged-in user, or null. */
+    private UUID currentEmployeeId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Object p = auth != null ? auth.getPrincipal() : null;
+        if (p instanceof AuthenticatedUser au && au.userId() != null) {
+            return appUserRepo.findById(au.userId()).map(AppUser::getEmployeeId).orElse(null);
+        }
+        return null;
+    }
+
+    /** Projects the current user is limited to; null = unrestricted (admin/manager). */
+    private Set<UUID> restrictedProjects() {
+        UUID empId = currentEmployeeId();
+        if (empId == null) {
+            return null;
+        }
+        List<UUID> projs = timekeeperService.allowedProjectIds(empId);
+        return projs.isEmpty() ? null : new HashSet<>(projs);
+    }
+
+    /** Employee's current project (from the latest assignment), or null. */
+    private UUID employeeProject(UUID employeeId) {
+        return defaultAllocation(employeeId)[0];
+    }
+
+    private void assertProjectAllowed(UUID employeeId) {
+        Set<UUID> allowed = restrictedProjects();
+        if (allowed != null && !allowed.contains(employeeProject(employeeId))) {
+            throw new BusinessRuleException("timekeeper.scope",
+                    "You are not assigned to this employee's project.");
+        }
     }
 
     @Transactional(readOnly = true)
@@ -117,6 +168,7 @@ public class TimesheetService {
         UUID companyId = TenantContext.requireCompanyId();
         employeeRepo.findById(req.getEmployeeId())
                 .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + req.getEmployeeId()));
+        assertProjectAllowed(req.getEmployeeId());
 
         // A timesheet must live inside an OPEN payroll period.
         PayrollPeriod period = periodRepo.findById(req.getPeriodId())
@@ -221,9 +273,11 @@ public class TimesheetService {
             throw new BusinessRuleException("period.not.open",
                     "The period is " + period.getStatus() + ". Reopen it to add timesheets.");
         }
+        Set<UUID> allowed = restrictedProjects();
         Set<UUID> emps = new java.util.LinkedHashSet<>();
         for (EmployeeShift es : employeeShiftRepo.findByCompanyIdOrderByEffectiveFromDesc(companyId)) {
-            if (es.isEffectiveOn(period.getStartDate())) {
+            if (es.isEffectiveOn(period.getStartDate())
+                    && (allowed == null || allowed.contains(employeeProject(es.getEmployeeId())))) {
                 emps.add(es.getEmployeeId());
             }
         }
@@ -239,6 +293,46 @@ public class TimesheetService {
             GenerateTimesheetRequest req = new GenerateTimesheetRequest();
             req.setEmployeeId(empId);
             req.setPeriodId(periodId);
+            generate(req);
+            created++;
+        }
+        return Map.of("created", created, "skipped", skipped);
+    }
+
+    /** Generate timesheets for the members of one crew (each on the member's shift). */
+    public Map<String, Integer> generateByCrew(UUID crewId, UUID periodId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        PayrollPeriod period = periodRepo.findById(periodId)
+                .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
+        if (!"OPEN".equals(period.getStatus())) {
+            throw new BusinessRuleException("period.not.open",
+                    "The period is " + period.getStatus() + ". Reopen it to add timesheets.");
+        }
+        Set<UUID> allowed = restrictedProjects();
+        // employee -> shift from the member row effective on the period start
+        Map<UUID, UUID> empShift = new java.util.LinkedHashMap<>();
+        for (CrewMember m : crewMemberRepo.findByCrewIdOrderByEffectiveFromDesc(crewId)) {
+            if (m.isEffectiveOn(period.getStartDate()) && !empShift.containsKey(m.getEmployeeId())) {
+                empShift.put(m.getEmployeeId(), m.getShiftId());
+            }
+        }
+        int created = 0;
+        int skipped = 0;
+        for (Map.Entry<UUID, UUID> e : empShift.entrySet()) {
+            UUID empId = e.getKey();
+            if (allowed != null && !allowed.contains(employeeProject(empId))) {
+                continue;
+            }
+            boolean exists = timesheetRepo.findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(
+                    companyId, empId, period.getPeriodYear(), period.getPeriodMonth()).isPresent();
+            if (exists) {
+                skipped++;
+                continue;
+            }
+            GenerateTimesheetRequest req = new GenerateTimesheetRequest();
+            req.setEmployeeId(empId);
+            req.setPeriodId(periodId);
+            req.setShiftId(e.getValue());
             generate(req);
             created++;
         }

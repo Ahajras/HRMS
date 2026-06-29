@@ -11,4 +11,6 @@ public interface CrewRepository extends JpaRepository<Crew, UUID> {
     List<Crew> findByCompanyIdOrderByCode(UUID companyId);
 
     boolean existsByCompanyIdAndCode(UUID companyId, String code);
+
+    boolean existsByCompanyIdAndProjectIdAndCode(UUID companyId, UUID projectId, String code);
 }

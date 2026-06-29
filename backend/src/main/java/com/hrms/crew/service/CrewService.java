@@ -50,8 +50,13 @@ public class CrewService {
 
     public CrewDto create(CrewDto dto) {
         UUID companyId = TenantContext.requireCompanyId();
-        if (repository.existsByCompanyIdAndCode(companyId, dto.getCode())) {
-            throw new BusinessRuleException("crew.code.duplicate", "Crew code already exists: " + dto.getCode());
+        // Code is unique per project (the same code may be reused in another project).
+        boolean dup = dto.getProjectId() != null
+                ? repository.existsByCompanyIdAndProjectIdAndCode(companyId, dto.getProjectId(), dto.getCode())
+                : repository.existsByCompanyIdAndCode(companyId, dto.getCode());
+        if (dup) {
+            throw new BusinessRuleException("crew.code.duplicate",
+                    "Crew code already exists in this project: " + dto.getCode());
         }
         Crew e = new Crew();
         e.setCompanyId(companyId);

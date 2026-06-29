@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link as RouterLink, useLocation } from "react-router-dom";
 import {
+  Alert,
   AppBar,
   Box,
   Button,
@@ -11,6 +12,7 @@ import {
   ListItemIcon,
   ListItemText,
   ListSubheader,
+  Snackbar,
   Toolbar,
   Typography,
   TextField,
@@ -114,6 +116,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const toggle = (label: string) => setCollapsed((c) => ({ ...c, [label]: !c[label] }));
 
+  // Global error toast: any failed API call dispatches an "api-error" event.
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  useEffect(() => {
+    const handler = (e: Event) => setErrorMsg((e as CustomEvent<string>).detail);
+    window.addEventListener("api-error", handler);
+    return () => window.removeEventListener("api-error", handler);
+  }, []);
+
   return (
     <Box sx={{ display: "flex" }}>
       <AppBar position="fixed" sx={{ zIndex: (t) => t.zIndex.drawer + 1 }}>
@@ -192,6 +202,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <Toolbar />
         {children}
       </Box>
+
+      <Snackbar
+        open={!!errorMsg}
+        autoHideDuration={6000}
+        onClose={() => setErrorMsg(null)}
+        anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
+      >
+        <Alert severity="error" variant="filled" onClose={() => setErrorMsg(null)} sx={{ maxWidth: 600 }}>
+          {errorMsg}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

@@ -55,6 +55,12 @@ public class TimesheetController {
         return service.generateBulk(periodId);
     }
 
+    @PostMapping("/generate-by-crew")
+    @ResponseStatus(HttpStatus.CREATED)
+    public Map<String, Integer> generateByCrew(@RequestParam UUID crewId, @RequestParam UUID periodId) {
+        return service.generateByCrew(crewId, periodId);
+    }
+
     @PostMapping("/submit-all")
     public Map<String, Integer> submitAll(@RequestParam int year, @RequestParam int month) {
         return service.submitAll(year, month);

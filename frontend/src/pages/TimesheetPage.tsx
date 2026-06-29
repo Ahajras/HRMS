@@ -17,7 +17,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { costCodeApi, employeeApi, periodApi, projectApi, shiftApi, timeTypeApi, timesheetApi } from "../api/resources";
+import { costCodeApi, crewApi, employeeApi, periodApi, projectApi, shiftApi, timeTypeApi, timesheetApi } from "../api/resources";
 import type { Timesheet, TimesheetDay, TimesheetDayCost } from "../api/types";
 
 const STATUS_COLOR: Record<string, "default" | "info" | "success" | "warning"> = {
@@ -50,6 +50,8 @@ export default function TimesheetPage() {
   const { data: shifts = [] } = useQuery({ queryKey: ["shifts"], queryFn: shiftApi.list });
   const { data: timeTypes = [] } = useQuery({ queryKey: ["timeTypes"], queryFn: timeTypeApi.list });
   const { data: periods = [] } = useQuery({ queryKey: ["periods"], queryFn: () => periodApi.list() });
+  const { data: allCrews = [] } = useQuery({ queryKey: ["crews"], queryFn: crewApi.list });
+  const [genCrew, setGenCrew] = useState("");
 
   const period = periods.find((p) => p.id === periodId);
   const { data: list = [] } = useQuery({
@@ -98,6 +100,13 @@ export default function TimesheetPage() {
       setBulkMsg(`Generated ${r.created}, skipped ${r.skipped} (already existed).`);
     },
   });
+  const generateCrew = useMutation({
+    mutationFn: () => timesheetApi.generateByCrew(genCrew, periodId),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
+      setBulkMsg(`Crew: generated ${r.created}, skipped ${r.skipped}.`);
+    },
+  });
   const submitAll = useMutation({
     mutationFn: () => timesheetApi.submitAll(period!.periodYear, period!.periodMonth),
     onSuccess: (r) => {
@@ -137,9 +146,16 @@ export default function TimesheetPage() {
           )}
           {period && (
             <Grid item xs={12}>
-              <Stack direction="row" spacing={1} flexWrap="wrap">
+              <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
                 <Button size="small" variant="outlined" disabled={!periodOpen || generateAll.isPending} onClick={() => generateAll.mutate()}>
                   Generate all (roster)
+                </Button>
+                <TextField select size="small" label="Crew" value={genCrew} onChange={(e) => setGenCrew(e.target.value)} sx={{ minWidth: 180 }}>
+                  <MenuItem value="">(pick a crew)</MenuItem>
+                  {allCrews.map((c) => <MenuItem key={c.id} value={c.id}>{c.code} — {c.name}</MenuItem>)}
+                </TextField>
+                <Button size="small" variant="outlined" disabled={!periodOpen || !genCrew || generateCrew.isPending} onClick={() => generateCrew.mutate()}>
+                  Generate for crew
                 </Button>
                 <Button size="small" variant="outlined" disabled={list.every((t) => t.status !== "DRAFT") || submitAll.isPending} onClick={() => submitAll.mutate()}>
                   Submit all drafts

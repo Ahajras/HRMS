@@ -60,6 +60,14 @@ api.interceptors.response.use(
       if (window.location.pathname !== "/login") {
         window.location.assign("/login");
       }
+    } else {
+      // Surface every other API error globally (a Snackbar in AppLayout listens).
+      const data = error?.response?.data;
+      const message: string =
+        data?.message || data?.error || error?.message || "Request failed";
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("api-error", { detail: message }));
+      }
     }
     return Promise.reject(error);
   }

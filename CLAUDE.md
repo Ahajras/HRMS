@@ -185,13 +185,22 @@ then update this file + deploy.
   across cost codes, the split must equal the worked hours (rejects + clear error;
   frontend shows error + live Σ/worked indicator).
 
-### ▶ Crew slice 2 (NEXT — not yet built)
-- **Enforce timekeeper project scope on the backend**: a timekeeper user only
-  sees/enters timesheets for employees in their `timekeeper_project` projects
-  (use TimekeeperService.allowedProjectIds + current user's employeeId).
-- **Timesheet generate/submit by crew** (pick a crew → bulk for its members).
-- **Crew trades** (job title + planned vs assigned counts, red/green shortage view).
-- **Timecard report** generation (per-employee monthly card: days + hours breakdown).
+### P4 Crew slice 2 (partly done)
+- **DONE — Timekeeper project scope enforced (backend):** TimesheetService resolves
+  the current user's employeeId (AppUserRepository via AuthenticatedUser.userId) →
+  TimekeeperService.allowedProjectIds. If the user is a timekeeper (≥1
+  timekeeper_project rows) listByPeriod/generate/generateBulk/generateByCrew are
+  restricted to those projects (employee's project from latest assignment). Empty ⇒
+  unrestricted (admins/managers). `restrictedProjects()/employeeProject()/assertProjectAllowed()`.
+- **DONE — Generate by crew:** `generateByCrew(crewId, periodId)` → each member on
+  their own crew shift. POST `/timesheets/generate-by-crew?crewId&periodId`.
+  Frontend TimesheetPage has a Crew picker + "Generate for crew".
+- **DONE — Crew code unique per project** (V20: uq on company_id+project_id+code);
+  crew member candidate list filtered to the crew's project.
+- **DONE — Global API error toast:** client.ts dispatches `api-error`; AppLayout
+  Snackbar shows every backend error message (was: most forms swallowed errors).
+- **NEXT (slice 2b):** Crew **trades** (job title planned vs assigned, red/green);
+  **Timecard report** (per-employee monthly card, printable/PDF).
 
 ### ▶ Still NOT built from the legacy timesheet (deferred — confirm before doing)
 - **VAKHTA** rotation engine (28/28 rotations, field-break F days, employee

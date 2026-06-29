@@ -100,7 +100,7 @@ export default function CrewsPage() {
               <IconButton size="small" color="error" onClick={() => c.id && del.mutate(c.id)}><DeleteIcon /></IconButton>
             </Box>
           </Stack>
-          {openMembers === c.id && c.id && <CrewMembersPanel crewId={c.id} empList={empList} />}
+          {openMembers === c.id && c.id && <CrewMembersPanel crewId={c.id} projectId={c.projectId} />}
         </Paper>
       ))}
       {crews.length === 0 && <Typography variant="body2" color="text.secondary">No crews yet. Add one above.</Typography>}
@@ -108,10 +108,16 @@ export default function CrewsPage() {
   );
 }
 
-function CrewMembersPanel({ crewId, empList }: { crewId: string; empList: any[] }) {
+function CrewMembersPanel({ crewId, projectId }: { crewId: string; projectId?: string }) {
   const qc = useQueryClient();
   const { data: members = [] } = useQuery({ queryKey: ["crewMembers", crewId], queryFn: () => crewApi.members(crewId) });
   const { data: shifts = [] } = useQuery({ queryKey: ["shifts"], queryFn: shiftApi.list });
+  // Only employees of the crew's project can be added.
+  const { data: empPage } = useQuery({
+    queryKey: ["employeesByProject", projectId ?? "all"],
+    queryFn: () => employeeApi.list(0, 500, undefined, undefined, projectId),
+  });
+  const empList = empPage?.content ?? [];
 
   const [shiftId, setShiftId] = useState("");
   const [date, setDate] = useState(today());
