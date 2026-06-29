@@ -140,13 +140,18 @@ function CrewMembersPanel({ crewId, projectId }: { crewId: string; projectId?: s
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["crewMembers", crewId] });
       qc.invalidateQueries({ queryKey: ["crews"] });
+      qc.invalidateQueries({ queryKey: ["crewByEmp"] });
       setMsg(`Added ${r.created} member(s).`);
       setSelected(new Set());
     },
   });
   const remove = useMutation({
     mutationFn: (id: string) => crewApi.removeMember(id),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crewMembers", crewId] }); qc.invalidateQueries({ queryKey: ["crews"] }); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crewMembers", crewId] });
+      qc.invalidateQueries({ queryKey: ["crews"] });
+      qc.invalidateQueries({ queryKey: ["crewByEmp"] });
+    },
   });
 
   return (
