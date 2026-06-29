@@ -74,6 +74,19 @@ public class CrewService {
         repository.delete(getEntity(id)); // crew_member cascades in DB
     }
 
+    /** The crew an employee currently belongs to (most recent open membership), or null. */
+    @Transactional(readOnly = true)
+    public CrewDto findByEmployee(UUID employeeId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        return memberRepository.findByCompanyIdAndEmployeeId(companyId, employeeId).stream()
+                .filter(m -> m.getEffectiveTo() == null)
+                .findFirst()
+                .or(() -> memberRepository.findByCompanyIdAndEmployeeId(companyId, employeeId).stream().findFirst())
+                .flatMap(m -> repository.findById(m.getCrewId()))
+                .map(this::toDto)
+                .orElse(null);
+    }
+
     // --- members -----------------------------------------------------
 
     @Transactional(readOnly = true)

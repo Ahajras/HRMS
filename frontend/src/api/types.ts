@@ -161,6 +161,9 @@ export interface Employee {
   jobTitleCode?: string;
   payStatus?: string;
   arabicName?: string;
+  supervisorEmployeeId?: string;
+  supervisorName?: string;
+  photoUrl?: string;
 }
 
 export interface EmployeeSummary {

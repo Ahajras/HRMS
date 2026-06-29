@@ -30,11 +30,15 @@ export default function CrewsPage() {
   const qc = useQueryClient();
   const { data: crews = [] } = useQuery({ queryKey: ["crews"], queryFn: crewApi.list });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
-  const { data: employees } = useQuery({ queryKey: ["employeesAll"], queryFn: () => employeeApi.list(0, 500) });
   const [form, setForm] = useState<Crew>(EMPTY);
   const [openMembers, setOpenMembers] = useState<string | null>(null);
 
-  const empList = employees?.content ?? [];
+  // Foreman candidates are limited to the selected project's employees.
+  const { data: foremanPage } = useQuery({
+    queryKey: ["employeesByProject", form.projectId ?? "all"],
+    queryFn: () => employeeApi.list(0, 500, undefined, undefined, form.projectId),
+  });
+  const empList = foremanPage?.content ?? [];
 
   const save = useMutation({
     mutationFn: (c: Crew) => (c.id ? crewApi.update(c.id, c) : crewApi.create(c)),
@@ -55,7 +59,7 @@ export default function CrewsPage() {
           <Grid item xs={6} sm={2}><TextField fullWidth size="small" label="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></Grid>
           <Grid item xs={6} sm={3}><TextField fullWidth size="small" label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Grid>
           <Grid item xs={12} sm={3}>
-            <TextField select fullWidth size="small" label="Project" value={form.projectId ?? ""} onChange={(e) => setForm({ ...form, projectId: e.target.value || undefined })}>
+            <TextField select fullWidth size="small" label="Project" value={form.projectId ?? ""} onChange={(e) => setForm({ ...form, projectId: e.target.value || undefined, foremanEmployeeId: undefined })}>
               <MenuItem value="">(none)</MenuItem>
               {projects.map((p) => <MenuItem key={p.id} value={p.id}>{p.code} — {p.name}</MenuItem>)}
             </TextField>

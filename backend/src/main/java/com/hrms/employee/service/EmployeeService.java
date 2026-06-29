@@ -110,6 +110,8 @@ public class EmployeeService {
         entity.setJobTitleCode(dto.getJobTitleCode());
         entity.setPayStatus(dto.getPayStatus());
         entity.setArabicName(dto.getArabicName());
+        entity.setSupervisorEmployeeId(dto.getSupervisorEmployeeId());
+        entity.setPhotoUrl(dto.getPhotoUrl());
         if (dto.getStatus() != null) {
             entity.setStatus(dto.getStatus());
         }
@@ -138,6 +140,12 @@ public class EmployeeService {
         dto.setJobTitleCode(entity.getJobTitleCode());
         dto.setPayStatus(entity.getPayStatus());
         dto.setArabicName(entity.getArabicName());
+        dto.setSupervisorEmployeeId(entity.getSupervisorEmployeeId());
+        dto.setPhotoUrl(entity.getPhotoUrl());
+        if (entity.getSupervisorEmployeeId() != null) {
+            repository.findById(entity.getSupervisorEmployeeId()).ifPresent(sup ->
+                    dto.setSupervisorName((sup.getFirstName() + " " + sup.getLastName()).trim()));
+        }
         dto.setStatus(entity.getStatus());
         return dto;
     }

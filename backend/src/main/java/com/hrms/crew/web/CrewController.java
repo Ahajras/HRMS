@@ -54,6 +54,11 @@ public class CrewController {
         return ResponseEntity.noContent().build();
     }
 
+    @GetMapping("/by-employee/{employeeId}")
+    public CrewDto byEmployee(@PathVariable UUID employeeId) {
+        return service.findByEmployee(employeeId);
+    }
+
     @GetMapping("/{id}/members")
     public List<CrewMemberDto> members(@PathVariable UUID id) {
         return service.listMembers(id);

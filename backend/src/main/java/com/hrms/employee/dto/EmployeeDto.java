@@ -78,6 +78,19 @@ public class EmployeeDto {
     @Size(max = 150)
     private String arabicName;
 
+    private UUID supervisorEmployeeId;
+    private String supervisorName;
+    private String photoUrl;
+
+    public UUID getSupervisorEmployeeId() { return supervisorEmployeeId; }
+    public void setSupervisorEmployeeId(UUID supervisorEmployeeId) { this.supervisorEmployeeId = supervisorEmployeeId; }
+
+    public String getSupervisorName() { return supervisorName; }
+    public void setSupervisorName(String supervisorName) { this.supervisorName = supervisorName; }
+
+    public String getPhotoUrl() { return photoUrl; }
+    public void setPhotoUrl(String photoUrl) { this.photoUrl = photoUrl; }
+
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
 
