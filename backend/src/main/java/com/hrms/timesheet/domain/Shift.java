@@ -24,6 +24,9 @@ public class Shift extends AuditableEntity implements EffectiveDated {
     @Column(name = "company_id", nullable = false)
     private UUID companyId;
 
+    @Column(name = "project_id")
+    private UUID projectId;
+
     @Column(name = "code", nullable = false, length = 30)
     private String code;
 
@@ -59,6 +62,9 @@ public class Shift extends AuditableEntity implements EffectiveDated {
 
     public UUID getCompanyId() { return companyId; }
     public void setCompanyId(UUID companyId) { this.companyId = companyId; }
+
+    public UUID getProjectId() { return projectId; }
+    public void setProjectId(UUID projectId) { this.projectId = projectId; }
 
     public String getCode() { return code; }
     public void setCode(String code) { this.code = code; }

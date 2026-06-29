@@ -57,7 +57,7 @@ public class TimesheetController {
 
     @PostMapping("/generate-by-crew")
     @ResponseStatus(HttpStatus.CREATED)
-    public Map<String, Integer> generateByCrew(@RequestParam UUID crewId, @RequestParam UUID periodId) {
+    public Map<String, Object> generateByCrew(@RequestParam UUID crewId, @RequestParam UUID periodId) {
         return service.generateByCrew(crewId, periodId);
     }
 

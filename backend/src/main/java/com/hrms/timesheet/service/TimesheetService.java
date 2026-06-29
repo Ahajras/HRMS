@@ -148,6 +148,20 @@ public class TimesheetService {
         return defaultAllocation(employeeId)[0];
     }
 
+    /** A roster/crew membership counts for a period when its date window overlaps it:
+     *  joined on/before the period end, and not ended before the period start. */
+    private static boolean activeForPeriod(LocalDate from, LocalDate to, PayrollPeriod period) {
+        boolean joinedInTime = from == null || !from.isAfter(period.getEndDate());
+        boolean notEnded = to == null || !to.isBefore(period.getStartDate());
+        return joinedInTime && notEnded;
+    }
+
+    private String empLabel(UUID employeeId) {
+        return employeeRepo.findById(employeeId)
+                .map(e -> e.getEmployeeNumber() + " " + (e.getFirstName() + " " + e.getLastName()).trim())
+                .orElse(employeeId.toString());
+    }
+
     private void assertProjectAllowed(UUID employeeId) {
         Set<UUID> allowed = restrictedProjects();
         if (allowed != null && !allowed.contains(employeeProject(employeeId))) {
@@ -276,7 +290,7 @@ public class TimesheetService {
         Set<UUID> allowed = restrictedProjects();
         Set<UUID> emps = new java.util.LinkedHashSet<>();
         for (EmployeeShift es : employeeShiftRepo.findByCompanyIdOrderByEffectiveFromDesc(companyId)) {
-            if (es.isEffectiveOn(period.getStartDate())
+            if (activeForPeriod(es.getEffectiveFrom(), es.getEffectiveTo(), period)
                     && (allowed == null || allowed.contains(employeeProject(es.getEmployeeId())))) {
                 emps.add(es.getEmployeeId());
             }
@@ -299,8 +313,9 @@ public class TimesheetService {
         return Map.of("created", created, "skipped", skipped);
     }
 
-    /** Generate timesheets for the members of one crew (each on the member's shift). */
-    public Map<String, Integer> generateByCrew(UUID crewId, UUID periodId) {
+    /** Generate timesheets for the members of one crew (each on the member's shift).
+     *  Returns created/skipped counts plus a message for every member that was skipped. */
+    public Map<String, Object> generateByCrew(UUID crewId, UUID periodId) {
         UUID companyId = TenantContext.requireCompanyId();
         PayrollPeriod period = periodRepo.findById(periodId)
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
@@ -309,34 +324,46 @@ public class TimesheetService {
                     "The period is " + period.getStatus() + ". Reopen it to add timesheets.");
         }
         Set<UUID> allowed = restrictedProjects();
-        // employee -> shift from the member row effective on the period start
-        Map<UUID, UUID> empShift = new java.util.LinkedHashMap<>();
+        // Most-recent membership row per employee (rows are ordered effectiveFrom desc).
+        Map<UUID, CrewMember> latest = new java.util.LinkedHashMap<>();
         for (CrewMember m : crewMemberRepo.findByCrewIdOrderByEffectiveFromDesc(crewId)) {
-            if (m.isEffectiveOn(period.getStartDate()) && !empShift.containsKey(m.getEmployeeId())) {
-                empShift.put(m.getEmployeeId(), m.getShiftId());
-            }
+            latest.putIfAbsent(m.getEmployeeId(), m);
         }
         int created = 0;
         int skipped = 0;
-        for (Map.Entry<UUID, UUID> e : empShift.entrySet()) {
-            UUID empId = e.getKey();
+        List<String> messages = new java.util.ArrayList<>();
+        for (CrewMember m : latest.values()) {
+            UUID empId = m.getEmployeeId();
+            if (!activeForPeriod(m.getEffectiveFrom(), m.getEffectiveTo(), period)) {
+                skipped++;
+                messages.add(empLabel(empId) + " — not in the crew during this period (member from "
+                        + m.getEffectiveFrom() + ").");
+                continue;
+            }
             if (allowed != null && !allowed.contains(employeeProject(empId))) {
+                skipped++;
+                messages.add(empLabel(empId) + " — outside your project scope.");
                 continue;
             }
             boolean exists = timesheetRepo.findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(
                     companyId, empId, period.getPeriodYear(), period.getPeriodMonth()).isPresent();
             if (exists) {
                 skipped++;
+                messages.add(empLabel(empId) + " — already has a timesheet for this period.");
                 continue;
             }
             GenerateTimesheetRequest req = new GenerateTimesheetRequest();
             req.setEmployeeId(empId);
             req.setPeriodId(periodId);
-            req.setShiftId(e.getValue());
+            req.setShiftId(m.getShiftId());
             generate(req);
             created++;
         }
-        return Map.of("created", created, "skipped", skipped);
+        Map<String, Object> result = new HashMap<>();
+        result.put("created", created);
+        result.put("skipped", skipped);
+        result.put("messages", messages);
+        return result;
     }
 
     /** Submit every DRAFT timesheet in the period. */
@@ -366,6 +393,7 @@ public class TimesheetService {
         Map<UUID, Shift> shiftCache = new HashMap<>();
         Map<UUID, TimeType> typeCache = new HashMap<>();
         Map<UUID, Map<String, ShiftDay>> weekCache = new HashMap<>();
+        boolean monthly = isMonthlyPaid(ts);
 
         for (TimesheetDayDto dto : dayDtos) {
             TimesheetDay day = byId.get(dto.getId());
@@ -385,7 +413,7 @@ public class TimesheetService {
             day.setProjectId(dto.getProjectId());
             day.setCostCodeId(dto.getCostCodeId());
             day.setRemarks(dto.getRemarks());
-            recomputeDay(day, ts, shiftCache, typeCache, weekCache);
+            recomputeDay(day, ts, shiftCache, typeCache, weekCache, monthly);
             validateCostSplit(day, dto.getCosts());
             dayRepo.save(day);
             saveDayCosts(day.getId(), dto.getCosts());
@@ -501,7 +529,8 @@ public class TimesheetService {
     // --- computation -------------------------------------------------
 
     private void recomputeDay(TimesheetDay day, Timesheet ts, Map<UUID, Shift> shiftCache,
-                              Map<UUID, TimeType> typeCache, Map<UUID, Map<String, ShiftDay>> weekCache) {
+                              Map<UUID, TimeType> typeCache, Map<UUID, Map<String, ShiftDay>> weekCache,
+                              boolean isMonthly) {
         Shift shift = resolveDayShift(day, ts, shiftCache);
 
         // Worked hours from clock when both punches are present.
@@ -530,8 +559,10 @@ public class TimesheetService {
         BigDecimal normal;
         BigDecimal ot;
         if ("REST".equals(category) || "HOLIDAY".equals(category)) {
-            normal = BigDecimal.ZERO;
-            ot = worked; // every hour worked on a rest/holiday day is premium time
+            // Weekend/holiday: paid normal hours for monthly-paid staff (legacy Hr_fri/Hr_hol),
+            // 0 for daily-paid. Any hours actually worked on the day are premium overtime.
+            normal = isMonthly ? sampleNormal : BigDecimal.ZERO;
+            ot = worked;
         } else if (isNonWorking(category)) {
             normal = BigDecimal.ZERO;
             ot = BigDecimal.ZERO;
@@ -568,15 +599,23 @@ public class TimesheetService {
         return week.get(date.getDayOfWeek().name().substring(0, 3));
     }
 
+    /** True when the timesheet's employee is monthly-paid (gets weekend/holiday normal pay). */
+    private boolean isMonthlyPaid(Timesheet ts) {
+        return employeeRepo.findById(ts.getEmployeeId())
+                .map(e -> e.getPayStatus() != null && e.getPayStatus().toUpperCase().contains("MONTH"))
+                .orElse(false);
+    }
+
     private void recomputeTotals(Timesheet ts) {
         Map<UUID, Shift> shiftCache = new HashMap<>();
         Map<UUID, TimeType> typeCache = new HashMap<>();
         Map<UUID, Map<String, ShiftDay>> weekCache = new HashMap<>();
+        boolean monthly = isMonthlyPaid(ts);
         BigDecimal worked = BigDecimal.ZERO;
         BigDecimal ot = BigDecimal.ZERO;
         BigDecimal absence = BigDecimal.ZERO;
         for (TimesheetDay day : dayRepo.findByTimesheetIdOrderByWorkDate(ts.getId())) {
-            recomputeDay(day, ts, shiftCache, typeCache, weekCache);
+            recomputeDay(day, ts, shiftCache, typeCache, weekCache, monthly);
             dayRepo.save(day);
             worked = worked.add(day.getWorkedHours() != null ? day.getWorkedHours() : BigDecimal.ZERO);
             ot = ot.add(day.getOtHours() != null ? day.getOtHours() : BigDecimal.ZERO);

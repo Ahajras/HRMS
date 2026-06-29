@@ -102,6 +102,7 @@ public class ShiftService {
     }
 
     private void apply(ShiftDto dto, Shift e) {
+        e.setProjectId(dto.getProjectId());
         e.setCode(dto.getCode());
         e.setName(dto.getName());
         e.setStartTime(dto.getStartTime());
@@ -121,6 +122,7 @@ public class ShiftService {
         ShiftDto dto = new ShiftDto();
         dto.setId(e.getId());
         dto.setCompanyId(e.getCompanyId());
+        dto.setProjectId(e.getProjectId());
         dto.setCode(e.getCode());
         dto.setName(e.getName());
         dto.setStartTime(e.getStartTime());

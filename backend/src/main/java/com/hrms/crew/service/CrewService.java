@@ -13,6 +13,8 @@ import com.hrms.crew.repository.CrewRepository;
 import com.hrms.employee.domain.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.project.repository.ProjectRepository;
+import com.hrms.timesheet.domain.EmployeeShift;
+import com.hrms.timesheet.repository.EmployeeShiftRepository;
 import com.hrms.timesheet.repository.ShiftRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,15 +33,36 @@ public class CrewService {
     private final EmployeeRepository employeeRepository;
     private final ProjectRepository projectRepository;
     private final ShiftRepository shiftRepository;
+    private final EmployeeShiftRepository employeeShiftRepository;
 
     public CrewService(CrewRepository repository, CrewMemberRepository memberRepository,
                        EmployeeRepository employeeRepository, ProjectRepository projectRepository,
-                       ShiftRepository shiftRepository) {
+                       ShiftRepository shiftRepository, EmployeeShiftRepository employeeShiftRepository) {
         this.repository = repository;
         this.memberRepository = memberRepository;
         this.employeeRepository = employeeRepository;
         this.projectRepository = projectRepository;
         this.shiftRepository = shiftRepository;
+        this.employeeShiftRepository = employeeShiftRepository;
+    }
+
+    /** Mirror a crew member's shift into the Shift Roster so it reflects there too. */
+    private void ensureRoster(UUID companyId, UUID employeeId, UUID shiftId, LocalDate from) {
+        if (shiftId == null) {
+            return;
+        }
+        boolean already = employeeShiftRepository
+                .findByCompanyIdAndEmployeeIdOrderByEffectiveFromDesc(companyId, employeeId).stream()
+                .anyMatch(es -> shiftId.equals(es.getShiftId()) && es.getEffectiveTo() == null);
+        if (already) {
+            return;
+        }
+        EmployeeShift es = new EmployeeShift();
+        es.setCompanyId(companyId);
+        es.setEmployeeId(employeeId);
+        es.setShiftId(shiftId);
+        es.setEffectiveFrom(from);
+        employeeShiftRepository.save(es);
     }
 
     @Transactional(readOnly = true)
@@ -105,7 +128,9 @@ public class CrewService {
         m.setShiftId(dto.getShiftId());
         m.setEffectiveFrom(dto.getEffectiveFrom() != null ? dto.getEffectiveFrom() : LocalDate.now());
         m.setEffectiveTo(dto.getEffectiveTo());
-        return toMemberDto(memberRepository.save(m));
+        CrewMember saved = memberRepository.save(m);
+        ensureRoster(companyId, saved.getEmployeeId(), saved.getShiftId(), saved.getEffectiveFrom());
+        return toMemberDto(saved);
     }
 
     /** Add many employees to a crew at once, all on one shift. Skips current members. */
@@ -131,6 +156,7 @@ public class CrewService {
             m.setShiftId(req.getShiftId());
             m.setEffectiveFrom(from);
             memberRepository.save(m);
+            ensureRoster(companyId, employeeId, req.getShiftId(), from);
             created++;
         }
         return created;

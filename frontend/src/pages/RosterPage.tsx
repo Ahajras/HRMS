@@ -20,7 +20,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
-import { employeeApi, employeeShiftApi, shiftApi } from "../api/resources";
+import { employeeApi, employeeShiftApi, projectApi, shiftApi } from "../api/resources";
 import type { EmployeeShift } from "../api/types";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -29,10 +29,17 @@ const EMPTY: EmployeeShift = { employeeId: "", shiftId: "", effectiveFrom: today
 export default function RosterPage() {
   const qc = useQueryClient();
   const [form, setForm] = useState<EmployeeShift>(EMPTY);
+  const [projectId, setProjectId] = useState("");
 
-  const { data: employees } = useQuery({ queryKey: ["employeesAll"], queryFn: () => employeeApi.list(0, 500) });
-  const { data: shifts = [] } = useQuery({ queryKey: ["shifts"], queryFn: shiftApi.list });
+  const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
+  const { data: employees } = useQuery({
+    queryKey: ["employeesByProject", projectId || "all"],
+    queryFn: () => employeeApi.list(0, 500, undefined, undefined, projectId || undefined),
+  });
+  const { data: allShifts = [] } = useQuery({ queryKey: ["shifts"], queryFn: shiftApi.list });
   const { data: roster = [] } = useQuery({ queryKey: ["roster"], queryFn: () => employeeShiftApi.list() });
+  // Shifts of the chosen project (plus shared shifts with no project).
+  const shifts = allShifts.filter((s) => !projectId || !s.projectId || s.projectId === projectId);
 
   const save = useMutation({
     mutationFn: (r: EmployeeShift) => (r.id ? employeeShiftApi.update(r.id, r) : employeeShiftApi.create(r)),
@@ -84,7 +91,13 @@ export default function RosterPage() {
         Assign each employee to a shift. Timesheet generation uses the shift that is in effect for the period.
       </Typography>
 
-      <TextField size="small" fullWidth placeholder="Search employee or shift" value={q} onChange={(e) => setQ(e.target.value)} sx={{ mb: 2 }} />
+      <Stack direction="row" spacing={1.5} mb={2}>
+        <TextField select size="small" label="Project" value={projectId} onChange={(e) => { setProjectId(e.target.value); setSelected(new Set()); }} sx={{ minWidth: 240 }}>
+          <MenuItem value="">All projects</MenuItem>
+          {projects.map((p) => <MenuItem key={p.id} value={p.id}>{p.code} — {p.name}</MenuItem>)}
+        </TextField>
+        <TextField size="small" fullWidth placeholder="Search employee or shift" value={q} onChange={(e) => setQ(e.target.value)} />
+      </Stack>
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
         <Typography variant="subtitle2" gutterBottom>Bulk assign (fast)</Typography>

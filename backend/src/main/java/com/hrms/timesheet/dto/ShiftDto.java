@@ -11,6 +11,7 @@ public class ShiftDto {
 
     private UUID id;
     private UUID companyId;
+    private UUID projectId;
     private String code;
     private String name;
     private LocalTime startTime;
@@ -30,6 +31,9 @@ public class ShiftDto {
 
     public UUID getCompanyId() { return companyId; }
     public void setCompanyId(UUID companyId) { this.companyId = companyId; }
+
+    public UUID getProjectId() { return projectId; }
+    public void setProjectId(UUID projectId) { this.projectId = projectId; }
 
     public String getCode() { return code; }
     public void setCode(String code) { this.code = code; }

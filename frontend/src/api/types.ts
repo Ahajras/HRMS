@@ -318,6 +318,7 @@ export interface ShiftDay {
 export interface Shift {
   id?: string;
   companyId?: string;
+  projectId?: string;
   code: string;
   name: string;
   startTime?: string;

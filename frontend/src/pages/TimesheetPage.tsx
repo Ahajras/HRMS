@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import {
   Alert,
+  Autocomplete,
   Box,
   Button,
   Chip,
@@ -104,7 +105,8 @@ export default function TimesheetPage() {
     mutationFn: () => timesheetApi.generateByCrew(genCrew, periodId),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
-      setBulkMsg(`Crew: generated ${r.created}, skipped ${r.skipped}.`);
+      const detail = r.messages && r.messages.length ? " — " + r.messages.join("  •  ") : "";
+      setBulkMsg(`Crew: generated ${r.created}, skipped ${r.skipped}.${detail}`);
     },
   });
   const submitAll = useMutation({
@@ -176,11 +178,15 @@ export default function TimesheetPage() {
         )}
         <Grid container spacing={1.5} alignItems="center">
           <Grid item xs={12} sm={4}>
-            <TextField select fullWidth size="small" label="Employee" value={genEmployee} onChange={(e) => setGenEmployee(e.target.value)}>
-              {(employees?.content ?? []).map((emp) => (
-                <MenuItem key={emp.id} value={emp.id}>{emp.employeeNumber} — {emp.firstName} {emp.lastName}</MenuItem>
-              ))}
-            </TextField>
+            <Autocomplete
+              size="small"
+              options={employees?.content ?? []}
+              getOptionLabel={(o) => `${o.employeeNumber} — ${o.firstName} ${o.lastName}`}
+              isOptionEqualToValue={(o, v) => o.id === v.id}
+              value={(employees?.content ?? []).find((e) => e.id === genEmployee) ?? null}
+              onChange={(_, v) => setGenEmployee(v?.id ?? "")}
+              renderInput={(params) => <TextField {...params} label="Employee" />}
+            />
           </Grid>
           <Grid item xs={12} sm={3}>
             <TextField select fullWidth size="small" label="Shift" value={genShift} onChange={(e) => setGenShift(e.target.value)}>
@@ -226,7 +232,12 @@ export default function TimesheetPage() {
                 <TableCell align="right">{t.totalWorkedHours ?? 0}</TableCell>
                 <TableCell align="right">{t.totalOtHours ?? 0}</TableCell>
                 <TableCell align="right">{t.totalAbsenceDays ?? 0}</TableCell>
-                <TableCell align="right"><Button size="small" onClick={() => setSelectedId(t.id ?? null)}>Open</Button></TableCell>
+                <TableCell align="right">
+                  <Button size="small" onClick={() => setSelectedId(t.id ?? null)}>Open</Button>
+                  {t.status !== "LOCKED" && (
+                    <Button size="small" color="error" onClick={() => t.id && del.mutate(t.id)}>Delete</Button>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
             {filtered.length === 0 && (

@@ -202,6 +202,21 @@ then update this file + deploy.
 - **NEXT (slice 2b):** Crew **trades** (job title planned vs assigned, red/green);
   **Timecard report** (per-employee monthly card, printable/PDF).
 
+### P4 polish round (done — V22)
+- **Shift → project** (V22: shift.project_id). ShiftsPage has a Project dropdown;
+  Shift Roster has a **project filter** that scopes both the employee list and the
+  shift options (shifts with no project are shared/all-projects).
+- **Crew member shift mirrors into the Roster**: CrewService.ensureRoster creates an
+  employee_shift row when a crew member is added with a shift (so it reflects in Shift Roster).
+- **generate-by-crew returns skip messages**: members not in the crew during the
+  period (membership date), out-of-scope, or already having a timesheet are reported
+  per-employee (Map<String,Object> {created, skipped, messages[]}); TimesheetPage shows them.
+- **REST/HOLIDAY paid for monthly**: recomputeDay sets a weekend/holiday day's
+  normal hours from the sample week for monthly-paid employees (0 for daily). Sample
+  week now allows Normal hrs on a weekly-off day (the paid weekend hours).
+- Timesheet: employee generate picker is now a **searchable Autocomplete**; list rows
+  have a **Delete**; membership date filter uses period overlap (not just start day).
+
 ### Employee card polish (done — V21)
 - V21: `employee` ADD `supervisor_employee_id` (FK employee, for future
   timesheet/leave approval) + `photo_url` TEXT (stores a data-URI avatar).
