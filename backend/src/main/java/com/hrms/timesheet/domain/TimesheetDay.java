@@ -55,6 +55,9 @@ public class TimesheetDay extends AuditableEntity {
     @Column(name = "undeclared_ot_hours", nullable = false, precision = 5, scale = 2)
     private BigDecimal undeclaredOtHours = BigDecimal.ZERO;
 
+    @Column(name = "ineligible_ot_hours", nullable = false, precision = 5, scale = 2)
+    private BigDecimal ineligibleOtHours = BigDecimal.ZERO;
+
     @Column(name = "project_id")
     private UUID projectId;
 
@@ -99,6 +102,9 @@ public class TimesheetDay extends AuditableEntity {
 
     public BigDecimal getUndeclaredOtHours() { return undeclaredOtHours; }
     public void setUndeclaredOtHours(BigDecimal undeclaredOtHours) { this.undeclaredOtHours = undeclaredOtHours; }
+
+    public BigDecimal getIneligibleOtHours() { return ineligibleOtHours; }
+    public void setIneligibleOtHours(BigDecimal ineligibleOtHours) { this.ineligibleOtHours = ineligibleOtHours; }
 
     public UUID getProjectId() { return projectId; }
     public void setProjectId(UUID projectId) { this.projectId = projectId; }

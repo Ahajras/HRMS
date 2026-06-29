@@ -273,6 +273,10 @@ public class TimesheetService {
                 code = "REGULAR";
                 day.setPlannedHours(standard);
                 day.setWorkedHours(standard);
+                if (shift != null && shift.getStartTime() != null && shift.getEndTime() != null) {
+                    day.setActualIn(shift.getStartTime());
+                    day.setActualOut(shift.getEndTime());
+                }
             }
             TimeType tt = typesByCode.get(code);
             day.setTimeTypeId(tt != null ? tt.getId() : null);
@@ -581,8 +585,11 @@ public class TimesheetService {
         BigDecimal undeclared = ot.subtract(declared).max(BigDecimal.ZERO);
 
         // Overtime eligibility gate: if the employee's overtime category is not
-        // eligible, overtime worked is NOT counted (hours beyond normal are dropped).
+        // eligible, the overtime worked is recorded separately (ineligible_ot_hours)
+        // — not paid and not shown to the employee — and payable OT becomes zero.
+        BigDecimal ineligibleOt = BigDecimal.ZERO;
         if (!otEligible) {
+            ineligibleOt = ot;
             ot = BigDecimal.ZERO;
             declared = BigDecimal.ZERO;
             undeclared = BigDecimal.ZERO;
@@ -592,6 +599,7 @@ public class TimesheetService {
         day.setOtHours(ot);
         day.setDeclaredOtHours(declared);
         day.setUndeclaredOtHours(undeclared);
+        day.setIneligibleOtHours(ineligibleOt);
     }
 
     /** True unless the employee's overtime category is explicitly not eligible. */
@@ -771,7 +779,8 @@ public class TimesheetService {
 
             // category lines: worked categories accrue worked hours, non-working
             // categories (absence/leave) accrue the planned (would-have-worked) hours.
-            BigDecimal lineHours = (dayWorked.signum() > 0) ? dayWorked : dayPlanned;
+            BigDecimal lineHours = isNonWorking(category) ? dayPlanned
+                    : (("REST".equals(category) || "HOLIDAY".equals(category)) ? dayWorked : dayNormal);
             daysByCat.computeIfAbsent(category, k -> new int[1])[0]++;
             hoursByCat.merge(category, lineHours, BigDecimal::add);
             paidByCat.putIfAbsent(category, paid);
@@ -877,6 +886,7 @@ public class TimesheetService {
         dto.setActualIn(d.getActualIn());
         dto.setActualOut(d.getActualOut());
         dto.setWorkedHours(d.getWorkedHours());
+        dto.setIneligibleOtHours(d.getIneligibleOtHours());
         dto.setOtHours(d.getOtHours());
         dto.setNormalHours(d.getNormalHours());
         dto.setDeclaredOtHours(d.getDeclaredOtHours());

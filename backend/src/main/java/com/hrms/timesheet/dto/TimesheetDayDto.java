@@ -23,6 +23,7 @@ public class TimesheetDayDto {
     private BigDecimal normalHours;
     private BigDecimal declaredOtHours;
     private BigDecimal undeclaredOtHours;
+    private BigDecimal ineligibleOtHours;
     private UUID projectId;
     private UUID costCodeId;
     private String remarks;
@@ -70,6 +71,9 @@ public class TimesheetDayDto {
 
     public BigDecimal getUndeclaredOtHours() { return undeclaredOtHours; }
     public void setUndeclaredOtHours(BigDecimal undeclaredOtHours) { this.undeclaredOtHours = undeclaredOtHours; }
+
+    public BigDecimal getIneligibleOtHours() { return ineligibleOtHours; }
+    public void setIneligibleOtHours(BigDecimal ineligibleOtHours) { this.ineligibleOtHours = ineligibleOtHours; }
 
     public List<TimesheetDayCostDto> getCosts() { return costs; }
     public void setCosts(List<TimesheetDayCostDto> costs) { this.costs = costs; }

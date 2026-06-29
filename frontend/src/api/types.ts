@@ -415,6 +415,7 @@ export interface TimesheetDay {
   normalHours?: number;
   declaredOtHours?: number;
   undeclaredOtHours?: number;
+  ineligibleOtHours?: number;
   projectId?: string;
   costCodeId?: string;
   remarks?: string;

@@ -34,6 +34,12 @@ const PERIOD_COLOR: Record<string, "success" | "warning" | "error"> = {
   CLOSED: "error",
 };
 
+const WEEKDAY = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+function fmtDay(iso: string): string {
+  const d = new Date(iso + "T00:00:00");
+  return isNaN(d.getTime()) ? iso : `${iso} · ${WEEKDAY[d.getDay()]}`;
+}
+
 export default function TimesheetPage() {
   const qc = useQueryClient();
   const [periodId, setPeriodId] = useState("");
@@ -379,6 +385,7 @@ function TimesheetDetail({
               <TableCell align="right">OT</TableCell>
               <TableCell align="right">Decl</TableCell>
               <TableCell align="right">Undecl</TableCell>
+              <TableCell align="right">Inelig OT</TableCell>
               <TableCell>Cost split</TableCell>
               <TableCell>Remarks</TableCell>
             </TableRow>
@@ -387,7 +394,7 @@ function TimesheetDetail({
             {days.map((d, idx) => (
               <Fragment key={d.id ?? d.workDate}>
               <TableRow>
-                <TableCell>{d.workDate}</TableCell>
+                <TableCell>{fmtDay(d.workDate)}</TableCell>
                 <TableCell>
                   {editable ? (
                     <TextField select size="small" value={d.timeTypeId ?? ""} onChange={(e) => setDay(idx, { timeTypeId: e.target.value })} sx={{ minWidth: 120 }}>
@@ -415,6 +422,7 @@ function TimesheetDetail({
                 <TableCell align="right">{d.otHours ?? 0}</TableCell>
                 <TableCell align="right">{d.declaredOtHours ?? 0}</TableCell>
                 <TableCell align="right">{d.undeclaredOtHours ?? 0}</TableCell>
+                <TableCell align="right" sx={{ color: "text.disabled" }}>{d.ineligibleOtHours ?? 0}</TableCell>
                 <TableCell>
                   <Button size="small" onClick={() => setCostOpen(costOpen === idx ? null : idx)}>
                     {(d.costs?.length ?? 0) > 0 ? `${d.costs!.length} code(s)` : "split"}
@@ -428,7 +436,7 @@ function TimesheetDetail({
               </TableRow>
               {costOpen === idx && (
                 <TableRow>
-                  <TableCell colSpan={12} sx={{ bgcolor: "action.hover" }}>
+                  <TableCell colSpan={13} sx={{ bgcolor: "action.hover" }}>
                     <Typography variant="caption" color="text.secondary">Split {d.workDate} hours across cost codes</Typography>
                     {(d.costs ?? []).map((c, ci) => (
                       <Stack key={ci} direction="row" spacing={1} alignItems="center" mt={0.5}>
