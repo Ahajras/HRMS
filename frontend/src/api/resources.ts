@@ -27,6 +27,7 @@ import type {
   EmployeeShift,
   Crew,
   CrewMember,
+  CrewTrade,
   TimekeeperProject,
   Rule,
   RulePackage,
@@ -273,6 +274,18 @@ export const periodApi = {
   remove: (id: string) => api.delete(`/payroll-periods/${id}`).then(() => undefined),
 };
 
+// --- Per-project period locks ---
+export const periodLockApi = {
+  statuses: (periodId: string) =>
+    api.get<{ projectId: string; projectLabel: string; status: string }[]>("/period-locks", { params: { periodId } }).then((r) => r.data),
+  lock: (periodId: string, projectId: string) =>
+    api.post<{ status: string }>("/period-locks/lock", null, { params: { periodId, projectId } }).then((r) => r.data),
+  close: (periodId: string, projectId: string) =>
+    api.post<{ status: string }>("/period-locks/close", null, { params: { periodId, projectId } }).then((r) => r.data),
+  reopen: (periodId: string, projectId: string) =>
+    api.post<{ status: string }>("/period-locks/reopen", null, { params: { periodId, projectId } }).then((r) => r.data),
+};
+
 // --- Shift roster (employee -> shift) ---
 export const employeeShiftApi = {
   list: (employeeId?: string) =>
@@ -301,6 +314,9 @@ export const crewApi = {
   bulkAddMembers: (id: string, shiftId: string | undefined, effectiveFrom: string, employeeIds: string[]) =>
     api.post<{ created: number }>(`/crews/${id}/members/bulk`, { shiftId, effectiveFrom, employeeIds }).then((r) => r.data),
   removeMember: (memberId: string) => api.delete(`/crews/members/${memberId}`).then(() => undefined),
+  trades: (id: string) => api.get<CrewTrade[]>(`/crews/${id}/trades`).then((r) => r.data),
+  addTrade: (id: string, d: CrewTrade) => api.post<CrewTrade>(`/crews/${id}/trades`, d).then((r) => r.data),
+  removeTrade: (tradeId: string) => api.delete(`/crews/trades/${tradeId}`).then(() => undefined),
 };
 
 // --- Timekeeper -> project assignment ---

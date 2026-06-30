@@ -3,6 +3,7 @@ package com.hrms.crew.web;
 import com.hrms.crew.dto.BulkCrewMemberRequest;
 import com.hrms.crew.dto.CrewDto;
 import com.hrms.crew.dto.CrewMemberDto;
+import com.hrms.crew.dto.CrewTradeDto;
 import com.hrms.crew.service.CrewService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -79,6 +80,23 @@ public class CrewController {
     @DeleteMapping("/members/{memberId}")
     public ResponseEntity<Void> removeMember(@PathVariable UUID memberId) {
         service.removeMember(memberId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/trades")
+    public List<CrewTradeDto> trades(@PathVariable UUID id) {
+        return service.listTrades(id);
+    }
+
+    @PostMapping("/{id}/trades")
+    @ResponseStatus(HttpStatus.CREATED)
+    public CrewTradeDto addTrade(@PathVariable UUID id, @RequestBody CrewTradeDto dto) {
+        return service.addTrade(id, dto);
+    }
+
+    @DeleteMapping("/trades/{tradeId}")
+    public ResponseEntity<Void> removeTrade(@PathVariable UUID tradeId) {
+        service.removeTrade(tradeId);
         return ResponseEntity.noContent().build();
     }
 }

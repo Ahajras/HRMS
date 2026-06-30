@@ -5,11 +5,14 @@ import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
 import com.hrms.crew.domain.Crew;
 import com.hrms.crew.domain.CrewMember;
+import com.hrms.crew.domain.CrewTrade;
 import com.hrms.crew.dto.BulkCrewMemberRequest;
 import com.hrms.crew.dto.CrewDto;
 import com.hrms.crew.dto.CrewMemberDto;
+import com.hrms.crew.dto.CrewTradeDto;
 import com.hrms.crew.repository.CrewMemberRepository;
 import com.hrms.crew.repository.CrewRepository;
+import com.hrms.crew.repository.CrewTradeRepository;
 import com.hrms.employee.domain.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.project.repository.ProjectRepository;
@@ -20,7 +23,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 /** Crew master data + membership (FTDD Vol.1 Ch.4; legacy PAYREF). Company-scoped. */
@@ -34,16 +39,64 @@ public class CrewService {
     private final ProjectRepository projectRepository;
     private final ShiftRepository shiftRepository;
     private final EmployeeShiftRepository employeeShiftRepository;
+    private final CrewTradeRepository tradeRepository;
 
     public CrewService(CrewRepository repository, CrewMemberRepository memberRepository,
                        EmployeeRepository employeeRepository, ProjectRepository projectRepository,
-                       ShiftRepository shiftRepository, EmployeeShiftRepository employeeShiftRepository) {
+                       ShiftRepository shiftRepository, EmployeeShiftRepository employeeShiftRepository,
+                       CrewTradeRepository tradeRepository) {
         this.repository = repository;
         this.memberRepository = memberRepository;
         this.employeeRepository = employeeRepository;
         this.projectRepository = projectRepository;
         this.shiftRepository = shiftRepository;
         this.employeeShiftRepository = employeeShiftRepository;
+        this.tradeRepository = tradeRepository;
+    }
+
+    // --- trades (planned vs assigned head-count) ---------------------
+
+    @Transactional(readOnly = true)
+    public List<CrewTradeDto> listTrades(UUID crewId) {
+        Map<String, Integer> assignedByCode = new HashMap<>();
+        for (CrewMember m : memberRepository.findByCrewIdOrderByEffectiveFromDesc(crewId)) {
+            if (m.getEffectiveTo() != null) {
+                continue;
+            }
+            employeeRepository.findById(m.getEmployeeId()).ifPresent(emp -> {
+                String code = emp.getJobTitleCode() != null ? emp.getJobTitleCode() : emp.getJobTitle();
+                if (code != null) {
+                    assignedByCode.merge(code, 1, Integer::sum);
+                }
+            });
+        }
+        return tradeRepository.findByCrewIdOrderByTradeCode(crewId).stream().map(t -> {
+            CrewTradeDto dto = new CrewTradeDto();
+            dto.setId(t.getId());
+            dto.setCrewId(t.getCrewId());
+            dto.setTradeCode(t.getTradeCode());
+            dto.setTradeName(t.getTradeName());
+            dto.setPlannedCount(t.getPlannedCount());
+            dto.setAssignedCount(assignedByCode.getOrDefault(t.getTradeCode(), 0));
+            return dto;
+        }).toList();
+    }
+
+    public CrewTradeDto addTrade(UUID crewId, CrewTradeDto dto) {
+        UUID companyId = TenantContext.requireCompanyId();
+        getEntity(crewId);
+        CrewTrade t = new CrewTrade();
+        t.setCompanyId(companyId);
+        t.setCrewId(crewId);
+        t.setTradeCode(dto.getTradeCode());
+        t.setTradeName(dto.getTradeName());
+        t.setPlannedCount(dto.getPlannedCount());
+        tradeRepository.save(t);
+        return dto;
+    }
+
+    public void removeTrade(UUID tradeId) {
+        tradeRepository.findById(tradeId).ifPresent(tradeRepository::delete);
     }
 
     /** Mirror a crew member's shift into the Shift Roster so it reflects there too. */

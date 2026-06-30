@@ -113,14 +113,14 @@ public class PayrollPeriodService {
     public List<PayrollPeriodDto> listPeriods() {
         UUID companyId = TenantContext.requireCompanyId();
         return periodRepo.findByCompanyIdOrderByPeriodYearDescPeriodMonthDesc(companyId)
-                .stream().map(this::toHeaderDto).toList();
+                .stream().map(this::toFullDto).toList();
     }
 
     @Transactional(readOnly = true)
     public List<PayrollPeriodDto> listPeriodsByYear(int year) {
         UUID companyId = TenantContext.requireCompanyId();
         return periodRepo.findByCompanyIdAndPeriodYearOrderByPeriodMonth(companyId, year)
-                .stream().map(this::toHeaderDto).toList();
+                .stream().map(this::toFullDto).toList();
     }
 
     @Transactional(readOnly = true)

@@ -210,6 +210,63 @@ function CrewMembersPanel({ crewId, projectId }: { crewId: string; projectId?: s
           {members.length === 0 && <TableRow><TableCell colSpan={4}><Typography variant="body2" color="text.secondary">No members yet.</Typography></TableCell></TableRow>}
         </TableBody>
       </Table>
+
+      <CrewTradesPanel crewId={crewId} />
+    </Box>
+  );
+}
+
+function CrewTradesPanel({ crewId }: { crewId: string }) {
+  const qc = useQueryClient();
+  const { data: trades = [] } = useQuery({ queryKey: ["crewTrades", crewId], queryFn: () => crewApi.trades(crewId) });
+  const [code, setCode] = useState("");
+  const [name, setName] = useState("");
+  const [planned, setPlanned] = useState(1);
+
+  const add = useMutation({
+    mutationFn: () => crewApi.addTrade(crewId, { tradeCode: code, tradeName: name, plannedCount: planned }),
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crewTrades", crewId] }); setCode(""); setName(""); setPlanned(1); },
+  });
+  const remove = useMutation({
+    mutationFn: (id: string) => crewApi.removeTrade(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["crewTrades", crewId] }),
+  });
+
+  return (
+    <Box sx={{ mt: 2 }}>
+      <Typography variant="subtitle2" gutterBottom>Trades (required vs assigned)</Typography>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Trade code</TableCell>
+            <TableCell>Title</TableCell>
+            <TableCell align="right">Planned</TableCell>
+            <TableCell align="right">Assigned</TableCell>
+            <TableCell align="right" />
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {trades.map((t) => {
+            const ok = (t.assignedCount ?? 0) >= t.plannedCount;
+            return (
+              <TableRow key={t.id} sx={{ bgcolor: ok ? "#e8f5e9" : "#ffebee" }}>
+                <TableCell>{t.tradeCode}</TableCell>
+                <TableCell>{t.tradeName ?? "—"}</TableCell>
+                <TableCell align="right">{t.plannedCount}</TableCell>
+                <TableCell align="right" sx={{ color: ok ? "success.main" : "error.main", fontWeight: 600 }}>{t.assignedCount ?? 0}</TableCell>
+                <TableCell align="right"><IconButton size="small" color="error" onClick={() => t.id && remove.mutate(t.id)}><DeleteIcon fontSize="small" /></IconButton></TableCell>
+              </TableRow>
+            );
+          })}
+          {trades.length === 0 && <TableRow><TableCell colSpan={5}><Typography variant="body2" color="text.secondary">No trades defined.</Typography></TableCell></TableRow>}
+        </TableBody>
+      </Table>
+      <Stack direction="row" spacing={1} mt={1} alignItems="center">
+        <TextField size="small" label="Trade code" value={code} onChange={(e) => setCode(e.target.value)} sx={{ width: 140 }} />
+        <TextField size="small" label="Title" value={name} onChange={(e) => setName(e.target.value)} sx={{ flex: 1 }} />
+        <TextField size="small" type="number" label="Planned" value={planned} onChange={(e) => setPlanned(Number(e.target.value))} sx={{ width: 100 }} />
+        <Button variant="contained" size="small" disabled={!code || add.isPending} onClick={() => add.mutate()}>Add</Button>
+      </Stack>
     </Box>
   );
 }

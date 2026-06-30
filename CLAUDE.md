@@ -199,8 +199,8 @@ then update this file + deploy.
   crew member candidate list filtered to the crew's project.
 - **DONE — Global API error toast:** client.ts dispatches `api-error`; AppLayout
   Snackbar shows every backend error message (was: most forms swallowed errors).
-- **NEXT (slice 2b):** Crew **trades** (job title planned vs assigned, red/green);
-  **Timecard report** (per-employee monthly card, printable/PDF).
+- **DONE — Crew trades** (job title planned vs assigned, red/green) — see V25 below.
+- **NEXT (slice 2b):** **Timecard report** (per-employee monthly card, printable/PDF).
 
 ### P4 polish round (done — V22)
 - **Shift → project** (V22: shift.project_id). ShiftsPage has a Project dropdown;
@@ -216,6 +216,38 @@ then update this file + deploy.
   week now allows Normal hrs on a weekly-off day (the paid weekend hours).
 - Timesheet: employee generate picker is now a **searchable Autocomplete**; list rows
   have a **Delete**; membership date filter uses period overlap (not just start day).
+
+### P4 crew trades + real per-project lock (done — V23–V26)
+- **V23/V24 (overtime, authored on the other machine):** `overtime_category`
+  (code,name,ot_eligible) + `employee.overtime_category_code` + `employee.band` +
+  BAND lookup seeds; `timesheet_day.ineligible_ot_hours`. recomputeDay splits OT
+  into eligible/ineligible by the employee's overtime category.
+- **V25 crew trades** (`crew_trade`: company_id, crew_id, trade_code, trade_name,
+  planned_count; uq crew_id+trade_code). CrewTrade entity/repo/dto;
+  CrewService.listTrades computes **assignedCount** from current members' job-title
+  code (fallback job title); addTrade/removeTrade. REST GET/POST `/crews/{id}/trades`,
+  DELETE `/crews/trades/{tradeId}`. Frontend **CrewTradesPanel** (green when
+  assigned ≥ planned, red when short).
+- **V26 real per-project period lock** (`payroll_period_project`: company_id,
+  period_id FK ON DELETE CASCADE, project_id FK, status OPEN→LOCKED→CLOSED,
+  locked_at, closed_at; uq period_id+project_id). The period stays one month; each
+  **project** locks independently (prep project A for payroll while project B keeps
+  collecting). Entity PayrollPeriodProject + repo; ProjectLockController
+  `/api/v1/period-locks` (GET ?periodId, POST /lock /close /reopen ?periodId&projectId).
+  - **The lock now actually blocks edits** (was cosmetic): `assertEditable(ts)` in
+    TimesheetService throws `period.project.locked` and is enforced in
+    saveDays / submit / approve / delete / generate. Editability is driven by the
+    employee's project status, not the period status.
+  - **Hard-block on lock if incomplete:** `lockProject` runs `projectReadiness` and
+    refuses with `period.project.not.ready` listing each blocker — DRAFT timesheets
+    and rostered employees of the project with **no timesheet** (by employee label /
+    number). (Approval workflow can layer on later.)
+  - Frontend CalendarPage: the period row's "Lock by project" expander renders
+    **ProjectLocksPanel** (per-project status chip + Lock/Close/Reopen). The old
+    period-level lock buttons were removed. periodLockApi in resources.ts.
+- **Non-working days show Worked=0** (fix): recomputeDay non-working branch now also
+  zeroes workedHours (ABSENCE/LEAVE/SICK/ACCIDENT/RR/UNPAID).
+- generate() REGULAR branch pre-fills actualIn/actualOut from the shift start/end.
 
 ### Employee card polish (done — V21)
 - V21: `employee` ADD `supervisor_employee_id` (FK employee, for future

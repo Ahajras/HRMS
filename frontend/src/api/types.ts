@@ -469,6 +469,15 @@ export interface CrewMember {
   status?: string;
 }
 
+export interface CrewTrade {
+  id?: string;
+  crewId?: string;
+  tradeCode: string;
+  tradeName?: string;
+  plannedCount: number;
+  assignedCount?: number;
+}
+
 export interface TimekeeperProject {
   id?: string;
   employeeId: string;

@@ -15,6 +15,7 @@ import com.hrms.security.domain.AppUser;
 import com.hrms.security.repository.AppUserRepository;
 import com.hrms.timesheet.domain.EmployeeShift;
 import com.hrms.timesheet.domain.PayrollPeriod;
+import com.hrms.timesheet.domain.PayrollPeriodProject;
 import com.hrms.timesheet.domain.PublicHoliday;
 import com.hrms.timesheet.domain.Shift;
 import com.hrms.timesheet.domain.ShiftDay;
@@ -29,6 +30,7 @@ import com.hrms.timesheet.dto.TimesheetSummaryDto;
 import com.hrms.reference.repository.OvertimeCategoryRepository;
 import com.hrms.timesheet.dto.TimesheetDto;
 import com.hrms.timesheet.repository.EmployeeShiftRepository;
+import com.hrms.timesheet.repository.PayrollPeriodProjectRepository;
 import com.hrms.timesheet.repository.PayrollPeriodRepository;
 import com.hrms.timesheet.repository.PublicHolidayRepository;
 import com.hrms.timesheet.repository.ShiftDayRepository;
@@ -89,6 +91,8 @@ public class TimesheetService {
     private final TimekeeperService timekeeperService;
     private final CrewMemberRepository crewMemberRepo;
     private final OvertimeCategoryRepository overtimeCategoryRepo;
+    private final PayrollPeriodProjectRepository periodProjectRepo;
+    private final com.hrms.project.repository.ProjectRepository projectRepo;
 
     public TimesheetService(TimesheetRepository timesheetRepo, TimesheetDayRepository dayRepo,
                             ShiftRepository shiftRepo, TimeTypeRepository timeTypeRepo,
@@ -97,7 +101,9 @@ public class TimesheetService {
                             EmployeeShiftRepository employeeShiftRepo, ShiftDayRepository shiftDayRepo,
                             TimesheetDayCostRepository dayCostRepo, AppUserRepository appUserRepo,
                             TimekeeperService timekeeperService, CrewMemberRepository crewMemberRepo,
-                            OvertimeCategoryRepository overtimeCategoryRepo) {
+                            OvertimeCategoryRepository overtimeCategoryRepo,
+                            PayrollPeriodProjectRepository periodProjectRepo,
+                            com.hrms.project.repository.ProjectRepository projectRepo) {
         this.timesheetRepo = timesheetRepo;
         this.dayRepo = dayRepo;
         this.shiftRepo = shiftRepo;
@@ -113,6 +119,8 @@ public class TimesheetService {
         this.periodRepo = periodRepo;
         this.employeeShiftRepo = employeeShiftRepo;
         this.overtimeCategoryRepo = overtimeCategoryRepo;
+        this.periodProjectRepo = periodProjectRepo;
+        this.projectRepo = projectRepo;
     }
 
     // --- queries -----------------------------------------------------
@@ -168,6 +176,132 @@ public class TimesheetService {
                 .orElse(employeeId.toString());
     }
 
+    // --- per-project period lock -------------------------------------
+
+    /** Lock status of a project within a period: OPEN (default) / LOCKED / CLOSED. */
+    private String projectStatus(UUID periodId, UUID projectId) {
+        if (periodId == null || projectId == null) {
+            return "OPEN";
+        }
+        UUID companyId = TenantContext.requireCompanyId();
+        return periodProjectRepo.findByCompanyIdAndPeriodIdAndProjectId(companyId, periodId, projectId)
+                .map(PayrollPeriodProject::getStatus).orElse("OPEN");
+    }
+
+    /** Block edits when the timesheet's project is locked/closed for its period. */
+    private void assertEditable(Timesheet ts) {
+        UUID project = employeeProject(ts.getEmployeeId());
+        String st = projectStatus(ts.getPeriodId(), project);
+        if (!"OPEN".equals(st)) {
+            throw new BusinessRuleException("period.project.locked",
+                    "This project is " + st + " for the period — timesheets are read-only.");
+        }
+    }
+
+    /** Lock a project for a period after validating its timesheets are ready. */
+    public Map<String, Object> lockProject(UUID periodId, UUID projectId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        periodRepo.findById(periodId)
+                .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
+        List<String> blockers = projectReadiness(companyId, periodId, projectId);
+        if (!blockers.isEmpty()) {
+            throw new BusinessRuleException("period.project.not.ready",
+                    "Cannot lock — timesheets not ready: " + String.join("  •  ", blockers));
+        }
+        setProjectStatus(companyId, periodId, projectId, "LOCKED");
+        return Map.of("status", "LOCKED");
+    }
+
+    public Map<String, Object> closeProject(UUID periodId, UUID projectId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        PayrollPeriodProject pp = periodProjectRepo
+                .findByCompanyIdAndPeriodIdAndProjectId(companyId, periodId, projectId).orElse(null);
+        if (pp == null || !"LOCKED".equals(pp.getStatus())) {
+            throw new BusinessRuleException("period.project.close.state", "Lock the project before closing it.");
+        }
+        pp.setStatus("CLOSED");
+        pp.setClosedAt(Instant.now());
+        periodProjectRepo.save(pp);
+        return Map.of("status", "CLOSED");
+    }
+
+    public Map<String, Object> reopenProject(UUID periodId, UUID projectId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        setProjectStatus(companyId, periodId, projectId, "OPEN");
+        return Map.of("status", "OPEN");
+    }
+
+    private void setProjectStatus(UUID companyId, UUID periodId, UUID projectId, String status) {
+        PayrollPeriodProject pp = periodProjectRepo
+                .findByCompanyIdAndPeriodIdAndProjectId(companyId, periodId, projectId)
+                .orElseGet(() -> {
+                    PayrollPeriodProject n = new PayrollPeriodProject();
+                    n.setCompanyId(companyId);
+                    n.setPeriodId(periodId);
+                    n.setProjectId(projectId);
+                    return n;
+                });
+        pp.setStatus(status);
+        if ("LOCKED".equals(status)) {
+            pp.setLockedAt(Instant.now());
+        }
+        if ("OPEN".equals(status)) {
+            pp.setLockedAt(null);
+            pp.setClosedAt(null);
+        }
+        periodProjectRepo.save(pp);
+    }
+
+    /** Reasons a project can't be locked: DRAFT timesheets, or rostered employees with none. */
+    private List<String> projectReadiness(UUID companyId, UUID periodId, UUID projectId) {
+        PayrollPeriod period = periodRepo.findById(periodId).orElseThrow();
+        List<String> blockers = new java.util.ArrayList<>();
+        // existing timesheets for this project that are still DRAFT
+        for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
+                companyId, period.getPeriodYear(), period.getPeriodMonth())) {
+            if (projectId.equals(employeeProject(t.getEmployeeId())) && DRAFT.equals(t.getStatus())) {
+                blockers.add(empLabel(t.getEmployeeId()) + " (still DRAFT)");
+            }
+        }
+        // rostered employees of the project with no timesheet at all
+        Set<UUID> done = new HashSet<>();
+        for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
+                companyId, period.getPeriodYear(), period.getPeriodMonth())) {
+            done.add(t.getEmployeeId());
+        }
+        for (EmployeeShift es : employeeShiftRepo.findByCompanyIdOrderByEffectiveFromDesc(companyId)) {
+            if (activeForPeriod(es.getEffectiveFrom(), es.getEffectiveTo(), period)
+                    && projectId.equals(employeeProject(es.getEmployeeId()))
+                    && !done.contains(es.getEmployeeId())) {
+                blockers.add(empLabel(es.getEmployeeId()) + " (no timesheet)");
+                done.add(es.getEmployeeId());
+            }
+        }
+        return blockers;
+    }
+
+    /** Per-project lock status for a period (for the Calendar screen). */
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> projectLockStatuses(UUID periodId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        Map<UUID, String> byProject = new java.util.LinkedHashMap<>();
+        projectRepo.findByCompanyIdOrderByName(companyId).forEach(p ->
+                byProject.put(p.getId(), p.getCode() + " — " + p.getName()));
+        Map<UUID, String> statusByProject = new HashMap<>();
+        for (PayrollPeriodProject pp : periodProjectRepo.findByPeriodId(periodId)) {
+            statusByProject.put(pp.getProjectId(), pp.getStatus());
+        }
+        List<Map<String, Object>> out = new java.util.ArrayList<>();
+        for (Map.Entry<UUID, String> e : byProject.entrySet()) {
+            Map<String, Object> row = new HashMap<>();
+            row.put("projectId", e.getKey().toString());
+            row.put("projectLabel", e.getValue());
+            row.put("status", statusByProject.getOrDefault(e.getKey(), "OPEN"));
+            out.add(row);
+        }
+        return out;
+    }
+
     private void assertProjectAllowed(UUID employeeId) {
         Set<UUID> allowed = restrictedProjects();
         if (allowed != null && !allowed.contains(employeeProject(employeeId))) {
@@ -196,6 +330,11 @@ public class TimesheetService {
         if (!"OPEN".equals(period.getStatus())) {
             throw new BusinessRuleException("period.not.open",
                     "The period is " + period.getStatus() + ". Reopen it to edit timesheets.");
+        }
+        String pst = projectStatus(req.getPeriodId(), employeeProject(req.getEmployeeId()));
+        if (!"OPEN".equals(pst)) {
+            throw new BusinessRuleException("period.project.locked",
+                    "This employee's project is " + pst + " for the period — can't generate.");
         }
         int year = period.getPeriodYear();
         int month = period.getPeriodMonth();
@@ -395,6 +534,7 @@ public class TimesheetService {
     public TimesheetDto saveDays(UUID timesheetId, List<TimesheetDayDto> dayDtos) {
         Timesheet ts = getEntity(timesheetId);
         requireDraft(ts);
+        assertEditable(ts);
 
         Map<UUID, TimesheetDay> byId = new HashMap<>();
         for (TimesheetDay d : dayRepo.findByTimesheetIdOrderByWorkDate(timesheetId)) {
@@ -479,6 +619,7 @@ public class TimesheetService {
         if (!DRAFT.equals(ts.getStatus())) {
             throw new BusinessRuleException("timesheet.submit.state", "Only a DRAFT timesheet can be submitted.");
         }
+        assertEditable(ts);
         recomputeTotals(ts);
         ts.setStatus(SUBMITTED);
         ts.setSubmittedAt(Instant.now());
@@ -490,6 +631,7 @@ public class TimesheetService {
         if (!SUBMITTED.equals(ts.getStatus())) {
             throw new BusinessRuleException("timesheet.approve.state", "Only a SUBMITTED timesheet can be approved.");
         }
+        assertEditable(ts);
         ts.setStatus(APPROVED);
         ts.setApprovedAt(Instant.now());
         ts.setApprovedBy(currentUsername());
@@ -526,6 +668,7 @@ public class TimesheetService {
         if (LOCKED.equals(ts.getStatus())) {
             throw new BusinessRuleException("timesheet.delete.locked", "A LOCKED timesheet cannot be deleted.");
         }
+        assertEditable(ts);
         timesheetRepo.delete(ts);
     }
 
@@ -575,8 +718,12 @@ public class TimesheetService {
             normal = isMonthly ? sampleNormal : BigDecimal.ZERO;
             ot = worked;
         } else if (isNonWorking(category)) {
+            // Leave / unpaid / absence / sick / accident / R&R = not worked.
+            // The hours belong to that category, not to "worked".
             normal = BigDecimal.ZERO;
             ot = BigDecimal.ZERO;
+            worked = BigDecimal.ZERO;
+            day.setWorkedHours(BigDecimal.ZERO);
         } else {
             normal = worked.min(sampleNormal);
             ot = worked.subtract(sampleNormal).max(BigDecimal.ZERO);

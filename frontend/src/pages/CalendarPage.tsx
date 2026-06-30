@@ -16,7 +16,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { calendarApi, periodApi } from "../api/resources";
+import { calendarApi, periodApi, periodLockApi } from "../api/resources";
 
 const STATUS_COLOR: Record<string, "default" | "success" | "warning" | "error"> = {
   OPEN: "success",
@@ -29,6 +29,7 @@ export default function CalendarPage() {
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [openWeeks, setOpenWeeks] = useState<string | null>(null);
+  const [openProjects, setOpenProjects] = useState<string | null>(null);
 
   const { data: calendars = [] } = useQuery({ queryKey: ["calendars"], queryFn: calendarApi.list });
   const { data: periods = [] } = useQuery({
@@ -38,10 +39,6 @@ export default function CalendarPage() {
 
   const generate = useMutation({
     mutationFn: () => periodApi.generate(year, calendars[0]?.id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["periods", year] }),
-  });
-  const action = useMutation({
-    mutationFn: ({ id, act }: { id: string; act: "lock" | "close" | "reopen" }) => periodApi[act](id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["periods", year] }),
   });
 
@@ -89,12 +86,17 @@ export default function CalendarPage() {
                   <TableCell>{p.payDate ?? "—"}</TableCell>
                   <TableCell><Chip size="small" label={p.status} color={STATUS_COLOR[p.status ?? "OPEN"] ?? "default"} /></TableCell>
                   <TableCell align="right">
+                    <Button size="small" onClick={() => setOpenProjects(openProjects === p.id ? null : (p.id ?? null))}>Lock by project</Button>
                     <Button size="small" onClick={() => setOpenWeeks(openWeeks === p.id ? null : (p.id ?? null))}>Weeks</Button>
-                    {p.status === "OPEN" && <Button size="small" color="warning" onClick={() => p.id && action.mutate({ id: p.id, act: "lock" })}>Lock</Button>}
-                    {p.status === "LOCKED" && <Button size="small" color="error" onClick={() => p.id && action.mutate({ id: p.id, act: "close" })}>Close</Button>}
-                    {p.status !== "CLOSED" && p.status !== "OPEN" && <Button size="small" onClick={() => p.id && action.mutate({ id: p.id, act: "reopen" })}>Reopen</Button>}
                   </TableCell>
                 </TableRow>
+                {openProjects === p.id && p.id && (
+                  <TableRow>
+                    <TableCell colSpan={5} sx={{ bgcolor: "action.hover" }}>
+                      <ProjectLocksPanel periodId={p.id} />
+                    </TableCell>
+                  </TableRow>
+                )}
                 {openWeeks === p.id && (
                   <TableRow>
                     <TableCell colSpan={5} sx={{ bgcolor: "action.hover" }}>
@@ -116,8 +118,48 @@ export default function CalendarPage() {
           </TableBody>
         </Table>
       </Paper>
+    </Box>
+  );
+}
 
-      {action.isError && <Typography color="error" variant="body2" mt={1}>{(action.error as any)?.response?.data?.message ?? "Action failed."}</Typography>}
+function ProjectLocksPanel({ periodId }: { periodId: string }) {
+  const qc = useQueryClient();
+  const { data: rows = [] } = useQuery({
+    queryKey: ["periodLocks", periodId],
+    queryFn: () => periodLockApi.statuses(periodId),
+  });
+  const act = useMutation({
+    mutationFn: ({ projectId, a }: { projectId: string; a: "lock" | "close" | "reopen" }) =>
+      periodLockApi[a](periodId, projectId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["periodLocks", periodId] }),
+  });
+
+  return (
+    <Box>
+      <Typography variant="subtitle2" gutterBottom>Lock per project (ready for payroll)</Typography>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Project</TableCell>
+            <TableCell>Status</TableCell>
+            <TableCell align="right">Actions</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((r) => (
+            <TableRow key={r.projectId}>
+              <TableCell>{r.projectLabel}</TableCell>
+              <TableCell><Chip size="small" label={r.status} color={STATUS_COLOR[r.status] ?? "default"} /></TableCell>
+              <TableCell align="right">
+                {r.status === "OPEN" && <Button size="small" color="warning" disabled={act.isPending} onClick={() => act.mutate({ projectId: r.projectId, a: "lock" })}>Lock</Button>}
+                {r.status === "LOCKED" && <Button size="small" color="error" disabled={act.isPending} onClick={() => act.mutate({ projectId: r.projectId, a: "close" })}>Close</Button>}
+                {r.status !== "OPEN" && <Button size="small" disabled={act.isPending} onClick={() => act.mutate({ projectId: r.projectId, a: "reopen" })}>Reopen</Button>}
+              </TableCell>
+            </TableRow>
+          ))}
+          {rows.length === 0 && <TableRow><TableCell colSpan={3}><Typography variant="body2" color="text.secondary">No projects.</Typography></TableCell></TableRow>}
+        </TableBody>
+      </Table>
     </Box>
   );
 }
