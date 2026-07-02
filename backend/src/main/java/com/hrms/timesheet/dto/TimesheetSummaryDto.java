@@ -21,6 +21,8 @@ public class TimesheetSummaryDto {
     private BigDecimal normalHours = BigDecimal.ZERO;
     private BigDecimal overtimeHours = BigDecimal.ZERO;
     private BigDecimal workedHours = BigDecimal.ZERO;   // normal + overtime
+    private BigDecimal restHours = BigDecimal.ZERO;
+    private BigDecimal holidayHours = BigDecimal.ZERO;
     private BigDecimal absenceHours = BigDecimal.ZERO;
     private BigDecimal leaveHours = BigDecimal.ZERO;
 
@@ -33,6 +35,9 @@ public class TimesheetSummaryDto {
 
     /** One line per time-type category present on the timesheet. */
     private List<CategoryLine> lines;
+
+    /** Cost allocation roll-up by project and cost code. */
+    private List<AllocationLine> allocationLines;
 
     public static class CategoryLine {
         private String category;
@@ -63,6 +68,52 @@ public class TimesheetSummaryDto {
         public void setPaid(boolean paid) { this.paid = paid; }
     }
 
+    public static class AllocationLine {
+        private UUID projectId;
+        private String projectCode;
+        private String projectName;
+        private UUID costCodeId;
+        private String costCode;
+        private String costCodeName;
+        private BigDecimal hours;
+
+        public AllocationLine() {
+        }
+
+        public AllocationLine(UUID projectId, String projectCode, String projectName,
+                              UUID costCodeId, String costCode, String costCodeName,
+                              BigDecimal hours) {
+            this.projectId = projectId;
+            this.projectCode = projectCode;
+            this.projectName = projectName;
+            this.costCodeId = costCodeId;
+            this.costCode = costCode;
+            this.costCodeName = costCodeName;
+            this.hours = hours;
+        }
+
+        public UUID getProjectId() { return projectId; }
+        public void setProjectId(UUID projectId) { this.projectId = projectId; }
+
+        public String getProjectCode() { return projectCode; }
+        public void setProjectCode(String projectCode) { this.projectCode = projectCode; }
+
+        public String getProjectName() { return projectName; }
+        public void setProjectName(String projectName) { this.projectName = projectName; }
+
+        public UUID getCostCodeId() { return costCodeId; }
+        public void setCostCodeId(UUID costCodeId) { this.costCodeId = costCodeId; }
+
+        public String getCostCode() { return costCode; }
+        public void setCostCode(String costCode) { this.costCode = costCode; }
+
+        public String getCostCodeName() { return costCodeName; }
+        public void setCostCodeName(String costCodeName) { this.costCodeName = costCodeName; }
+
+        public BigDecimal getHours() { return hours; }
+        public void setHours(BigDecimal hours) { this.hours = hours; }
+    }
+
     public UUID getTimesheetId() { return timesheetId; }
     public void setTimesheetId(UUID timesheetId) { this.timesheetId = timesheetId; }
 
@@ -90,6 +141,12 @@ public class TimesheetSummaryDto {
     public BigDecimal getWorkedHours() { return workedHours; }
     public void setWorkedHours(BigDecimal workedHours) { this.workedHours = workedHours; }
 
+    public BigDecimal getRestHours() { return restHours; }
+    public void setRestHours(BigDecimal restHours) { this.restHours = restHours; }
+
+    public BigDecimal getHolidayHours() { return holidayHours; }
+    public void setHolidayHours(BigDecimal holidayHours) { this.holidayHours = holidayHours; }
+
     public BigDecimal getAbsenceHours() { return absenceHours; }
     public void setAbsenceHours(BigDecimal absenceHours) { this.absenceHours = absenceHours; }
 
@@ -116,4 +173,7 @@ public class TimesheetSummaryDto {
 
     public List<CategoryLine> getLines() { return lines; }
     public void setLines(List<CategoryLine> lines) { this.lines = lines; }
+
+    public List<AllocationLine> getAllocationLines() { return allocationLines; }
+    public void setAllocationLines(List<AllocationLine> allocationLines) { this.allocationLines = allocationLines; }
 }

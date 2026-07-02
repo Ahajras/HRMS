@@ -12,16 +12,22 @@ public class EmployeeSummaryDto {
     private long notActive;
     private long monthly;
     private long daily;
+    private long withoutProject;
 
     public EmployeeSummaryDto() {
     }
 
     public EmployeeSummaryDto(long total, long active, long notActive, long monthly, long daily) {
+        this(total, active, notActive, monthly, daily, 0);
+    }
+
+    public EmployeeSummaryDto(long total, long active, long notActive, long monthly, long daily, long withoutProject) {
         this.total = total;
         this.active = active;
         this.notActive = notActive;
         this.monthly = monthly;
         this.daily = daily;
+        this.withoutProject = withoutProject;
     }
 
     public long getTotal() {
@@ -62,5 +68,13 @@ public class EmployeeSummaryDto {
 
     public void setDaily(long daily) {
         this.daily = daily;
+    }
+
+    public long getWithoutProject() {
+        return withoutProject;
+    }
+
+    public void setWithoutProject(long withoutProject) {
+        this.withoutProject = withoutProject;
     }
 }

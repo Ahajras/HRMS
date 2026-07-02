@@ -76,11 +76,18 @@ const NAV_GROUPS: NavGroup[] = [
     ],
   },
   {
+    label: "Payroll",
+    items: [
+      { to: "/payroll-runs", label: "Payroll Runs", icon: <PaymentsIcon />, authority: "payroll.config.read" },
+      { to: "/payroll-components", label: "Pay Components", icon: <PaymentsIcon />, authority: "payroll.config.read" },
+      { to: "/payroll-rules", label: "Payroll Rules", icon: <PaymentsIcon />, authority: "payroll.config.read" },
+    ],
+  },
+  {
     label: "Configuration",
     items: [
       { to: "/projects", label: "Projects", icon: <WorkIcon />, authority: "reference.read" },
       { to: "/org-unit-types", label: "Org Levels", icon: <LayersIcon />, authority: "organization.read" },
-      { to: "/payroll-components", label: "Pay Components", icon: <PaymentsIcon />, authority: "payroll.config.read" },
       { to: "/countries", label: "Countries", icon: <PublicIcon />, authority: "reference.read" },
       { to: "/country-law", label: "Country Law", icon: <GavelIcon />, authority: "reference.read" },
       { to: "/overtime-categories", label: "Overtime Categories", icon: <TimerIcon />, authority: "reference.read" },

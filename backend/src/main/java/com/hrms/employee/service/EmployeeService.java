@@ -29,9 +29,12 @@ public class EmployeeService {
     }
 
     @Transactional(readOnly = true)
-    public PageResponse<EmployeeDto> findAll(String q, String payStatus, UUID projectId, Pageable pageable) {
+    public PageResponse<EmployeeDto> findAll(String q, String payStatus, UUID projectId,
+                                             boolean activeOnly, boolean assignedOnly, boolean unassigned,
+                                             Pageable pageable) {
         UUID companyId = TenantContext.requireCompanyId();
-        Page<EmployeeDto> page = repository.searchFiltered(companyId, q, payStatus, projectId, pageable)
+        Page<EmployeeDto> page = repository.searchFiltered(companyId, q, payStatus, projectId,
+                        activeOnly, assignedOnly, unassigned, pageable)
                 .map(this::toDto);
         return PageResponse.from(page);
     }
@@ -48,7 +51,8 @@ public class EmployeeService {
         long active = asLong(row, 1);
         long monthly = asLong(row, 2);
         long daily = asLong(row, 3);
-        return new EmployeeSummaryDto(total, active, total - active, monthly, daily);
+        long withoutProject = asLong(row, 4);
+        return new EmployeeSummaryDto(total, active, total - active, monthly, daily, withoutProject);
     }
 
     private static long asLong(Object[] row, int idx) {
@@ -77,6 +81,11 @@ public class EmployeeService {
 
     public EmployeeDto update(UUID id, EmployeeDto dto) {
         Employee entity = getEntity(id);
+        if (repository.existsByCompanyIdAndEmployeeNumberAndIdNot(
+                entity.getCompanyId(), dto.getEmployeeNumber(), entity.getId())) {
+            throw new BusinessRuleException("employee.number.duplicate",
+                    "Employee number already exists: " + dto.getEmployeeNumber());
+        }
         apply(dto, entity);
         return toDto(repository.save(entity));
     }
@@ -115,8 +124,16 @@ public class EmployeeService {
         entity.setSupervisorEmployeeId(dto.getSupervisorEmployeeId());
         entity.setPhotoUrl(dto.getPhotoUrl());
         if (dto.getStatus() != null) {
+            if (requiresTerminationDate(dto.getStatus()) && dto.getTerminationDate() == null) {
+                throw new BusinessRuleException("employee.termination-date.required",
+                        "Termination date is required when employee status is TERMINATED or SUSPENDED.");
+            }
             entity.setStatus(dto.getStatus());
         }
+    }
+
+    private static boolean requiresTerminationDate(String status) {
+        return "TERMINATED".equalsIgnoreCase(status) || "SUSPENDED".equalsIgnoreCase(status);
     }
 
     private EmployeeDto toDto(Employee entity) {

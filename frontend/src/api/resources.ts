@@ -19,6 +19,7 @@ import type {
   OrganizationUnit,
   PageResponse,
   PayrollComponent,
+  PayrollRun,
   Project,
   CostCode,
   PublicHoliday,
@@ -179,7 +180,8 @@ export const organizationUnitApi = {
 
 // --- Employees ---
 export const employeeApi = {
-  list: (page = 0, size = 20, q?: string, payStatus?: string, projectId?: string) =>
+  list: (page = 0, size = 20, q?: string, payStatus?: string, projectId?: string,
+         opts?: { activeOnly?: boolean; assignedOnly?: boolean; unassigned?: boolean }) =>
     api
       .get<PageResponse<Employee>>("/employees", {
         params: {
@@ -188,6 +190,9 @@ export const employeeApi = {
           ...(q ? { q } : {}),
           ...(payStatus ? { payStatus } : {}),
           ...(projectId ? { projectId } : {}),
+          ...(opts?.activeOnly ? { activeOnly: true } : {}),
+          ...(opts?.assignedOnly ? { assignedOnly: true } : {}),
+          ...(opts?.unassigned ? { unassigned: true } : {}),
         },
       })
       .then((r) => r.data),
@@ -225,7 +230,8 @@ function post(url: string, files: File[]) {
 
 // --- Timesheet: shifts ---
 export const shiftApi = {
-  list: () => api.get<Shift[]>("/shifts").then((r) => r.data),
+  list: (projectId?: unknown) =>
+    api.get<Shift[]>("/shifts", { params: typeof projectId === "string" && projectId ? { projectId } : {} }).then((r) => r.data),
   create: (d: Shift) => api.post<Shift>("/shifts", d).then((r) => r.data),
   update: (id: string, d: Shift) => api.put<Shift>(`/shifts/${id}`, d).then((r) => r.data),
   remove: (id: string) => api.delete(`/shifts/${id}`).then(() => undefined),
@@ -237,6 +243,15 @@ export const timeTypeApi = {
   create: (d: TimeType) => api.post<TimeType>("/time-types", d).then((r) => r.data),
   update: (id: string, d: TimeType) => api.put<TimeType>(`/time-types/${id}`, d).then((r) => r.data),
   remove: (id: string) => api.delete(`/time-types/${id}`).then(() => undefined),
+};
+
+export const timeTypePayrollRuleApi = {
+  list: (timeTypeId: string) =>
+    api.get<import("./types").TimeTypePayrollRule[]>(`/time-types/${timeTypeId}/payroll-rules`).then((r) => r.data),
+  save: (timeTypeId: string, payload: import("./types").TimeTypePayrollRule) =>
+    api.post<import("./types").TimeTypePayrollRule>(`/time-types/${timeTypeId}/payroll-rules`, payload).then((r) => r.data),
+  remove: (timeTypeId: string, componentId: string) =>
+    api.delete(`/time-types/${timeTypeId}/payroll-rules/${componentId}`).then(() => undefined),
 };
 
 // --- Timesheet: public holidays ---
@@ -276,14 +291,14 @@ export const periodApi = {
 
 // --- Per-project period locks ---
 export const periodLockApi = {
-  statuses: (periodId: string) =>
-    api.get<{ projectId: string; projectLabel: string; status: string }[]>("/period-locks", { params: { periodId } }).then((r) => r.data),
-  lock: (periodId: string, projectId: string) =>
-    api.post<{ status: string }>("/period-locks/lock", null, { params: { periodId, projectId } }).then((r) => r.data),
-  close: (periodId: string, projectId: string) =>
-    api.post<{ status: string }>("/period-locks/close", null, { params: { periodId, projectId } }).then((r) => r.data),
-  reopen: (periodId: string, projectId: string) =>
-    api.post<{ status: string }>("/period-locks/reopen", null, { params: { periodId, projectId } }).then((r) => r.data),
+  statuses: (periodId: string, payGroup?: string) =>
+    api.get<{ projectId: string; projectLabel: string; status: string; payGroup: string }[]>("/period-locks", { params: { periodId, ...(payGroup ? { payGroup } : {}) } }).then((r) => r.data),
+  lock: (periodId: string, projectId: string, payGroup?: string) =>
+    api.post<{ status: string; payGroup: string }>("/period-locks/lock", null, { params: { periodId, projectId, ...(payGroup ? { payGroup } : {}) } }).then((r) => r.data),
+  close: (periodId: string, projectId: string, payGroup?: string) =>
+    api.post<{ status: string; payGroup: string }>("/period-locks/close", null, { params: { periodId, projectId, ...(payGroup ? { payGroup } : {}) } }).then((r) => r.data),
+  reopen: (periodId: string, projectId: string, payGroup?: string) =>
+    api.post<{ status: string; payGroup: string }>("/period-locks/reopen", null, { params: { periodId, projectId, ...(payGroup ? { payGroup } : {}) } }).then((r) => r.data),
 };
 
 // --- Shift roster (employee -> shift) ---
@@ -328,18 +343,22 @@ export const timekeeperApi = {
 
 // --- Timesheet: monthly timesheets ---
 export const timesheetApi = {
-  listByPeriod: (year: number, month: number) =>
-    api.get<Timesheet[]>("/timesheets", { params: { year, month } }).then((r) => r.data),
+  listByPeriod: (year: number, month: number, projectId?: string) =>
+    api.get<Timesheet[]>("/timesheets", { params: { year, month, ...(projectId ? { projectId } : {}) } }).then((r) => r.data),
   get: (id: string) => api.get<Timesheet>(`/timesheets/${id}`).then((r) => r.data),
   summary: (id: string) => api.get<TimesheetSummary>(`/timesheets/${id}/summary`).then((r) => r.data),
+  eligibleEmployees: (periodId: string) =>
+    api.get<Employee[]>("/timesheets/eligible-employees", { params: { periodId } }).then((r) => r.data),
   generate: (d: GenerateTimesheetRequest) =>
     api.post<Timesheet>("/timesheets/generate", d).then((r) => r.data),
   generateBulk: (periodId: string) =>
     api.post<{ created: number; skipped: number }>("/timesheets/generate-bulk", null, { params: { periodId } }).then((r) => r.data),
   generateByCrew: (crewId: string, periodId: string) =>
     api.post<{ created: number; skipped: number; messages?: string[] }>("/timesheets/generate-by-crew", null, { params: { crewId, periodId } }).then((r) => r.data),
-  submitAll: (year: number, month: number) =>
-    api.post<{ submitted: number }>("/timesheets/submit-all", null, { params: { year, month } }).then((r) => r.data),
+  submitAll: (year: number, month: number, projectId?: string) =>
+    api.post<{ submitted: number }>("/timesheets/submit-all", null, { params: { year, month, ...(projectId ? { projectId } : {}) } }).then((r) => r.data),
+  approveAll: (year: number, month: number, projectId?: string) =>
+    api.post<{ approved: number }>("/timesheets/approve-all", null, { params: { year, month, ...(projectId ? { projectId } : {}) } }).then((r) => r.data),
   saveDays: (id: string, days: TimesheetDay[]) =>
     api.put<Timesheet>(`/timesheets/${id}/days`, days).then((r) => r.data),
   submit: (id: string) => api.post<Timesheet>(`/timesheets/${id}/submit`).then((r) => r.data),
@@ -355,8 +374,28 @@ export const payrollComponentApi = {
     api
       .get<PayrollComponent[]>("/payroll-components", { params: category ? { category } : {} })
       .then((r) => r.data),
+  initializeDefaults: () =>
+    api.post<PayrollComponent[]>("/payroll-components/initialize-defaults").then((r) => r.data),
   create: (d: PayrollComponent) => api.post<PayrollComponent>("/payroll-components", d).then((r) => r.data),
   update: (id: string, d: PayrollComponent) =>
     api.put<PayrollComponent>(`/payroll-components/${id}`, d).then((r) => r.data),
   remove: (id: string) => api.delete(`/payroll-components/${id}`).then(() => undefined),
+};
+
+export const payrollRunApi = {
+  list: (periodId?: string) =>
+    api.get<PayrollRun[]>("/payroll-runs", { params: periodId ? { periodId } : {} }).then((r) => r.data),
+  get: (id: string) => api.get<PayrollRun>(`/payroll-runs/${id}`).then((r) => r.data),
+  create: (periodId: string, projectId?: string, payGroup?: string) =>
+    api.post<PayrollRun>("/payroll-runs", null, { params: { periodId, ...(projectId ? { projectId } : {}), ...(payGroup ? { payGroup } : {}) } }).then((r) => r.data),
+  calculate: (id: string) => api.post<PayrollRun>(`/payroll-runs/${id}/calculate`).then((r) => r.data),
+  approve: (id: string) => api.post<PayrollRun>(`/payroll-runs/${id}/approve`).then((r) => r.data),
+  lock: (id: string) => api.post<PayrollRun>(`/payroll-runs/${id}/lock`).then((r) => r.data),
+  delete: (id: string) => api.delete(`/payroll-runs/${id}`),
+};
+
+export const payrollRuleApi = {
+  list: () => api.get<import("./types").PayrollRule[]>("/payroll-rules").then((r) => r.data),
+  update: (id: string, payload: import("./types").PayrollRule) =>
+    api.put<import("./types").PayrollRule>(`/payroll-rules/${id}`, payload).then((r) => r.data),
 };

@@ -45,6 +45,11 @@ public class PayrollComponentController {
         return service.create(dto);
     }
 
+    @PostMapping("/initialize-defaults")
+    public List<PayrollComponentDto> initializeDefaults() {
+        return service.initializeDefaults();
+    }
+
     @PutMapping("/{id}")
     public PayrollComponentDto update(@PathVariable UUID id, @Valid @RequestBody PayrollComponentDto dto) {
         return service.update(id, dto);

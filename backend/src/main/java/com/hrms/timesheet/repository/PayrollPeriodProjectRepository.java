@@ -12,4 +12,7 @@ public interface PayrollPeriodProjectRepository extends JpaRepository<PayrollPer
     List<PayrollPeriodProject> findByPeriodId(UUID periodId);
 
     Optional<PayrollPeriodProject> findByCompanyIdAndPeriodIdAndProjectId(UUID companyId, UUID periodId, UUID projectId);
+
+    Optional<PayrollPeriodProject> findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(
+            UUID companyId, UUID periodId, UUID projectId, String payGroup);
 }

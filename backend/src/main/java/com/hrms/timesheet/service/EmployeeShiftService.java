@@ -1,8 +1,12 @@
 package com.hrms.timesheet.service;
 
+import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
+import com.hrms.employee.domain.Assignment;
 import com.hrms.employee.repository.EmployeeRepository;
+import com.hrms.employee.repository.AssignmentRepository;
+import com.hrms.timesheet.domain.Shift;
 import com.hrms.timesheet.domain.EmployeeShift;
 import com.hrms.timesheet.dto.BulkAssignRequest;
 import com.hrms.timesheet.dto.EmployeeShiftDto;
@@ -24,13 +28,16 @@ public class EmployeeShiftService {
 
     private final EmployeeShiftRepository repository;
     private final EmployeeRepository employeeRepository;
+    private final AssignmentRepository assignmentRepository;
     private final ShiftRepository shiftRepository;
 
     public EmployeeShiftService(EmployeeShiftRepository repository,
                                 EmployeeRepository employeeRepository,
+                                AssignmentRepository assignmentRepository,
                                 ShiftRepository shiftRepository) {
         this.repository = repository;
         this.employeeRepository = employeeRepository;
+        this.assignmentRepository = assignmentRepository;
         this.shiftRepository = shiftRepository;
     }
 
@@ -84,6 +91,7 @@ public class EmployeeShiftService {
             e.setEmployeeId(employeeId);
             e.setShiftId(req.getShiftId());
             e.setEffectiveFrom(from);
+            validateShiftProject(e);
             repository.save(e);
             created++;
         }
@@ -102,6 +110,24 @@ public class EmployeeShiftService {
         e.setEffectiveTo(dto.getEffectiveTo());
         if (dto.getStatus() != null) {
             e.setStatus(dto.getStatus());
+        }
+        validateShiftProject(e);
+    }
+
+    private void validateShiftProject(EmployeeShift e) {
+        Shift shift = shiftRepository.findById(e.getShiftId())
+                .orElseThrow(() -> new ResourceNotFoundException("Shift not found: " + e.getShiftId()));
+        if (shift.getProjectId() == null) {
+            return;
+        }
+        UUID employeeProject = assignmentRepository.findByEmployeeIdOrderByEffectiveFromDesc(e.getEmployeeId()).stream()
+                .filter(a -> a.getProjectId() != null && "ACTIVE".equalsIgnoreCase(a.getStatus()))
+                .findFirst()
+                .map(Assignment::getProjectId)
+                .orElse(null);
+        if (!shift.getProjectId().equals(employeeProject)) {
+            throw new BusinessRuleException("employee-shift.project.mismatch",
+                    "Shift project must match the employee's active project assignment.");
         }
     }
 

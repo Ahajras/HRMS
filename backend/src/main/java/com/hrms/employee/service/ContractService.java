@@ -3,6 +3,7 @@ package com.hrms.employee.service;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.employee.domain.Contract;
 import com.hrms.employee.dto.ContractDto;
+import com.hrms.employee.repository.ContractPayItemRepository;
 import com.hrms.employee.repository.ContractRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,9 +19,11 @@ import java.util.UUID;
 public class ContractService {
 
     private final ContractRepository repository;
+    private final ContractPayItemRepository payItemRepository;
 
-    public ContractService(ContractRepository repository) {
+    public ContractService(ContractRepository repository, ContractPayItemRepository payItemRepository) {
         this.repository = repository;
+        this.payItemRepository = payItemRepository;
     }
 
     @Transactional(readOnly = true)
@@ -48,7 +51,9 @@ public class ContractService {
     }
 
     public void delete(UUID id) {
-        repository.delete(getEntity(id));
+        Contract contract = getEntity(id);
+        payItemRepository.deleteByContractId(contract.getId());
+        repository.delete(contract);
     }
 
     private Contract getEntity(UUID id) {

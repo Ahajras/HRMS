@@ -17,8 +17,9 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
+import PrintIcon from "@mui/icons-material/Print";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { costCodeApi, crewApi, employeeApi, periodApi, projectApi, shiftApi, timeTypeApi, timesheetApi } from "../api/resources";
+import { costCodeApi, crewApi, periodApi, periodLockApi, projectApi, shiftApi, timeTypeApi, timesheetApi } from "../api/resources";
 import type { Timesheet, TimesheetDay, TimesheetDayCost } from "../api/types";
 
 const STATUS_COLOR: Record<string, "default" | "info" | "success" | "warning"> = {
@@ -40,9 +41,125 @@ function fmtDay(iso: string): string {
   return isNaN(d.getTime()) ? iso : `${iso} · ${WEEKDAY[d.getDay()]}`;
 }
 
+function printTimesheet(
+  timesheet: Timesheet,
+  summary: any,
+  days: TimesheetDay[],
+  projects: { id?: string; code: string; name: string }[],
+  costCodes: { id?: string; code: string; name: string; projectId: string }[],
+  timeTypes: { id?: string; code: string; name: string }[],
+) {
+  const projectLabel = (id?: string) => projects.find((p) => p.id === id)?.code ?? "";
+  const costLabel = (id?: string) => {
+    const cc = costCodes.find((c) => c.id === id);
+    return cc ? `${cc.code} - ${cc.name}` : "";
+  };
+  const timeTypeLabel = (day: TimesheetDay) => {
+    if (day.timeTypeCode) return day.timeTypeCode;
+    const type = timeTypes.find((t) => t.id === day.timeTypeId);
+    return type ? `${type.code} - ${type.name}` : "";
+  };
+  const html = `
+    <html>
+      <head>
+        <title>Timesheet ${escapeHtml(timesheet.employeeNumber ?? "")}</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+          h1,h2,h3,p { margin: 0; }
+          .header { display:flex; justify-content:space-between; margin-bottom:18px; }
+          .muted { color:#6b7280; font-size:12px; }
+          .grid { display:grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 18px 0; }
+          .card { border:1px solid #d1d5db; border-radius:8px; padding:10px; }
+          table { width:100%; border-collapse: collapse; margin-top:10px; }
+          th, td { border:1px solid #d1d5db; padding:7px; text-align:left; vertical-align:top; font-size:12px; }
+          th { background:#f3f4f6; }
+          .section { margin-top: 18px; }
+          .right { text-align:right; }
+          .chip { display:inline-block; border:1px solid #d1d5db; border-radius:999px; padding:4px 8px; margin:3px 6px 0 0; font-size:12px; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <h1>Timesheet</h1>
+            <p>${escapeHtml(timesheet.employeeNumber ?? "")} - ${escapeHtml(timesheet.employeeName ?? "")}</p>
+            <p class="muted">${timesheet.periodYear}/${String(timesheet.periodMonth).padStart(2, "0")} - ${escapeHtml(timesheet.status ?? "")}</p>
+          </div>
+        </div>
+        ${summary ? `
+          <div class="section">
+            <h2>Summary</h2>
+            <div class="grid">
+              <div class="card"><div class="muted">Normal</div><strong>${summary.normalHours}h</strong></div>
+              <div class="card"><div class="muted">Weekend</div><strong>${summary.restHours ?? 0}h</strong></div>
+              <div class="card"><div class="muted">Holiday</div><strong>${summary.holidayHours ?? 0}h</strong></div>
+              <div class="card"><div class="muted">Overtime</div><strong>${summary.overtimeHours}h</strong></div>
+              <div class="card"><div class="muted">Worked days</div><strong>${summary.workedDays}</strong></div>
+              <div class="card"><div class="muted">Absence</div><strong>${summary.absenceDays}d · ${summary.absenceHours}h</strong></div>
+              <div class="card"><div class="muted">Leave</div><strong>${summary.leaveDays}d · ${summary.leaveHours}h</strong></div>
+              <div class="card"><div class="muted">Payable hours</div><strong>${summary.workedHours}h</strong></div>
+            </div>
+            <div>
+              ${(summary.lines ?? []).map((line: any) => `<span class="chip">${escapeHtml(line.category)}: ${line.days}d · ${line.hours}h${line.paid ? "" : " (unpaid)"}</span>`).join("")}
+            </div>
+          </div>
+        ` : ""}
+        <div class="section">
+          <h2>Days</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th><th>Type</th><th>In</th><th>Out</th><th class="right">Planned</th><th class="right">Worked</th><th class="right">Normal</th><th class="right">OT</th><th>Project</th><th>Cost code</th><th>Remarks</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${days.map((d) => `
+                <tr>
+                  <td>${escapeHtml(fmtDay(d.workDate))}</td>
+                  <td>${escapeHtml(timeTypeLabel(d))}</td>
+                  <td>${escapeHtml(d.actualIn ?? "")}</td>
+                  <td>${escapeHtml(d.actualOut ?? "")}</td>
+                  <td class="right">${d.plannedHours ?? 0}</td>
+                  <td class="right">${d.workedHours ?? 0}</td>
+                  <td class="right">${d.normalHours ?? 0}</td>
+                  <td class="right">${d.otHours ?? 0}</td>
+                  <td>${escapeHtml(projectLabel(d.projectId))}</td>
+                  <td>${escapeHtml(costLabel(d.costCodeId))}</td>
+                  <td>${escapeHtml(d.remarks ?? "")}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
+        </div>
+      </body>
+    </html>
+  `;
+  openPrintWindow(html);
+}
+
+function openPrintWindow(html: string) {
+  const win = window.open("", "_blank", "width=1100,height=900");
+  if (!win) return;
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.onload = () => win.print();
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
 export default function TimesheetPage() {
   const qc = useQueryClient();
   const [periodId, setPeriodId] = useState("");
+  const [projectId, setProjectId] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // Generate form
@@ -50,20 +167,25 @@ export default function TimesheetPage() {
   const [genShift, setGenShift] = useState("");
   const [overwrite, setOverwrite] = useState(false);
 
-  const { data: employees } = useQuery({
-    queryKey: ["employeesAll"],
-    queryFn: () => employeeApi.list(0, 500),
+  const { data: employees = [] } = useQuery({
+    queryKey: ["timesheetEligibleEmployees", periodId],
+    queryFn: () => timesheetApi.eligibleEmployees(periodId),
+    enabled: !!periodId,
   });
   const { data: shifts = [] } = useQuery({ queryKey: ["shifts"], queryFn: shiftApi.list });
   const { data: timeTypes = [] } = useQuery({ queryKey: ["timeTypes"], queryFn: timeTypeApi.list });
   const { data: periods = [] } = useQuery({ queryKey: ["periods"], queryFn: () => periodApi.list() });
+  const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
   const { data: allCrews = [] } = useQuery({ queryKey: ["crews"], queryFn: crewApi.list });
   const [genCrew, setGenCrew] = useState("");
 
   const period = periods.find((p) => p.id === periodId);
+  const employeeOptions = employees.filter((e) => !projectId || e.projectId === projectId);
+  const selectedEmployee = employeeOptions.find((e) => e.id === genEmployee);
+  const availableShifts = shifts.filter((s) => !selectedEmployee?.projectId || !s.projectId || s.projectId === selectedEmployee.projectId);
   const { data: list = [] } = useQuery({
-    queryKey: ["timesheets", periodId],
-    queryFn: () => timesheetApi.listByPeriod(period!.periodYear, period!.periodMonth),
+    queryKey: ["timesheets", periodId, projectId],
+    queryFn: () => timesheetApi.listByPeriod(period!.periodYear, period!.periodMonth, projectId || undefined),
     enabled: !!period,
   });
   const { data: detail } = useQuery({
@@ -116,10 +238,24 @@ export default function TimesheetPage() {
     },
   });
   const submitAll = useMutation({
-    mutationFn: () => timesheetApi.submitAll(period!.periodYear, period!.periodMonth),
+    mutationFn: () => timesheetApi.submitAll(period!.periodYear, period!.periodMonth, projectId || undefined),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
       setBulkMsg(`Submitted ${r.submitted} draft timesheet(s).`);
+    },
+  });
+  const approveAll = useMutation({
+    mutationFn: () => timesheetApi.approveAll(period!.periodYear, period!.periodMonth, projectId || undefined),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
+      setBulkMsg(`Approved ${r.approved} submitted timesheet(s).`);
+    },
+  });
+  const lockProject = useMutation({
+    mutationFn: () => periodLockApi.lock(periodId, projectId, "ALL"),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
+      setBulkMsg("Project locked for payroll.");
     },
   });
 
@@ -141,6 +277,14 @@ export default function TimesheetPage() {
               {periods.length === 0 && <MenuItem value="" disabled>No periods — create them in Payroll Calendar</MenuItem>}
               {periods.map((p) => (
                 <MenuItem key={p.id} value={p.id}>{p.name} ({p.status})</MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} sm={3}>
+            <TextField select fullWidth size="small" label="Project" value={projectId} onChange={(e) => { setProjectId(e.target.value); setSelectedId(null); setGenEmployee(""); setGenShift(""); }}>
+              <MenuItem value="">All projects</MenuItem>
+              {projects.map((p) => (
+                <MenuItem key={p.id} value={p.id}>{p.code} — {p.name}</MenuItem>
               ))}
             </TextField>
           </Grid>
@@ -168,8 +312,25 @@ export default function TimesheetPage() {
                 <Button size="small" variant="outlined" disabled={list.every((t) => t.status !== "DRAFT") || submitAll.isPending} onClick={() => submitAll.mutate()}>
                   Submit all drafts
                 </Button>
+                <Button size="small" variant="outlined" color="success" disabled={list.every((t) => t.status !== "SUBMITTED") || approveAll.isPending} onClick={() => approveAll.mutate()}>
+                  Approve all submitted
+                </Button>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  color="warning"
+                  disabled={!projectId || !periodOpen || lockProject.isPending}
+                  onClick={() => lockProject.mutate()}
+                >
+                  Lock all approved
+                </Button>
               </Stack>
               {bulkMsg && <Alert severity="success" sx={{ mt: 1 }} onClose={() => setBulkMsg(null)}>{bulkMsg}</Alert>}
+              {lockProject.isError && (
+                <Alert severity="error" sx={{ mt: 1 }}>
+                  {(lockProject.error as any)?.response?.data?.message ?? "Could not lock this project."}
+                </Alert>
+              )}
             </Grid>
           )}
         </Grid>
@@ -186,18 +347,18 @@ export default function TimesheetPage() {
           <Grid item xs={12} sm={4}>
             <Autocomplete
               size="small"
-              options={employees?.content ?? []}
+              options={employeeOptions}
               getOptionLabel={(o) => `${o.employeeNumber} — ${o.firstName} ${o.lastName}`}
               isOptionEqualToValue={(o, v) => o.id === v.id}
-              value={(employees?.content ?? []).find((e) => e.id === genEmployee) ?? null}
-              onChange={(_, v) => setGenEmployee(v?.id ?? "")}
+              value={employeeOptions.find((e) => e.id === genEmployee) ?? null}
+              onChange={(_, v) => { setGenEmployee(v?.id ?? ""); setGenShift(""); }}
               renderInput={(params) => <TextField {...params} label="Employee" />}
             />
           </Grid>
           <Grid item xs={12} sm={3}>
             <TextField select fullWidth size="small" label="Shift" value={genShift} onChange={(e) => setGenShift(e.target.value)}>
               <MenuItem value="">(from roster)</MenuItem>
-              {shifts.map((s) => <MenuItem key={s.id} value={s.id}>{s.code} — {s.name}</MenuItem>)}
+              {availableShifts.map((s) => <MenuItem key={s.id} value={s.id}>{s.code} — {s.name}</MenuItem>)}
             </TextField>
           </Grid>
           <Grid item xs={6} sm={2}>
@@ -258,6 +419,7 @@ export default function TimesheetPage() {
           key={detail.id}
           timesheet={detail}
           timeTypes={timeTypes}
+          lifecycleError={(lifecycle.error as any)?.response?.data?.message}
           onLifecycle={(action) => detail.id && lifecycle.mutate({ id: detail.id, action })}
           onDelete={() => detail.id && del.mutate(detail.id)}
         />
@@ -268,9 +430,56 @@ export default function TimesheetPage() {
 
 function SummaryStat({ label, value }: { label: string; value: string | number }) {
   return (
-    <Box>
+    <Box sx={{
+      minWidth: 118,
+      px: 1.25,
+      py: 1,
+      borderRadius: 1,
+      bgcolor: "background.paper",
+      border: "1px solid",
+      borderColor: "divider",
+    }}>
       <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>{label}</Typography>
-      <Typography variant="body2" fontWeight={600}>{value}</Typography>
+      <Typography variant="body1" fontWeight={700}>{value}</Typography>
+    </Box>
+  );
+}
+
+function AllocationCard({
+  project,
+  costCode,
+  hours,
+}: {
+  project: string;
+  costCode: string;
+  hours: number;
+}) {
+  return (
+    <Box sx={{
+      minWidth: 220,
+      flex: "1 1 220px",
+      px: 1.25,
+      py: 1,
+      borderRadius: 1,
+      bgcolor: "background.paper",
+      border: "1px solid",
+      borderColor: "divider",
+      borderLeft: "4px solid",
+      borderLeftColor: "primary.main",
+    }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" gap={1}>
+        <Box sx={{ minWidth: 0 }}>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+            {project}
+          </Typography>
+          <Typography variant="body2" fontWeight={600} noWrap title={costCode}>
+            {costCode}
+          </Typography>
+        </Box>
+        <Typography variant="h6" fontWeight={800} sx={{ lineHeight: 1 }}>
+          {hours}h
+        </Typography>
+      </Stack>
     </Box>
   );
 }
@@ -278,11 +487,13 @@ function SummaryStat({ label, value }: { label: string; value: string | number }
 function TimesheetDetail({
   timesheet,
   timeTypes,
+  lifecycleError,
   onLifecycle,
   onDelete,
 }: {
   timesheet: Timesheet;
   timeTypes: { id?: string; code: string; name: string }[];
+  lifecycleError?: string;
   onLifecycle: (action: "submit" | "approve" | "lock" | "reopen") => void;
   onDelete: () => void;
 }) {
@@ -322,6 +533,17 @@ function TimesheetDetail({
   const removeCost = (idx: number, ci: number) =>
     setDays((prev) => prev.map((d, i) =>
       i === idx ? { ...d, costs: (d.costs ?? []).filter((_, j) => j !== ci) } : d));
+  const costLabel = (costCodeId?: string) => {
+    const cc = costCodes.find((c) => c.id === costCodeId);
+    return cc ? `${cc.code} ${cc.name}` : "No code";
+  };
+  const splitSummary = (d: TimesheetDay) => {
+    const active = (d.costs ?? []).filter((c) => c.projectId || c.costCodeId || Number(c.hours));
+    if (active.length === 0) return "Split";
+    return active.map((c) => `${costLabel(c.costCodeId)} ${Number(c.hours) || 0}h`).join(" · ");
+  };
+  const costedHours = (d: TimesheetDay) => Number(d.normalHours ?? 0) + Number(d.otHours ?? 0);
+  const dayEditable = (_d?: TimesheetDay) => editable;
 
   return (
     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
@@ -334,6 +556,9 @@ function TimesheetDetail({
           </Typography>
         </Box>
         <Stack direction="row" spacing={1} flexWrap="wrap">
+          <Button size="small" startIcon={<PrintIcon />} onClick={() => printTimesheet(timesheet, summary, days, projects, costCodes, timeTypes)}>
+            Print
+          </Button>
           {editable && <Button size="small" variant="contained" disabled={save.isPending} onClick={() => save.mutate()}>Save days</Button>}
           {timesheet.status === "DRAFT" && <Button size="small" onClick={() => onLifecycle("submit")}>Submit</Button>}
           {timesheet.status === "SUBMITTED" && <Button size="small" color="success" onClick={() => onLifecycle("approve")}>Approve</Button>}
@@ -343,6 +568,8 @@ function TimesheetDetail({
         </Stack>
       </Stack>
 
+      {lifecycleError && <Alert severity="error" sx={{ mb: 1 }}>{lifecycleError}</Alert>}
+
       {save.isError && (
         <Alert severity="error" sx={{ mb: 1 }}>
           {(save.error as any)?.response?.data?.message ?? "Save failed."}
@@ -350,9 +577,29 @@ function TimesheetDetail({
       )}
 
       {summary && (
-        <Box sx={{ mb: 1.5, p: 1.5, bgcolor: "action.hover", borderRadius: 1 }}>
-          <Stack direction="row" spacing={3} flexWrap="wrap" useFlexGap>
+        <Box sx={{
+          mb: 1.5,
+          p: 1.5,
+          borderRadius: 1.5,
+          bgcolor: "grey.50",
+          border: "1px solid",
+          borderColor: "divider",
+        }}>
+          <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1.25} gap={1} flexWrap="wrap">
+            <Box>
+              <Typography variant="subtitle2" fontWeight={700}>Timesheet summary</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Payroll hours and cost allocation for this period
+              </Typography>
+            </Box>
+            <Chip size="small" color={summary.overtimeHours > 0 ? "warning" : "default"}
+              label={`${summary.workedHours} payable hours`} />
+          </Stack>
+
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
             <SummaryStat label="Normal" value={`${summary.normalHours}h`} />
+            <SummaryStat label="Weekend" value={`${summary.restHours ?? 0}h`} />
+            <SummaryStat label="Holiday" value={`${summary.holidayHours ?? 0}h`} />
             <SummaryStat label="Overtime" value={`${summary.overtimeHours}h`} />
             <SummaryStat label="Worked days" value={summary.workedDays} />
             <SummaryStat label="Absence" value={`${summary.absenceDays}d · ${summary.absenceHours}h`} />
@@ -367,6 +614,23 @@ function TimesheetDetail({
                   label={`${l.category}: ${l.days}d · ${l.hours}h${l.paid ? "" : " (unpaid)"}`} />
               ))}
             </Stack>
+          )}
+          {(summary.allocationLines?.length ?? 0) > 0 && (
+            <Box sx={{ mt: 1.5 }}>
+              <Typography variant="subtitle2" fontWeight={700} sx={{ display: "block", mb: 0.75 }}>
+                Cost allocation
+              </Typography>
+              <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                {summary.allocationLines.map((l) => (
+                  <AllocationCard
+                    key={`${l.projectId}-${l.costCodeId}`}
+                    project={l.projectCode ?? "Project"}
+                    costCode={`${l.costCode ?? "Cost code"}${l.costCodeName ? ` — ${l.costCodeName}` : ""}`}
+                    hours={l.hours}
+                  />
+                ))}
+              </Stack>
+            </Box>
           )}
         </Box>
       )}
@@ -386,6 +650,8 @@ function TimesheetDetail({
               <TableCell align="right">Decl</TableCell>
               <TableCell align="right">Undecl</TableCell>
               <TableCell align="right">Inelig OT</TableCell>
+              <TableCell>Project</TableCell>
+              <TableCell>Cost code</TableCell>
               <TableCell>Cost split</TableCell>
               <TableCell>Remarks</TableCell>
             </TableRow>
@@ -396,25 +662,25 @@ function TimesheetDetail({
               <TableRow>
                 <TableCell>{fmtDay(d.workDate)}</TableCell>
                 <TableCell>
-                  {editable ? (
-                    <TextField select size="small" value={d.timeTypeId ?? ""} onChange={(e) => setDay(idx, { timeTypeId: e.target.value })} sx={{ minWidth: 120 }}>
-                      {timeTypes.map((t) => <MenuItem key={t.id} value={t.id}>{t.code}</MenuItem>)}
+                  {dayEditable(d) ? (
+                    <TextField select size="small" value={d.timeTypeId ?? ""} onChange={(e) => setDay(idx, { timeTypeId: e.target.value })} sx={{ minWidth: 220 }}>
+                      {timeTypes.map((t) => <MenuItem key={t.id} value={t.id}>{t.code} - {t.name}</MenuItem>)}
                     </TextField>
                   ) : (d.timeTypeCode ?? "")}
                 </TableCell>
                 <TableCell>
-                  {editable ? (
+                  {dayEditable(d) ? (
                     <TextField type="time" size="small" value={d.actualIn ?? ""} onChange={(e) => setDay(idx, { actualIn: e.target.value || null })} sx={{ width: 110 }} />
                   ) : (d.actualIn ?? "")}
                 </TableCell>
                 <TableCell>
-                  {editable ? (
+                  {dayEditable(d) ? (
                     <TextField type="time" size="small" value={d.actualOut ?? ""} onChange={(e) => setDay(idx, { actualOut: e.target.value || null })} sx={{ width: 110 }} />
                   ) : (d.actualOut ?? "")}
                 </TableCell>
                 <TableCell align="right">{d.plannedHours ?? 0}</TableCell>
                 <TableCell align="right">
-                  {editable ? (
+                  {dayEditable(d) ? (
                     <TextField type="number" size="small" value={d.workedHours ?? 0} onChange={(e) => setDay(idx, { workedHours: Number(e.target.value) })} sx={{ width: 80 }} />
                   ) : (d.workedHours ?? 0)}
                 </TableCell>
@@ -424,45 +690,70 @@ function TimesheetDetail({
                 <TableCell align="right">{d.undeclaredOtHours ?? 0}</TableCell>
                 <TableCell align="right" sx={{ color: "text.disabled" }}>{d.ineligibleOtHours ?? 0}</TableCell>
                 <TableCell>
-                  <Button size="small" onClick={() => setCostOpen(costOpen === idx ? null : idx)}>
-                    {(d.costs?.length ?? 0) > 0 ? `${d.costs!.length} code(s)` : "split"}
+                  {dayEditable(d) ? (
+                    <TextField select size="small" value={d.projectId ?? ""}
+                      onChange={(e) => setDay(idx, { projectId: e.target.value || undefined, costCodeId: undefined })}
+                      sx={{ minWidth: 140 }}>
+                      <MenuItem value="">(none)</MenuItem>
+                      {projects.map((p) => <MenuItem key={p.id} value={p.id}>{p.code}</MenuItem>)}
+                    </TextField>
+                  ) : (projects.find((p) => p.id === d.projectId)?.code ?? "")}
+                </TableCell>
+                <TableCell>
+                  {dayEditable(d) ? (
+                    <TextField select size="small" value={d.costCodeId ?? ""}
+                      onChange={(e) => setDay(idx, { costCodeId: e.target.value || undefined })}
+                      sx={{ minWidth: 160 }}>
+                      <MenuItem value="">(none)</MenuItem>
+                      {costCodes.filter((cc) => !d.projectId || cc.projectId === d.projectId).map((cc) => (
+                        <MenuItem key={cc.id} value={cc.id}>{cc.code} — {cc.name}</MenuItem>
+                      ))}
+                    </TextField>
+                  ) : (() => {
+                    const cc = costCodes.find((c) => c.id === d.costCodeId);
+                    return cc ? `${cc.code} — ${cc.name}` : "";
+                  })()}
+                </TableCell>
+                <TableCell>
+                  <Button size="small" disabled={!dayEditable(d) && (d.costs?.length ?? 0) === 0} onClick={() => setCostOpen(costOpen === idx ? null : idx)}>
+                    {splitSummary(d)}
                   </Button>
                 </TableCell>
                 <TableCell>
-                  {editable ? (
+                  {dayEditable(d) ? (
                     <TextField size="small" value={d.remarks ?? ""} onChange={(e) => setDay(idx, { remarks: e.target.value })} sx={{ minWidth: 140 }} />
                   ) : (d.remarks ?? "")}
                 </TableCell>
               </TableRow>
               {costOpen === idx && (
                 <TableRow>
-                  <TableCell colSpan={13} sx={{ bgcolor: "action.hover" }}>
+                  <TableCell colSpan={15} sx={{ bgcolor: "action.hover" }}>
                     <Typography variant="caption" color="text.secondary">Split {d.workDate} hours across cost codes</Typography>
                     {(d.costs ?? []).map((c, ci) => (
                       <Stack key={ci} direction="row" spacing={1} alignItems="center" mt={0.5}>
-                        <TextField select size="small" label="Project" value={c.projectId ?? ""} disabled={!editable}
+                        <TextField select size="small" label="Project" value={c.projectId ?? ""} disabled={!dayEditable(d)}
                           onChange={(e) => setCost(idx, ci, { projectId: e.target.value, costCodeId: undefined })} sx={{ minWidth: 140 }}>
                           {projects.map((p) => <MenuItem key={p.id} value={p.id}>{p.code}</MenuItem>)}
                         </TextField>
-                        <TextField select size="small" label="Cost code" value={c.costCodeId ?? ""} disabled={!editable}
+                        <TextField select size="small" label="Cost code" value={c.costCodeId ?? ""} disabled={!dayEditable(d)}
                           onChange={(e) => setCost(idx, ci, { costCodeId: e.target.value })} sx={{ minWidth: 160 }}>
                           {costCodes.filter((cc) => !c.projectId || cc.projectId === c.projectId).map((cc) => (
                             <MenuItem key={cc.id} value={cc.id}>{cc.code} — {cc.name}</MenuItem>
                           ))}
                         </TextField>
-                        <TextField type="number" size="small" label="Hours" value={c.hours ?? 0} disabled={!editable}
+                        <TextField type="number" size="small" label="Hours" value={c.hours ?? 0} disabled={!dayEditable(d)}
                           onChange={(e) => setCost(idx, ci, { hours: Number(e.target.value) })} sx={{ width: 90 }} />
-                        {editable && <Button size="small" color="error" onClick={() => removeCost(idx, ci)}>Remove</Button>}
+                        {dayEditable(d) && <Button size="small" color="error" onClick={() => removeCost(idx, ci)}>Remove</Button>}
                       </Stack>
                     ))}
-                    {editable && <Button size="small" sx={{ mt: 0.5 }} onClick={() => addCost(idx)}>+ Add cost code</Button>}
+                    {dayEditable(d) && <Button size="small" sx={{ mt: 0.5 }} onClick={() => addCost(idx)}>+ Add cost code</Button>}
                     {(d.costs?.length ?? 0) > 0 && (() => {
                       const sum = (d.costs ?? []).reduce((a, c) => a + (Number(c.hours) || 0), 0);
-                      const worked = Number(d.workedHours) || 0;
-                      const ok = Math.abs(sum - worked) < 0.01;
+                      const target = costedHours(d);
+                      const ok = Math.abs(sum - target) < 0.01;
                       return (
                         <Typography variant="caption" sx={{ ml: 1 }} color={ok ? "success.main" : "error.main"}>
-                          Σ {sum} / worked {worked} {ok ? "✓" : "✗ must match"}
+                          Σ {sum} / costed {target} {ok ? "✓" : "✗ must match"}
                         </Typography>
                       );
                     })()}

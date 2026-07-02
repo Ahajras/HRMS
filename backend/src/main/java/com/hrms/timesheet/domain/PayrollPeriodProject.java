@@ -22,6 +22,9 @@ public class PayrollPeriodProject extends AuditableEntity {
     @Column(name = "project_id", nullable = false)
     private UUID projectId;
 
+    @Column(name = "pay_group", nullable = false, length = 20)
+    private String payGroup = "ALL";
+
     @Column(name = "status", nullable = false, length = 20)
     private String status = "OPEN";
 
@@ -39,6 +42,9 @@ public class PayrollPeriodProject extends AuditableEntity {
 
     public UUID getProjectId() { return projectId; }
     public void setProjectId(UUID projectId) { this.projectId = projectId; }
+
+    public String getPayGroup() { return payGroup; }
+    public void setPayGroup(String payGroup) { this.payGroup = payGroup; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

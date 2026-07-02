@@ -3,9 +3,11 @@ import {
   Box,
   Button,
   Checkbox,
+  Divider,
   FormControlLabel,
   Grid,
   IconButton,
+  MenuItem,
   Paper,
   Stack,
   TextField,
@@ -14,8 +16,8 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
-import { publicHolidayApi, timeTypeApi } from "../api/resources";
-import type { PublicHoliday, TimeType } from "../api/types";
+import { payrollComponentApi, publicHolidayApi, timeTypeApi, timeTypePayrollRuleApi } from "../api/resources";
+import type { PayrollComponent, PublicHoliday, TimeType, TimeTypePayrollRule } from "../api/types";
 
 const EMPTY_TYPE: TimeType = {
   code: "",
@@ -28,18 +30,58 @@ const EMPTY_TYPE: TimeType = {
   sortOrder: 0,
 };
 
+const EMPTY_RULE: TimeTypePayrollRule = {
+  timeTypeId: "",
+  payrollComponentId: "",
+  action: "PAY",
+  percent: 100,
+  basis: "HOURS",
+  affectsOvertime: false,
+  processSeparately: false,
+  sortOrder: 100,
+};
+
 function TimeTypesSection() {
   const qc = useQueryClient();
-  const { data = [] } = useQuery({ queryKey: ["timeTypes"], queryFn: timeTypeApi.list });
+  const { data: timeTypes = [] } = useQuery({ queryKey: ["timeTypes"], queryFn: timeTypeApi.list });
+  const { data: components = [] } = useQuery({ queryKey: ["payrollComponents"], queryFn: () => payrollComponentApi.list() });
   const [form, setForm] = useState<TimeType>(EMPTY_TYPE);
+  const [ruleForm, setRuleForm] = useState<TimeTypePayrollRule>(EMPTY_RULE);
 
   const save = useMutation({
     mutationFn: (t: TimeType) => (t.id ? timeTypeApi.update(t.id, t) : timeTypeApi.create(t)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["timeTypes"] }); setForm(EMPTY_TYPE); },
+    onSuccess: (saved) => {
+      qc.invalidateQueries({ queryKey: ["timeTypes"] });
+      setForm(saved);
+      setRuleForm({ ...EMPTY_RULE, timeTypeId: saved.id! });
+    },
   });
   const del = useMutation({
     mutationFn: (id: string) => timeTypeApi.remove(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["timeTypes"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["timeTypes"] });
+      setForm(EMPTY_TYPE);
+      setRuleForm(EMPTY_RULE);
+    },
+  });
+
+  const selectedTimeTypeId = form.id ?? "";
+  const { data: rules = [] } = useQuery({
+    queryKey: ["timeTypePayrollRules", selectedTimeTypeId],
+    queryFn: () => timeTypePayrollRuleApi.list(selectedTimeTypeId),
+    enabled: !!selectedTimeTypeId,
+  });
+
+  const saveRule = useMutation({
+    mutationFn: (rule: TimeTypePayrollRule) => timeTypePayrollRuleApi.save(selectedTimeTypeId, rule),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["timeTypePayrollRules", selectedTimeTypeId] });
+      setRuleForm({ ...EMPTY_RULE, timeTypeId: selectedTimeTypeId });
+    },
+  });
+  const deleteRule = useMutation({
+    mutationFn: (componentId: string) => timeTypePayrollRuleApi.remove(selectedTimeTypeId, componentId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["timeTypePayrollRules", selectedTimeTypeId] }),
   });
 
   return (
@@ -48,11 +90,21 @@ function TimeTypesSection() {
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
         <Typography variant="subtitle2" gutterBottom>{form.id ? "Edit time type" : "Add time type"}</Typography>
         <Grid container spacing={1.5}>
-          <Grid item xs={6} sm={2}><TextField fullWidth size="small" label="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></Grid>
-          <Grid item xs={6} sm={3}><TextField fullWidth size="small" label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Grid>
-          <Grid item xs={6} sm={2}><TextField fullWidth size="small" label="Category" value={form.category ?? ""} onChange={(e) => setForm({ ...form, category: e.target.value })} /></Grid>
-          <Grid item xs={6} sm={2}><TextField fullWidth size="small" type="number" label="Factor" value={form.factor ?? 1} onChange={(e) => setForm({ ...form, factor: Number(e.target.value) })} /></Grid>
-          <Grid item xs={6} sm={2}><TextField fullWidth size="small" type="number" label="Sort" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })} /></Grid>
+          <Grid item xs={6} sm={2}>
+            <TextField fullWidth size="small" label="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value.toUpperCase() })} />
+          </Grid>
+          <Grid item xs={6} sm={3}>
+            <TextField fullWidth size="small" label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+          </Grid>
+          <Grid item xs={6} sm={2}>
+            <TextField fullWidth size="small" label="Category" value={form.category ?? ""} onChange={(e) => setForm({ ...form, category: e.target.value.toUpperCase() })} />
+          </Grid>
+          <Grid item xs={6} sm={2}>
+            <TextField fullWidth size="small" type="number" label="Factor" value={form.factor ?? 1} onChange={(e) => setForm({ ...form, factor: Number(e.target.value) })} />
+          </Grid>
+          <Grid item xs={6} sm={2}>
+            <TextField fullWidth size="small" type="number" label="Sort" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })} />
+          </Grid>
           <Grid item xs={12}>
             <Stack direction="row" spacing={2} flexWrap="wrap">
               <FormControlLabel control={<Checkbox checked={form.paid} onChange={(e) => setForm({ ...form, paid: e.target.checked })} />} label="Paid" />
@@ -65,28 +117,109 @@ function TimeTypesSection() {
               <Button startIcon={<AddIcon />} variant="contained" disabled={!form.code || !form.name || save.isPending} onClick={() => save.mutate(form)}>
                 {form.id ? "Update" : "Add"}
               </Button>
-              {form.id && <Button onClick={() => setForm(EMPTY_TYPE)}>Cancel</Button>}
+              {form.id && <Button onClick={() => { setForm(EMPTY_TYPE); setRuleForm(EMPTY_RULE); }}>Cancel</Button>}
             </Stack>
           </Grid>
         </Grid>
       </Paper>
-      {data.map((t) => (
-        <Paper key={t.id} variant="outlined" sx={{ p: 1.5, borderRadius: 2, mb: 1 }}>
+
+      {form.id && (
+        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
+          <Typography variant="subtitle2" gutterBottom>Payroll Effect for {form.code}</Typography>
+          <Typography variant="body2" color="text.secondary" mb={1.5}>
+            Tell the system which payroll component this time type pays, deducts, or ignores.
+          </Typography>
+          <Grid container spacing={1.5}>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                select
+                fullWidth
+                size="small"
+                label="Payroll Component"
+                value={ruleForm.payrollComponentId}
+                onChange={(e) => setRuleForm({ ...ruleForm, timeTypeId: form.id!, payrollComponentId: e.target.value })}
+              >
+                {components.map((component: PayrollComponent) => (
+                  <MenuItem key={component.id} value={component.id!}>
+                    {component.code} - {component.name}
+                  </MenuItem>
+                ))}
+              </TextField>
+            </Grid>
+            <Grid item xs={6} sm={2}>
+              <TextField select fullWidth size="small" label="Action" value={ruleForm.action} onChange={(e) => setRuleForm({ ...ruleForm, action: e.target.value })}>
+                <MenuItem value="PAY">Pay</MenuItem>
+                <MenuItem value="DEDUCT">Deduct</MenuItem>
+                <MenuItem value="IGNORE">Ignore</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={6} sm={2}>
+              <TextField fullWidth size="small" type="number" label="Percent" value={ruleForm.percent} onChange={(e) => setRuleForm({ ...ruleForm, percent: Number(e.target.value) })} />
+            </Grid>
+            <Grid item xs={6} sm={2}>
+              <TextField select fullWidth size="small" label="Basis" value={ruleForm.basis} onChange={(e) => setRuleForm({ ...ruleForm, basis: e.target.value })}>
+                <MenuItem value="HOURS">Hours</MenuItem>
+                <MenuItem value="DAYS">Days</MenuItem>
+                <MenuItem value="FIXED">Fixed</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={6} sm={2}>
+              <TextField fullWidth size="small" type="number" label="Sort" value={ruleForm.sortOrder} onChange={(e) => setRuleForm({ ...ruleForm, sortOrder: Number(e.target.value) })} />
+            </Grid>
+            <Grid item xs={12}>
+              <Stack direction="row" spacing={2} flexWrap="wrap">
+                <FormControlLabel control={<Checkbox checked={ruleForm.affectsOvertime} onChange={(e) => setRuleForm({ ...ruleForm, affectsOvertime: e.target.checked })} />} label="Affects overtime" />
+                <FormControlLabel control={<Checkbox checked={ruleForm.processSeparately} onChange={(e) => setRuleForm({ ...ruleForm, processSeparately: e.target.checked })} />} label="Process separately" />
+              </Stack>
+            </Grid>
+            <Grid item xs={12}>
+              <TextField fullWidth size="small" label="Remarks" value={ruleForm.remarks ?? ""} onChange={(e) => setRuleForm({ ...ruleForm, remarks: e.target.value })} />
+            </Grid>
+            <Grid item xs={12}>
+              <Button variant="contained" disabled={!ruleForm.payrollComponentId || saveRule.isPending} onClick={() => saveRule.mutate(ruleForm)}>
+                Save Payroll Rule
+              </Button>
+            </Grid>
+          </Grid>
+          <Divider sx={{ my: 2 }} />
+          <Stack spacing={1}>
+            {rules.map((rule) => (
+              <Paper key={rule.id ?? rule.payrollComponentId} variant="outlined" sx={{ p: 1.25, borderRadius: 2 }}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+                  <Box>
+                    <Typography fontWeight={600}>{rule.payrollComponentCode} - {rule.payrollComponentName}</Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      {rule.action} · {rule.percent}% · {rule.basis}{rule.affectsOvertime ? " · affects OT" : ""}{rule.processSeparately ? " · separate" : ""}
+                    </Typography>
+                  </Box>
+                  <IconButton size="small" color="error" onClick={() => deleteRule.mutate(rule.payrollComponentId)}>
+                    <DeleteIcon />
+                  </IconButton>
+                </Stack>
+              </Paper>
+            ))}
+            {rules.length === 0 && <Typography variant="body2" color="text.secondary">No payroll rules for this time type yet.</Typography>}
+          </Stack>
+        </Paper>
+      )}
+
+      {timeTypes.map((timeType) => (
+        <Paper key={timeType.id} variant="outlined" sx={{ p: 1.5, borderRadius: 2, mb: 1 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between">
             <Box>
-              <Typography fontWeight={600}>{t.code} — {t.name}</Typography>
+              <Typography fontWeight={600}>{timeType.code} - {timeType.name}</Typography>
               <Typography variant="caption" color="text.secondary">
-                factor {t.factor} · {t.paid ? "paid" : "unpaid"} · {t.countsAsWorked ? "worked" : "not worked"}{t.affectsLeave ? " · affects leave" : ""}
+                factor {timeType.factor} · {timeType.paid ? "paid" : "unpaid"} · {timeType.countsAsWorked ? "worked" : "not worked"}{timeType.affectsLeave ? " · affects leave" : ""}
               </Typography>
             </Box>
             <Box>
-              <Button size="small" onClick={() => setForm(t)}>Edit</Button>
-              <IconButton size="small" color="error" onClick={() => t.id && del.mutate(t.id)}><DeleteIcon /></IconButton>
+              <Button size="small" onClick={() => { setForm(timeType); setRuleForm({ ...EMPTY_RULE, timeTypeId: timeType.id! }); }}>Edit</Button>
+              <IconButton size="small" color="error" onClick={() => timeType.id && del.mutate(timeType.id)}><DeleteIcon /></IconButton>
             </Box>
           </Stack>
         </Paper>
       ))}
-      {data.length === 0 && <Typography variant="body2" color="text.secondary">No time types yet.</Typography>}
+      {timeTypes.length === 0 && <Typography variant="body2" color="text.secondary">No time types yet.</Typography>}
     </Box>
   );
 }
@@ -125,7 +258,7 @@ function HolidaysSection() {
       {data.map((h) => (
         <Paper key={h.id} variant="outlined" sx={{ p: 1.5, borderRadius: 2, mb: 1 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between">
-            <Typography fontWeight={600}>{h.holidayDate} — {h.name}</Typography>
+            <Typography fontWeight={600}>{h.holidayDate} - {h.name}</Typography>
             <Box>
               <Button size="small" onClick={() => setForm(h)}>Edit</Button>
               <IconButton size="small" color="error" onClick={() => h.id && del.mutate(h.id)}><DeleteIcon /></IconButton>

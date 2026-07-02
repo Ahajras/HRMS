@@ -23,7 +23,7 @@ import type { PayrollComponent } from "../api/types";
 const CATEGORIES = ["SALARY", "ALLOWANCE", "DEDUCTION", "PROVISION", "BONUS", "OVERTIME", "LEAVE", "LOAN", "GOVERNMENT", "TAX", "INSURANCE"];
 const TYPES = ["EARNING", "DEDUCTION"];
 const METHODS = ["FIXED", "PERCENTAGE", "FORMULA"];
-const FREQ = ["MONTHLY", "WEEKLY", "DAILY", "ONE_TIME", "ANNUAL"];
+const FREQ = ["HOURLY", "DAILY", "WEEKLY", "MONTHLY", "QUARTERLY", "SEMI_ANNUAL", "ANNUAL", "ONE_TIME"];
 
 const EMPTY: PayrollComponent = {
   code: "",
@@ -63,6 +63,13 @@ export default function PayrollComponentsPage() {
     },
   });
 
+  const initializeDefaults = useMutation({
+    mutationFn: () => payrollComponentApi.initializeDefaults(),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["payrollComponents"] });
+    },
+  });
+
   const columns: GridColDef<PayrollComponent>[] = [
     { field: "code", headerName: "Code", width: 130 },
     { field: "name", headerName: "Name", flex: 1 },
@@ -87,13 +94,18 @@ export default function PayrollComponentsPage() {
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h5">Payroll Components</Typography>
-        <Button startIcon={<AddIcon />} variant="contained" onClick={() => { setForm(EMPTY); setOpen(true); }}>
-          New Component
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" disabled={initializeDefaults.isPending} onClick={() => initializeDefaults.mutate()}>
+            Initialize Default Components
+          </Button>
+          <Button startIcon={<AddIcon />} variant="contained" onClick={() => { setForm(EMPTY); setOpen(true); }}>
+            New Component
+          </Button>
+        </Stack>
       </Stack>
 
       <Typography variant="body2" color="text.secondary" mb={2}>
-        Salary is a collection of components (FTDD Vol.1 Ch.6). Calculation semantics are resolved by the Rule Engine (Phase 3).
+        Salary is a collection of components. Initialize the legacy allowance library, then adjust names, frequencies, and flags to match your payroll policy.
       </Typography>
 
       <div style={{ height: 560, width: "100%" }}>

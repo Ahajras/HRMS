@@ -10,6 +10,9 @@ import com.hrms.employee.domain.Assignment;
 import com.hrms.employee.domain.Employee;
 import com.hrms.employee.repository.AssignmentRepository;
 import com.hrms.employee.repository.EmployeeRepository;
+import com.hrms.project.domain.CostCode;
+import com.hrms.project.domain.Project;
+import com.hrms.project.repository.CostCodeRepository;
 import com.hrms.security.AuthenticatedUser;
 import com.hrms.security.domain.AppUser;
 import com.hrms.security.repository.AppUserRepository;
@@ -93,6 +96,7 @@ public class TimesheetService {
     private final OvertimeCategoryRepository overtimeCategoryRepo;
     private final PayrollPeriodProjectRepository periodProjectRepo;
     private final com.hrms.project.repository.ProjectRepository projectRepo;
+    private final CostCodeRepository costCodeRepo;
 
     public TimesheetService(TimesheetRepository timesheetRepo, TimesheetDayRepository dayRepo,
                             ShiftRepository shiftRepo, TimeTypeRepository timeTypeRepo,
@@ -103,7 +107,8 @@ public class TimesheetService {
                             TimekeeperService timekeeperService, CrewMemberRepository crewMemberRepo,
                             OvertimeCategoryRepository overtimeCategoryRepo,
                             PayrollPeriodProjectRepository periodProjectRepo,
-                            com.hrms.project.repository.ProjectRepository projectRepo) {
+                            com.hrms.project.repository.ProjectRepository projectRepo,
+                            CostCodeRepository costCodeRepo) {
         this.timesheetRepo = timesheetRepo;
         this.dayRepo = dayRepo;
         this.shiftRepo = shiftRepo;
@@ -121,18 +126,25 @@ public class TimesheetService {
         this.overtimeCategoryRepo = overtimeCategoryRepo;
         this.periodProjectRepo = periodProjectRepo;
         this.projectRepo = projectRepo;
+        this.costCodeRepo = costCodeRepo;
     }
 
     // --- queries -----------------------------------------------------
 
     @Transactional(readOnly = true)
-    public List<TimesheetDto> listByPeriod(int year, int month) {
+    public List<TimesheetDto> listByPeriod(int year, int month, UUID projectId) {
         UUID companyId = TenantContext.requireCompanyId();
         Set<UUID> allowed = restrictedProjects();
         return timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month)
                 .stream()
-                .filter(t -> allowed == null || allowed.contains(employeeProject(t.getEmployeeId())))
+                .filter(t -> matchesProjectScope(t, projectId, allowed))
                 .map(t -> toHeaderDto(t)).toList();
+    }
+
+    private boolean matchesProjectScope(Timesheet t, UUID projectId, Set<UUID> allowed) {
+        UUID employeeProjectId = employeeProject(t.getEmployeeId());
+        return (allowed == null || allowed.contains(employeeProjectId))
+                && (projectId == null || projectId.equals(employeeProjectId));
     }
 
     // --- timekeeper project scoping ----------------------------------
@@ -162,12 +174,42 @@ public class TimesheetService {
         return defaultAllocation(employeeId)[0];
     }
 
+    private void assertTimesheetEligible(Employee employee) {
+        UUID[] alloc = defaultAllocation(employee.getId());
+        if (alloc[0] == null) {
+            throw new BusinessRuleException("employee.project.required",
+                    "Assign the employee to a project before generating a timesheet.");
+        }
+    }
+
+    private boolean isTimesheetEligible(Employee employee) {
+        return employee != null && employeeProject(employee.getId()) != null;
+    }
+
     /** A roster/crew membership counts for a period when its date window overlaps it:
      *  joined on/before the period end, and not ended before the period start. */
     private static boolean activeForPeriod(LocalDate from, LocalDate to, PayrollPeriod period) {
         boolean joinedInTime = from == null || !from.isAfter(period.getEndDate());
         boolean notEnded = to == null || !to.isBefore(period.getStartDate());
         return joinedInTime && notEnded;
+    }
+
+    private static boolean employmentOverlapsPeriod(Employee employee, PayrollPeriod period) {
+        return isEmployedOnOrBefore(employee.getHireDate(), period.getEndDate())
+                && isNotTerminatedBefore(employee.getTerminationDate(), period.getStartDate());
+    }
+
+    private static boolean isEmployedOn(Employee employee, LocalDate date) {
+        return isEmployedOnOrBefore(employee.getHireDate(), date)
+                && isNotTerminatedBefore(employee.getTerminationDate(), date);
+    }
+
+    private static boolean isEmployedOnOrBefore(LocalDate hireDate, LocalDate date) {
+        return hireDate == null || !hireDate.isAfter(date);
+    }
+
+    private static boolean isNotTerminatedBefore(LocalDate terminationDate, LocalDate date) {
+        return terminationDate == null || !terminationDate.isBefore(date);
     }
 
     private String empLabel(UUID employeeId) {
@@ -180,18 +222,36 @@ public class TimesheetService {
 
     /** Lock status of a project within a period: OPEN (default) / LOCKED / CLOSED. */
     private String projectStatus(UUID periodId, UUID projectId) {
+        return projectStatus(periodId, projectId, "ALL");
+    }
+
+    private String projectStatus(UUID periodId, UUID projectId, String payGroup) {
         if (periodId == null || projectId == null) {
             return "OPEN";
         }
         UUID companyId = TenantContext.requireCompanyId();
-        return periodProjectRepo.findByCompanyIdAndPeriodIdAndProjectId(companyId, periodId, projectId)
+        String all = periodProjectRepo.findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(companyId, periodId, projectId, "ALL")
                 .map(PayrollPeriodProject::getStatus).orElse("OPEN");
+        String group = "ALL".equals(payGroup) ? all
+                : periodProjectRepo.findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(companyId, periodId, projectId, payGroup)
+                .map(PayrollPeriodProject::getStatus).orElse("OPEN");
+        return strongestStatus(all, group);
+    }
+
+    private static String strongestStatus(String a, String b) {
+        if ("CLOSED".equals(a) || "CLOSED".equals(b)) {
+            return "CLOSED";
+        }
+        if ("LOCKED".equals(a) || "LOCKED".equals(b)) {
+            return "LOCKED";
+        }
+        return "OPEN";
     }
 
     /** Block edits when the timesheet's project is locked/closed for its period. */
     private void assertEditable(Timesheet ts) {
         UUID project = employeeProject(ts.getEmployeeId());
-        String st = projectStatus(ts.getPeriodId(), project);
+        String st = projectStatus(ts.getPeriodId(), project, payGroup(ts.getEmployeeId()));
         if (!"OPEN".equals(st)) {
             throw new BusinessRuleException("period.project.locked",
                     "This project is " + st + " for the period — timesheets are read-only.");
@@ -199,23 +259,25 @@ public class TimesheetService {
     }
 
     /** Lock a project for a period after validating its timesheets are ready. */
-    public Map<String, Object> lockProject(UUID periodId, UUID projectId) {
+    public Map<String, Object> lockProject(UUID periodId, UUID projectId, String payGroup) {
         UUID companyId = TenantContext.requireCompanyId();
+        String group = normalizePayGroup(payGroup);
         periodRepo.findById(periodId)
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
-        List<String> blockers = projectReadiness(companyId, periodId, projectId);
+        List<String> blockers = projectReadiness(companyId, periodId, projectId, group);
         if (!blockers.isEmpty()) {
             throw new BusinessRuleException("period.project.not.ready",
                     "Cannot lock — timesheets not ready: " + String.join("  •  ", blockers));
         }
-        setProjectStatus(companyId, periodId, projectId, "LOCKED");
-        return Map.of("status", "LOCKED");
+        setProjectStatus(companyId, periodId, projectId, group, "LOCKED");
+        return Map.of("status", "LOCKED", "payGroup", group);
     }
 
-    public Map<String, Object> closeProject(UUID periodId, UUID projectId) {
+    public Map<String, Object> closeProject(UUID periodId, UUID projectId, String payGroup) {
         UUID companyId = TenantContext.requireCompanyId();
+        String group = normalizePayGroup(payGroup);
         PayrollPeriodProject pp = periodProjectRepo
-                .findByCompanyIdAndPeriodIdAndProjectId(companyId, periodId, projectId).orElse(null);
+                .findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(companyId, periodId, projectId, group).orElse(null);
         if (pp == null || !"LOCKED".equals(pp.getStatus())) {
             throw new BusinessRuleException("period.project.close.state", "Lock the project before closing it.");
         }
@@ -225,20 +287,22 @@ public class TimesheetService {
         return Map.of("status", "CLOSED");
     }
 
-    public Map<String, Object> reopenProject(UUID periodId, UUID projectId) {
+    public Map<String, Object> reopenProject(UUID periodId, UUID projectId, String payGroup) {
         UUID companyId = TenantContext.requireCompanyId();
-        setProjectStatus(companyId, periodId, projectId, "OPEN");
-        return Map.of("status", "OPEN");
+        String group = normalizePayGroup(payGroup);
+        setProjectStatus(companyId, periodId, projectId, group, "OPEN");
+        return Map.of("status", "OPEN", "payGroup", group);
     }
 
-    private void setProjectStatus(UUID companyId, UUID periodId, UUID projectId, String status) {
+    private void setProjectStatus(UUID companyId, UUID periodId, UUID projectId, String payGroup, String status) {
         PayrollPeriodProject pp = periodProjectRepo
-                .findByCompanyIdAndPeriodIdAndProjectId(companyId, periodId, projectId)
+                .findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(companyId, periodId, projectId, payGroup)
                 .orElseGet(() -> {
                     PayrollPeriodProject n = new PayrollPeriodProject();
                     n.setCompanyId(companyId);
                     n.setPeriodId(periodId);
                     n.setProjectId(projectId);
+                    n.setPayGroup(payGroup);
                     return n;
                 });
         pp.setStatus(status);
@@ -252,26 +316,34 @@ public class TimesheetService {
         periodProjectRepo.save(pp);
     }
 
-    /** Reasons a project can't be locked: DRAFT timesheets, or rostered employees with none. */
-    private List<String> projectReadiness(UUID companyId, UUID periodId, UUID projectId) {
+    /** Reasons a project/pay group can't be locked: unapproved timesheets, or rostered employees with none. */
+    private List<String> projectReadiness(UUID companyId, UUID periodId, UUID projectId, String payGroup) {
         PayrollPeriod period = periodRepo.findById(periodId).orElseThrow();
         List<String> blockers = new java.util.ArrayList<>();
-        // existing timesheets for this project that are still DRAFT
+        // existing timesheets for this project/pay group that are not approved yet
         for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
                 companyId, period.getPeriodYear(), period.getPeriodMonth())) {
-            if (projectId.equals(employeeProject(t.getEmployeeId())) && DRAFT.equals(t.getStatus())) {
-                blockers.add(empLabel(t.getEmployeeId()) + " (still DRAFT)");
+            if (projectId.equals(employeeProject(t.getEmployeeId()))
+                    && payGroupMatches(t.getEmployeeId(), payGroup)
+                    && !APPROVED.equals(t.getStatus()) && !LOCKED.equals(t.getStatus())) {
+                blockers.add(empLabel(t.getEmployeeId()) + " (still " + t.getStatus() + ")");
             }
         }
-        // rostered employees of the project with no timesheet at all
+        // rostered employees of the project/pay group with no timesheet at all
         Set<UUID> done = new HashSet<>();
         for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
                 companyId, period.getPeriodYear(), period.getPeriodMonth())) {
-            done.add(t.getEmployeeId());
+            if (payGroupMatches(t.getEmployeeId(), payGroup)) {
+                done.add(t.getEmployeeId());
+            }
         }
         for (EmployeeShift es : employeeShiftRepo.findByCompanyIdOrderByEffectiveFromDesc(companyId)) {
-            if (activeForPeriod(es.getEffectiveFrom(), es.getEffectiveTo(), period)
+            Employee employee = employeeRepo.findById(es.getEmployeeId()).orElse(null);
+            if (employee != null
+                    && activeForPeriod(es.getEffectiveFrom(), es.getEffectiveTo(), period)
+                    && employmentOverlapsPeriod(employee, period)
                     && projectId.equals(employeeProject(es.getEmployeeId()))
+                    && payGroupMatches(es.getEmployeeId(), payGroup)
                     && !done.contains(es.getEmployeeId())) {
                 blockers.add(empLabel(es.getEmployeeId()) + " (no timesheet)");
                 done.add(es.getEmployeeId());
@@ -280,23 +352,59 @@ public class TimesheetService {
         return blockers;
     }
 
+    private boolean payGroupMatches(UUID employeeId, String payGroup) {
+        return "ALL".equals(payGroup) || payGroup.equals(payGroup(employeeId));
+    }
+
+    private String payGroup(UUID employeeId) {
+        return employeeRepo.findById(employeeId)
+                .map(Employee::getPayStatus)
+                .map(TimesheetService::normalizePayGroup)
+                .orElse("ALL");
+    }
+
+    private static String normalizePayGroup(String payGroup) {
+        if (payGroup == null || payGroup.isBlank()) {
+            return "ALL";
+        }
+        String p = payGroup.trim().toUpperCase();
+        if (p.contains("DAILY")) {
+            return "DAILY";
+        }
+        if (p.contains("MONTH")) {
+            return "MONTHLY";
+        }
+        return "ALL";
+    }
+
     /** Per-project lock status for a period (for the Calendar screen). */
     @Transactional(readOnly = true)
-    public List<Map<String, Object>> projectLockStatuses(UUID periodId) {
+    public List<Map<String, Object>> projectLockStatuses(UUID periodId, String payGroup) {
         UUID companyId = TenantContext.requireCompanyId();
+        String group = normalizePayGroup(payGroup);
         Map<UUID, String> byProject = new java.util.LinkedHashMap<>();
         projectRepo.findByCompanyIdOrderByName(companyId).forEach(p ->
-                byProject.put(p.getId(), p.getCode() + " — " + p.getName()));
-        Map<UUID, String> statusByProject = new HashMap<>();
+                byProject.put(p.getId(), p.getCode() + " - " + p.getName()));
+        Map<UUID, String> allStatusByProject = new HashMap<>();
+        Map<UUID, String> groupStatusByProject = new HashMap<>();
         for (PayrollPeriodProject pp : periodProjectRepo.findByPeriodId(periodId)) {
-            statusByProject.put(pp.getProjectId(), pp.getStatus());
+            String ppGroup = normalizePayGroup(pp.getPayGroup());
+            if ("ALL".equals(ppGroup)) {
+                allStatusByProject.put(pp.getProjectId(), pp.getStatus());
+            }
+            if (group.equals(ppGroup)) {
+                groupStatusByProject.put(pp.getProjectId(), pp.getStatus());
+            }
         }
         List<Map<String, Object>> out = new java.util.ArrayList<>();
         for (Map.Entry<UUID, String> e : byProject.entrySet()) {
             Map<String, Object> row = new HashMap<>();
             row.put("projectId", e.getKey().toString());
             row.put("projectLabel", e.getValue());
-            row.put("status", statusByProject.getOrDefault(e.getKey(), "OPEN"));
+            row.put("payGroup", group);
+            row.put("status", strongestStatus(
+                    allStatusByProject.getOrDefault(e.getKey(), "OPEN"),
+                    groupStatusByProject.getOrDefault(e.getKey(), "OPEN")));
             out.add(row);
         }
         return out;
@@ -316,12 +424,42 @@ public class TimesheetService {
         return toFullDto(t);
     }
 
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> eligibleEmployees(UUID periodId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        PayrollPeriod period = periodRepo.findById(periodId)
+                .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
+        Set<UUID> allowed = restrictedProjects();
+        List<Map<String, Object>> out = new ArrayList<>();
+        for (Employee employee : employeeRepo.findByCompanyIdOrderByEmployeeNumber(companyId)) {
+            UUID projectId = employeeProject(employee.getId());
+            if (projectId == null || (allowed != null && !allowed.contains(projectId))) {
+                continue;
+            }
+            if (!employmentOverlapsPeriod(employee, period)) {
+                continue;
+            }
+            Map<String, Object> row = new HashMap<>();
+            row.put("id", employee.getId());
+            row.put("employeeNumber", employee.getEmployeeNumber());
+            row.put("firstName", employee.getFirstName());
+            row.put("lastName", employee.getLastName());
+            row.put("status", employee.getStatus());
+            row.put("hireDate", employee.getHireDate());
+            row.put("terminationDate", employee.getTerminationDate());
+            row.put("projectId", projectId);
+            out.add(row);
+        }
+        return out;
+    }
+
     // --- generation --------------------------------------------------
 
     public TimesheetDto generate(GenerateTimesheetRequest req) {
         UUID companyId = TenantContext.requireCompanyId();
-        employeeRepo.findById(req.getEmployeeId())
+        Employee employee = employeeRepo.findById(req.getEmployeeId())
                 .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + req.getEmployeeId()));
+        assertTimesheetEligible(employee);
         assertProjectAllowed(req.getEmployeeId());
 
         // A timesheet must live inside an OPEN payroll period.
@@ -331,7 +469,12 @@ public class TimesheetService {
             throw new BusinessRuleException("period.not.open",
                     "The period is " + period.getStatus() + ". Reopen it to edit timesheets.");
         }
-        String pst = projectStatus(req.getPeriodId(), employeeProject(req.getEmployeeId()));
+        if (!employmentOverlapsPeriod(employee, period)) {
+            throw new BusinessRuleException("employee.not.active.period",
+                    "Employee was not active during this payroll period.");
+        }
+        UUID employeeProjectId = employeeProject(req.getEmployeeId());
+        String pst = projectStatus(req.getPeriodId(), employeeProjectId, payGroup(req.getEmployeeId()));
         if (!"OPEN".equals(pst)) {
             throw new BusinessRuleException("period.project.locked",
                     "This employee's project is " + pst + " for the period — can't generate.");
@@ -344,8 +487,10 @@ public class TimesheetService {
                 ? resolveShift(companyId, req.getShiftId())
                 : resolveRosterShift(companyId, req.getEmployeeId(), period.getStartDate());
         if (shift == null) {
-            shift = resolveShift(companyId, null);
+            throw new BusinessRuleException("timesheet.shift.required",
+                    "Assign the employee to a shift for this project before generating a timesheet.");
         }
+        validateShiftProject(shift, employeeProjectId);
 
         Timesheet existing = timesheetRepo
                 .findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(
@@ -401,15 +546,15 @@ public class TimesheetService {
 
             String code;
             if (isWeeklyOff(date, weeklyOff)) {
-                code = "REST";
+                code = "W";
                 day.setPlannedHours(BigDecimal.ZERO);
                 day.setWorkedHours(BigDecimal.ZERO);
             } else if (holidays.contains(date)) {
-                code = "HOLIDAY";
+                code = "H";
                 day.setPlannedHours(BigDecimal.ZERO);
                 day.setWorkedHours(BigDecimal.ZERO);
             } else {
-                code = "REGULAR";
+                code = "N";
                 day.setPlannedHours(standard);
                 day.setWorkedHours(standard);
                 if (shift != null && shift.getStartTime() != null && shift.getEndTime() != null) {
@@ -420,6 +565,17 @@ public class TimesheetService {
             TimeType tt = typesByCode.get(code);
             day.setTimeTypeId(tt != null ? tt.getId() : null);
             day.setOtHours(BigDecimal.ZERO);
+            if (!isEmployedOn(employee, date)) {
+                TimeType nt = typesByCode.get("U");
+                day.setTimeTypeId(nt != null ? nt.getId() : null);
+                day.setPlannedHours(BigDecimal.ZERO);
+                day.setWorkedHours(BigDecimal.ZERO);
+                day.setOtHours(BigDecimal.ZERO);
+                day.setActualIn(null);
+                day.setActualOut(null);
+                day.setProjectId(null);
+                day.setCostCodeId(null);
+            }
             dayRepo.save(day);
         }
 
@@ -439,7 +595,10 @@ public class TimesheetService {
         Set<UUID> allowed = restrictedProjects();
         Set<UUID> emps = new java.util.LinkedHashSet<>();
         for (EmployeeShift es : employeeShiftRepo.findByCompanyIdOrderByEffectiveFromDesc(companyId)) {
+            Employee emp = employeeRepo.findById(es.getEmployeeId()).orElse(null);
             if (activeForPeriod(es.getEffectiveFrom(), es.getEffectiveTo(), period)
+                    && isTimesheetEligible(emp)
+                    && employmentOverlapsPeriod(emp, period)
                     && (allowed == null || allowed.contains(employeeProject(es.getEmployeeId())))) {
                 emps.add(es.getEmployeeId());
             }
@@ -494,6 +653,17 @@ public class TimesheetService {
                 messages.add(empLabel(empId) + " — outside your project scope.");
                 continue;
             }
+            Employee emp = employeeRepo.findById(empId).orElse(null);
+            if (!isTimesheetEligible(emp)) {
+                skipped++;
+                messages.add(empLabel(empId) + " - not assigned to a project.");
+                continue;
+            }
+            if (!employmentOverlapsPeriod(emp, period)) {
+                skipped++;
+                messages.add(empLabel(empId) + " - outside the employee service dates.");
+                continue;
+            }
             boolean exists = timesheetRepo.findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(
                     companyId, empId, period.getPeriodYear(), period.getPeriodMonth()).isPresent();
             if (exists) {
@@ -516,16 +686,31 @@ public class TimesheetService {
     }
 
     /** Submit every DRAFT timesheet in the period. */
-    public Map<String, Integer> submitAll(int year, int month) {
+    public Map<String, Integer> submitAll(int year, int month, UUID projectId) {
         UUID companyId = TenantContext.requireCompanyId();
+        Set<UUID> allowed = restrictedProjects();
         int submitted = 0;
         for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month)) {
-            if (DRAFT.equals(t.getStatus())) {
+            if (DRAFT.equals(t.getStatus()) && matchesProjectScope(t, projectId, allowed)) {
                 submit(t.getId());
                 submitted++;
             }
         }
         return Map.of("submitted", submitted);
+    }
+
+    /** Approve every SUBMITTED timesheet in the period. */
+    public Map<String, Integer> approveAll(int year, int month, UUID projectId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        Set<UUID> allowed = restrictedProjects();
+        int approved = 0;
+        for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month)) {
+            if (SUBMITTED.equals(t.getStatus()) && matchesProjectScope(t, projectId, allowed)) {
+                approve(t.getId());
+                approved++;
+            }
+        }
+        return Map.of("approved", approved);
     }
 
     // --- editing -----------------------------------------------------
@@ -535,6 +720,8 @@ public class TimesheetService {
         Timesheet ts = getEntity(timesheetId);
         requireDraft(ts);
         assertEditable(ts);
+        Employee employee = employeeRepo.findById(ts.getEmployeeId())
+                .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + ts.getEmployeeId()));
 
         Map<UUID, TimesheetDay> byId = new HashMap<>();
         for (TimesheetDay d : dayRepo.findByTimesheetIdOrderByWorkDate(timesheetId)) {
@@ -543,12 +730,23 @@ public class TimesheetService {
         Map<UUID, Shift> shiftCache = new HashMap<>();
         Map<UUID, TimeType> typeCache = new HashMap<>();
         Map<UUID, Map<String, ShiftDay>> weekCache = new HashMap<>();
+        UUID notEmployedTypeId = timeTypeRepo.findByCompanyIdOrderBySortOrderAscNameAsc(ts.getCompanyId()).stream()
+                .filter(t -> "U".equals(t.getCode()))
+                .findFirst()
+                .map(TimeType::getId)
+                .orElse(null);
         boolean monthly = isMonthlyPaid(ts);
         boolean otEligibleSave = isOtEligible(ts);
 
         for (TimesheetDayDto dto : dayDtos) {
             TimesheetDay day = byId.get(dto.getId());
             if (day == null) {
+                continue;
+            }
+            if (!isEmployedOn(employee, day.getWorkDate())) {
+                forceNotEmployedDay(day, notEmployedTypeId);
+                dayRepo.save(day);
+                saveDayCosts(day.getId(), List.of());
                 continue;
             }
             day.setShiftId(dto.getShiftId());
@@ -565,6 +763,7 @@ public class TimesheetService {
             day.setCostCodeId(dto.getCostCodeId());
             day.setRemarks(dto.getRemarks());
             recomputeDay(day, ts, shiftCache, typeCache, weekCache, monthly, otEligibleSave);
+            validateDayAllocation(day, dto.getCosts());
             validateCostSplit(day, dto.getCosts());
             dayRepo.save(day);
             saveDayCosts(day.getId(), dto.getCosts());
@@ -573,24 +772,74 @@ public class TimesheetService {
         return toFullDto(timesheetRepo.save(ts));
     }
 
+    private void forceNotEmployedDay(TimesheetDay day, UUID notEmployedTypeId) {
+        day.setTimeTypeId(notEmployedTypeId);
+        day.setPlannedHours(BigDecimal.ZERO);
+        day.setActualIn(null);
+        day.setActualOut(null);
+        day.setWorkedHours(BigDecimal.ZERO);
+        day.setOtHours(BigDecimal.ZERO);
+        day.setNormalHours(BigDecimal.ZERO);
+        day.setDeclaredOtHours(BigDecimal.ZERO);
+        day.setUndeclaredOtHours(BigDecimal.ZERO);
+        day.setIneligibleOtHours(BigDecimal.ZERO);
+        day.setProjectId(null);
+        day.setCostCodeId(null);
+        day.setRemarks(null);
+    }
+
+    /** A worked day needs a default allocation unless detailed cost splits replace it. */
+    private void validateDayAllocation(TimesheetDay day, List<TimesheetDayCostDto> costs) {
+        BigDecimal worked = day.getWorkedHours() != null ? day.getWorkedHours() : BigDecimal.ZERO;
+        if (worked.compareTo(BigDecimal.ZERO) <= 0 || hasActiveCostRows(costs)) {
+            return;
+        }
+        if (day.getProjectId() == null || day.getCostCodeId() == null) {
+            throw new BusinessRuleException("timesheet.allocation.required",
+                    "Day " + day.getWorkDate() + ": worked hours require a project and cost code.");
+        }
+    }
+
     /** When a day is split across cost codes, the split must add up to the worked hours. */
     private void validateCostSplit(TimesheetDay day, List<TimesheetDayCostDto> costs) {
-        if (costs == null || costs.isEmpty()) {
+        if (!hasActiveCostRows(costs)) {
             return;
         }
         BigDecimal sum = BigDecimal.ZERO;
         for (TimesheetDayCostDto c : costs) {
-            if (c.getCostCodeId() == null && c.getProjectId() == null) {
+            if (!isActiveCostRow(c)) {
                 continue;
+            }
+            if (c.getProjectId() == null || c.getCostCodeId() == null) {
+                throw new BusinessRuleException("timesheet.cost.split.required",
+                        "Day " + day.getWorkDate() + ": each cost split line requires a project and cost code.");
             }
             sum = sum.add(c.getHours() != null ? c.getHours() : BigDecimal.ZERO);
         }
-        BigDecimal worked = day.getWorkedHours() != null ? day.getWorkedHours() : BigDecimal.ZERO;
-        if (sum.subtract(worked).abs().compareTo(new BigDecimal("0.01")) > 0) {
+        BigDecimal allocatable = allocatableCostHours(day);
+        if (sum.subtract(allocatable).abs().compareTo(new BigDecimal("0.01")) > 0) {
             throw new BusinessRuleException("timesheet.cost.split.mismatch",
                     "Day " + day.getWorkDate() + ": cost-code hours (" + sum
-                            + ") must equal the worked hours (" + worked + ").");
+                            + ") must equal the costed hours (" + allocatable + ").");
         }
+    }
+
+    private static BigDecimal allocatableCostHours(TimesheetDay day) {
+        BigDecimal normal = day.getNormalHours() != null ? day.getNormalHours() : BigDecimal.ZERO;
+        BigDecimal overtime = day.getOtHours() != null ? day.getOtHours() : BigDecimal.ZERO;
+        return normal.add(overtime);
+    }
+
+    private static boolean hasActiveCostRows(List<TimesheetDayCostDto> costs) {
+        if (costs == null || costs.isEmpty()) {
+            return false;
+        }
+        return costs.stream().anyMatch(TimesheetService::isActiveCostRow);
+    }
+
+    private static boolean isActiveCostRow(TimesheetDayCostDto c) {
+        return c != null && (c.getProjectId() != null || c.getCostCodeId() != null
+                || (c.getHours() != null && c.getHours().compareTo(BigDecimal.ZERO) != 0));
     }
 
     /** Replace a day's cost-code allocation rows (legacy PAYIN HR_CC1..8). */
@@ -600,7 +849,7 @@ public class TimesheetService {
             return;
         }
         for (TimesheetDayCostDto c : costs) {
-            if (c.getCostCodeId() == null && c.getProjectId() == null) {
+            if (!isActiveCostRow(c)) {
                 continue;
             }
             TimesheetDayCost e = new TimesheetDayCost();
@@ -653,6 +902,7 @@ public class TimesheetService {
         if (LOCKED.equals(ts.getStatus())) {
             throw new BusinessRuleException("timesheet.reopen.locked", "A LOCKED timesheet cannot be reopened.");
         }
+        assertEditable(ts);
         if (DRAFT.equals(ts.getStatus())) {
             return toFullDto(ts);
         }
@@ -696,11 +946,13 @@ public class TimesheetService {
         BigDecimal worked = day.getWorkedHours() != null ? day.getWorkedHours() : BigDecimal.ZERO;
 
         String category = "REGULAR";
+        boolean paid = true;
         if (day.getTimeTypeId() != null) {
             TimeType tt = typeCache.computeIfAbsent(day.getTimeTypeId(),
                     k -> timeTypeRepo.findById(k).orElse(null));
             if (tt != null && tt.getCategory() != null) {
                 category = tt.getCategory();
+                paid = tt.isPaid();
             }
         }
 
@@ -713,14 +965,14 @@ public class TimesheetService {
         BigDecimal normal;
         BigDecimal ot;
         if ("REST".equals(category) || "HOLIDAY".equals(category)) {
-            // Weekend/holiday: paid normal hours for monthly-paid staff (legacy Hr_fri/Hr_hol),
-            // 0 for daily-paid. Any hours actually worked on the day are premium overtime.
-            normal = isMonthly ? sampleNormal : BigDecimal.ZERO;
+            // Weekend/holiday are paid time types. Any hours actually worked on the
+            // day are premium overtime.
+            normal = paid && isMonthly ? sampleNormal : BigDecimal.ZERO;
             ot = worked;
         } else if (isNonWorking(category)) {
-            // Leave / unpaid / absence / sick / accident / R&R = not worked.
-            // The hours belong to that category, not to "worked".
-            normal = BigDecimal.ZERO;
+            // Paid leave/absence-like types keep planned hours for payroll;
+            // unpaid types become deduction hours.
+            normal = paid ? sampleNormal : BigDecimal.ZERO;
             ot = BigDecimal.ZERO;
             worked = BigDecimal.ZERO;
             day.setWorkedHours(BigDecimal.ZERO);
@@ -761,7 +1013,8 @@ public class TimesheetService {
 
     private static boolean isNonWorking(String category) {
         return "ABSENCE".equals(category) || "LEAVE".equals(category) || "SICK".equals(category)
-                || "ACCIDENT".equals(category) || "RR".equals(category) || "UNPAID".equals(category);
+                || "ACCIDENT".equals(category) || "RR".equals(category) || "UNPAID".equals(category)
+                || "NOT_EMPLOYED".equals(category);
     }
 
     /** Sample-week row for the weekday of {@code date} on the given shift. */
@@ -841,11 +1094,25 @@ public class TimesheetService {
 
     private Shift resolveShift(UUID companyId, UUID shiftId) {
         if (shiftId != null) {
-            return shiftRepo.findById(shiftId)
+            Shift shift = shiftRepo.findById(shiftId)
                     .orElseThrow(() -> new ResourceNotFoundException("Shift not found: " + shiftId));
+            if (!companyId.equals(shift.getCompanyId())) {
+                throw new ResourceNotFoundException("Shift not found: " + shiftId);
+            }
+            return shift;
         }
-        List<Shift> shifts = shiftRepo.findByCompanyIdOrderByCode(companyId);
-        return shifts.isEmpty() ? null : shifts.get(0);
+        return null;
+    }
+
+    private void validateShiftProject(Shift shift, UUID projectId) {
+        if (!shiftProjectAllowed(shift, projectId)) {
+            throw new BusinessRuleException("timesheet.shift.project.mismatch",
+                    "Shift must be shared or belong to the employee's assigned project.");
+        }
+    }
+
+    private static boolean shiftProjectAllowed(Shift shift, UUID projectId) {
+        return shift == null || shift.getProjectId() == null || shift.getProjectId().equals(projectId);
     }
 
     /** The shift the employee is rostered on, effective on the given date. */
@@ -869,9 +1136,10 @@ public class TimesheetService {
     /** Default project/cost code from the employee's most recent assignment. */
     private UUID[] defaultAllocation(UUID employeeId) {
         List<Assignment> assignments = assignmentRepo.findByEmployeeIdOrderByEffectiveFromDesc(employeeId);
-        if (!assignments.isEmpty()) {
-            Assignment a = assignments.get(0);
-            return new UUID[]{a.getProjectId(), a.getCostCodeId()};
+        for (Assignment a : assignments) {
+            if (a.getProjectId() != null && "ACTIVE".equalsIgnoreCase(a.getStatus())) {
+                return new UUID[]{a.getProjectId(), a.getCostCodeId()};
+            }
         }
         return new UUID[]{null, null};
     }
@@ -898,11 +1166,15 @@ public class TimesheetService {
         Map<String, int[]> daysByCat = new HashMap<>();
         Map<String, BigDecimal> hoursByCat = new HashMap<>();
         Map<String, Boolean> paidByCat = new HashMap<>();
+        Map<AllocationKey, BigDecimal> allocationHours = new HashMap<>();
 
         BigDecimal normal = BigDecimal.ZERO;
         BigDecimal ot = BigDecimal.ZERO;
+        BigDecimal restHours = BigDecimal.ZERO;
+        BigDecimal holidayHours = BigDecimal.ZERO;
         BigDecimal absenceHours = BigDecimal.ZERO;
         BigDecimal leaveHours = BigDecimal.ZERO;
+        BigDecimal standardDayHours = BigDecimal.ZERO;
         int worked = 0, absence = 0, leave = 0, rest = 0, holiday = 0, total = 0;
 
         for (TimesheetDay day : dayRepo.findByTimesheetIdOrderByWorkDate(timesheetId)) {
@@ -921,13 +1193,16 @@ public class TimesheetService {
             BigDecimal dayOt = nz(day.getOtHours());
             BigDecimal dayWorked = nz(day.getWorkedHours());
             BigDecimal dayPlanned = nz(day.getPlannedHours());
-            normal = normal.add(dayNormal);
+            if (standardDayHours.compareTo(BigDecimal.ZERO) == 0 && dayNormal.compareTo(BigDecimal.ZERO) > 0) {
+                standardDayHours = dayNormal;
+            }
             ot = ot.add(dayOt);
+            collectAllocationHours(day, allocationHours);
 
             // category lines: worked categories accrue worked hours, non-working
             // categories (absence/leave) accrue the planned (would-have-worked) hours.
             BigDecimal lineHours = isNonWorking(category) ? dayPlanned
-                    : (("REST".equals(category) || "HOLIDAY".equals(category)) ? dayWorked : dayNormal);
+                    : (("REST".equals(category) || "HOLIDAY".equals(category)) ? dayNormal : dayNormal);
             daysByCat.computeIfAbsent(category, k -> new int[1])[0]++;
             hoursByCat.merge(category, lineHours, BigDecimal::add);
             paidByCat.putIfAbsent(category, paid);
@@ -935,15 +1210,30 @@ public class TimesheetService {
             switch (category) {
                 case "ABSENCE", "UNPAID" -> { absence++; absenceHours = absenceHours.add(dayPlanned); }
                 case "LEAVE", "SICK", "ACCIDENT" -> { leave++; leaveHours = leaveHours.add(dayPlanned); }
-                case "REST" -> rest++;
-                case "HOLIDAY" -> holiday++;
-                default -> { if (dayWorked.signum() > 0) worked++; }
+                case "REST" -> { rest++; restHours = restHours.add(dayNormal); }
+                case "HOLIDAY" -> { holiday++; holidayHours = holidayHours.add(dayNormal); }
+                default -> {
+                    normal = normal.add(dayNormal);
+                    if (dayWorked.signum() > 0) worked++;
+                }
+            }
+        }
+        if (isMonthlyPaid(ts) && standardDayHours.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal maxRegularHours = new BigDecimal("30")
+                    .subtract(BigDecimal.valueOf(rest + holiday))
+                    .max(BigDecimal.ZERO)
+                    .multiply(standardDayHours);
+            if (normal.compareTo(maxRegularHours) > 0) {
+                normal = maxRegularHours;
+                hoursByCat.put("REGULAR", normal);
             }
         }
 
         dto.setNormalHours(normal);
         dto.setOvertimeHours(ot);
-        dto.setWorkedHours(normal.add(ot));
+        dto.setRestHours(restHours);
+        dto.setHolidayHours(holidayHours);
+        dto.setWorkedHours(normal.add(restHours).add(holidayHours).add(ot));
         dto.setAbsenceHours(absenceHours);
         dto.setLeaveHours(leaveHours);
         dto.setWorkedDays(worked);
@@ -962,8 +1252,51 @@ public class TimesheetService {
         }
         lines.sort((a, b) -> a.getCategory().compareTo(b.getCategory()));
         dto.setLines(lines);
+        dto.setAllocationLines(toAllocationLines(allocationHours));
         return dto;
     }
+
+    private void collectAllocationHours(TimesheetDay day, Map<AllocationKey, BigDecimal> allocationHours) {
+        List<TimesheetDayCost> costs = dayCostRepo.findByTimesheetDayId(day.getId());
+        if (!costs.isEmpty()) {
+            for (TimesheetDayCost c : costs) {
+                if (c.getProjectId() != null && c.getCostCodeId() != null) {
+                    allocationHours.merge(new AllocationKey(c.getProjectId(), c.getCostCodeId()), nz(c.getHours()), BigDecimal::add);
+                }
+            }
+            return;
+        }
+
+        BigDecimal hours = allocatableCostHours(day);
+        if (hours.signum() > 0 && day.getProjectId() != null && day.getCostCodeId() != null) {
+            allocationHours.merge(new AllocationKey(day.getProjectId(), day.getCostCodeId()), hours, BigDecimal::add);
+        }
+    }
+
+    private List<TimesheetSummaryDto.AllocationLine> toAllocationLines(Map<AllocationKey, BigDecimal> allocationHours) {
+        Map<UUID, Project> projects = new HashMap<>();
+        Map<UUID, CostCode> costCodes = new HashMap<>();
+        List<TimesheetSummaryDto.AllocationLine> out = new ArrayList<>();
+        for (Map.Entry<AllocationKey, BigDecimal> e : allocationHours.entrySet()) {
+            AllocationKey key = e.getKey();
+            Project p = projects.computeIfAbsent(key.projectId(), id -> projectRepo.findById(id).orElse(null));
+            CostCode c = costCodes.computeIfAbsent(key.costCodeId(), id -> costCodeRepo.findById(id).orElse(null));
+            out.add(new TimesheetSummaryDto.AllocationLine(
+                    key.projectId(), p != null ? p.getCode() : null, p != null ? p.getName() : null,
+                    key.costCodeId(), c != null ? c.getCode() : null, c != null ? c.getName() : null,
+                    e.getValue()));
+        }
+        out.sort((a, b) -> {
+            int pc = String.valueOf(a.getProjectCode()).compareTo(String.valueOf(b.getProjectCode()));
+            if (pc != 0) {
+                return pc;
+            }
+            return String.valueOf(a.getCostCode()).compareTo(String.valueOf(b.getCostCode()));
+        });
+        return out;
+    }
+
+    private record AllocationKey(UUID projectId, UUID costCodeId) {}
 
     private static BigDecimal nz(BigDecimal v) {
         return v != null ? v : BigDecimal.ZERO;
@@ -1052,3 +1385,4 @@ public class TimesheetService {
         return dto;
     }
 }
+

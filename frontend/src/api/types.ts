@@ -141,6 +141,7 @@ export interface OrganizationUnit {
 export interface Employee {
   id?: string;
   companyId?: string;
+  projectId?: string;
   employeeNumber: string;
   firstName: string;
   lastName: string;
@@ -174,6 +175,7 @@ export interface EmployeeSummary {
   notActive: number;
   monthly: number;
   daily: number;
+  withoutProject: number;
 }
 
 export interface LookupValue {
@@ -372,6 +374,16 @@ export interface TimesheetSummaryLine {
   paid: boolean;
 }
 
+export interface TimesheetAllocationLine {
+  projectId: string;
+  projectCode?: string;
+  projectName?: string;
+  costCodeId: string;
+  costCode?: string;
+  costCodeName?: string;
+  hours: number;
+}
+
 export interface TimesheetSummary {
   timesheetId: string;
   employeeId: string;
@@ -382,6 +394,8 @@ export interface TimesheetSummary {
   normalHours: number;
   overtimeHours: number;
   workedHours: number;
+  restHours: number;
+  holidayHours: number;
   absenceHours: number;
   leaveHours: number;
   workedDays: number;
@@ -391,6 +405,7 @@ export interface TimesheetSummary {
   holidayDays: number;
   totalDays: number;
   lines: TimesheetSummaryLine[];
+  allocationLines: TimesheetAllocationLine[];
 }
 
 export interface TimesheetDayCost {
@@ -439,6 +454,21 @@ export interface Timesheet {
   approvedAt?: string;
   approvedBy?: string;
   days: TimesheetDay[];
+}
+
+export interface TimeTypePayrollRule {
+  id?: string;
+  timeTypeId: string;
+  payrollComponentId: string;
+  payrollComponentCode?: string;
+  payrollComponentName?: string;
+  action: string;
+  percent: number;
+  basis: string;
+  affectsOvertime: boolean;
+  processSeparately: boolean;
+  sortOrder: number;
+  remarks?: string;
 }
 
 // --- Crew / Foreman + Timekeeper (FTDD Vol.1 Ch.4) ---
@@ -572,4 +602,68 @@ export interface PayrollComponent {
   effectiveTo?: string;
   status?: string;
   remarks?: string;
+}
+
+export interface PayrollResultLine {
+  id?: string;
+  componentCode?: string;
+  componentName: string;
+  componentType: string;
+  category?: string;
+  quantity?: number;
+  rate?: number;
+  amount: number;
+  source?: string;
+}
+
+export interface PayrollResult {
+  id?: string;
+  employeeId: string;
+  employeeNumber?: string;
+  employeeName?: string;
+  payStatus?: string;
+  workedDays: number;
+  normalHours: number;
+  otHours: number;
+  gross: number;
+  totalEarnings: number;
+  totalDeductions: number;
+  net: number;
+  status?: string;
+  message?: string;
+  lines: PayrollResultLine[];
+}
+
+export interface PayrollRun {
+  id?: string;
+  periodId: string;
+  periodName?: string;
+  periodYear?: number;
+  periodMonth?: number;
+  periodStartDate?: string;
+  periodEndDate?: string;
+  payDate?: string;
+  projectId?: string;
+  payGroup?: string;
+  runType?: string;
+  status?: string;
+  currencyCode?: string;
+  calculatedAt?: string;
+  notes?: string;
+  totalGross: number;
+  totalNet: number;
+  employeeCount: number;
+  results: PayrollResult[];
+}
+
+export interface PayrollRule {
+  id?: string;
+  payGroup: string;
+  payItemBasis: string;
+  otMultiplier: number;
+  restDayOtMultiplier: number;
+  standardHoursPerDay: number;
+  weeklyRestPaid: boolean;
+  monthDivisor: number;
+  status?: string;
 }

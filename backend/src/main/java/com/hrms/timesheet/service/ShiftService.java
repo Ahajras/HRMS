@@ -35,9 +35,11 @@ public class ShiftService {
     }
 
     @Transactional(readOnly = true)
-    public List<ShiftDto> findAll() {
+    public List<ShiftDto> findAll(UUID projectId) {
         UUID companyId = TenantContext.requireCompanyId();
-        return repository.findByCompanyIdOrderByCode(companyId).stream().map(this::toDto).toList();
+        return repository.findByCompanyIdOrderByCode(companyId).stream()
+                .filter(s -> projectId == null || s.getProjectId() == null || projectId.equals(s.getProjectId()))
+                .map(this::toDto).toList();
     }
 
     public ShiftDto create(ShiftDto dto) {

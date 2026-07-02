@@ -9,14 +9,19 @@ import org.springframework.data.repository.query.Param;
 
 import java.util.Optional;
 import java.util.UUID;
+import java.util.List;
 
 public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
 
     Page<Employee> findByCompanyId(UUID companyId, Pageable pageable);
 
+    List<Employee> findByCompanyIdOrderByEmployeeNumber(UUID companyId);
+
     Optional<Employee> findByCompanyIdAndEmployeeNumber(UUID companyId, String employeeNumber);
 
     boolean existsByCompanyIdAndEmployeeNumber(UUID companyId, String employeeNumber);
+
+    boolean existsByCompanyIdAndEmployeeNumberAndIdNot(UUID companyId, String employeeNumber, UUID id);
 
     /**
      * Free-text search across employee identity fields and the action sheet
@@ -58,6 +63,17 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
               and (:projectId is null or exists (
                     select 1 from Assignment a
                     where a.employeeId = e.id and a.projectId = :projectId))
+              and (:activeOnly = false or upper(coalesce(e.status, '')) = 'ACTIVE')
+              and (:assignedOnly = false or exists (
+                    select 1 from Assignment a
+                    where a.employeeId = e.id
+                      and a.projectId is not null
+                      and upper(coalesce(a.status, '')) = 'ACTIVE'))
+              and (:unassigned = false or not exists (
+                    select 1 from Assignment a
+                    where a.employeeId = e.id
+                      and a.projectId is not null
+                      and upper(coalesce(a.status, '')) = 'ACTIVE'))
               and (:q is null or :q = '' or (
                     lower(e.employeeNumber) like lower(concat('%', :q, '%'))
                  or lower(e.firstName) like lower(concat('%', :q, '%'))
@@ -77,7 +93,11 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
             """)
     Page<Employee> searchFiltered(@Param("companyId") UUID companyId, @Param("q") String q,
                                   @Param("payStatus") String payStatus,
-                                  @Param("projectId") UUID projectId, Pageable pageable);
+                                  @Param("projectId") UUID projectId,
+                                  @Param("activeOnly") boolean activeOnly,
+                                  @Param("assignedOnly") boolean assignedOnly,
+                                  @Param("unassigned") boolean unassigned,
+                                  Pageable pageable);
 
     /**
      * Headcount summary for the same filter scope (company + optional free-text +
@@ -91,7 +111,13 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
               count(e),
               sum(case when upper(coalesce(e.status, '')) = 'ACTIVE' then 1 else 0 end),
               sum(case when lower(coalesce(e.payStatus, '')) like '%monthly%' then 1 else 0 end),
-              sum(case when lower(coalesce(e.payStatus, '')) like '%daily%' then 1 else 0 end)
+              sum(case when lower(coalesce(e.payStatus, '')) like '%daily%' then 1 else 0 end),
+              sum(case when not exists (
+                    select 1 from Assignment a
+                    where a.employeeId = e.id
+                      and a.projectId is not null
+                      and upper(coalesce(a.status, '')) = 'ACTIVE'
+                  ) then 1 else 0 end)
             from Employee e
             where e.companyId = :companyId
               and (:projectId is null or exists (

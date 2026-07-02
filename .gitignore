@@ -36,3 +36,4 @@ Thumbs.db
 
 # Docker volumes (local data)
 infra/data/
+*.bak.*

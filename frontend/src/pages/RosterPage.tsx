@@ -33,13 +33,16 @@ export default function RosterPage() {
 
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
   const { data: employees } = useQuery({
-    queryKey: ["employeesByProject", projectId || "all"],
-    queryFn: () => employeeApi.list(0, 500, undefined, undefined, projectId || undefined),
+    queryKey: ["employeesByProject", projectId],
+    queryFn: () => employeeApi.list(0, 500, undefined, undefined, projectId, { assignedOnly: true }),
+    enabled: !!projectId,
   });
-  const { data: allShifts = [] } = useQuery({ queryKey: ["shifts"], queryFn: shiftApi.list });
+  const { data: shifts = [] } = useQuery({
+    queryKey: ["shifts", projectId],
+    queryFn: () => shiftApi.list(projectId),
+    enabled: !!projectId,
+  });
   const { data: roster = [] } = useQuery({ queryKey: ["roster"], queryFn: () => employeeShiftApi.list() });
-  // Shifts of the chosen project (plus shared shifts with no project).
-  const shifts = allShifts.filter((s) => !projectId || !s.projectId || s.projectId === projectId);
 
   const save = useMutation({
     mutationFn: (r: EmployeeShift) => (r.id ? employeeShiftApi.update(r.id, r) : employeeShiftApi.create(r)),
@@ -64,6 +67,7 @@ export default function RosterPage() {
   const empList = (employees?.content ?? []).filter((e) =>
     match(`${e.employeeNumber ?? ""} ${e.firstName ?? ""} ${e.lastName ?? ""}`));
   const filteredRoster = roster.filter((r) =>
+    (!projectId || empList.some((e) => e.id === r.employeeId)) &&
     match(`${r.employeeNumber ?? ""} ${r.employeeName ?? ""} ${r.shiftCode ?? ""}`));
   const toggle = (id: string) =>
     setSelected((prev) => {
@@ -92,18 +96,24 @@ export default function RosterPage() {
       </Typography>
 
       <Stack direction="row" spacing={1.5} mb={2}>
-        <TextField select size="small" label="Project" value={projectId} onChange={(e) => { setProjectId(e.target.value); setSelected(new Set()); }} sx={{ minWidth: 240 }}>
-          <MenuItem value="">All projects</MenuItem>
+        <TextField select size="small" label="Project" value={projectId} onChange={(e) => { setProjectId(e.target.value); setSelected(new Set()); setBulkShift(""); setForm(EMPTY); }} sx={{ minWidth: 240 }}>
+          <MenuItem value="">Pick project</MenuItem>
           {projects.map((p) => <MenuItem key={p.id} value={p.id}>{p.code} — {p.name}</MenuItem>)}
         </TextField>
         <TextField size="small" fullWidth placeholder="Search employee or shift" value={q} onChange={(e) => setQ(e.target.value)} />
       </Stack>
 
+      {!projectId && (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Pick a project first to load that project's employees and matching shifts.
+        </Alert>
+      )}
+
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
         <Typography variant="subtitle2" gutterBottom>Bulk assign (fast)</Typography>
         <Grid container spacing={1.5} alignItems="center" mb={1}>
           <Grid item xs={12} sm={4}>
-            <TextField select fullWidth size="small" label="Shift" value={bulkShift} onChange={(e) => setBulkShift(e.target.value)}>
+            <TextField select fullWidth size="small" label="Shift" value={bulkShift} disabled={!projectId} onChange={(e) => setBulkShift(e.target.value)}>
               {shifts.map((s) => <MenuItem key={s.id} value={s.id}>{s.code} — {s.name}</MenuItem>)}
             </TextField>
           </Grid>
@@ -111,7 +121,7 @@ export default function RosterPage() {
             <TextField fullWidth size="small" type="date" label="From" InputLabelProps={{ shrink: true }} value={bulkDate} onChange={(e) => setBulkDate(e.target.value)} />
           </Grid>
           <Grid item xs={6} sm={5}>
-            <Button variant="contained" disabled={!bulkShift || selected.size === 0 || bulk.isPending} onClick={() => bulk.mutate()}>
+            <Button variant="contained" disabled={!projectId || !bulkShift || selected.size === 0 || bulk.isPending} onClick={() => bulk.mutate()}>
               Assign {selected.size} selected
             </Button>
           </Grid>
@@ -134,6 +144,9 @@ export default function RosterPage() {
                   <TableCell>{e.firstName} {e.lastName}</TableCell>
                 </TableRow>
               ))}
+              {projectId && empList.length === 0 && (
+                <TableRow><TableCell colSpan={3}><Typography variant="body2" color="text.secondary" p={1}>No employees assigned to this project.</Typography></TableCell></TableRow>
+              )}
             </TableBody>
           </Table>
         </Box>
@@ -143,14 +156,14 @@ export default function RosterPage() {
         <Typography variant="subtitle2" gutterBottom>{form.id ? "Edit assignment" : "Assign employee to shift"}</Typography>
         <Grid container spacing={1.5} alignItems="center">
           <Grid item xs={12} sm={4}>
-            <TextField select fullWidth size="small" label="Employee" value={form.employeeId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}>
+            <TextField select fullWidth size="small" label="Employee" value={form.employeeId} disabled={!projectId} onChange={(e) => setForm({ ...form, employeeId: e.target.value })}>
               {(employees?.content ?? []).map((emp) => (
                 <MenuItem key={emp.id} value={emp.id}>{emp.employeeNumber} — {emp.firstName} {emp.lastName}</MenuItem>
               ))}
             </TextField>
           </Grid>
           <Grid item xs={12} sm={3}>
-            <TextField select fullWidth size="small" label="Shift" value={form.shiftId} onChange={(e) => setForm({ ...form, shiftId: e.target.value })}>
+            <TextField select fullWidth size="small" label="Shift" value={form.shiftId} disabled={!projectId} onChange={(e) => setForm({ ...form, shiftId: e.target.value })}>
               {shifts.map((s) => <MenuItem key={s.id} value={s.id}>{s.code} — {s.name}</MenuItem>)}
             </TextField>
           </Grid>
@@ -162,7 +175,7 @@ export default function RosterPage() {
           </Grid>
           <Grid item xs={12} sm={1}>
             <Stack direction="row" spacing={1}>
-              <Button startIcon={<AddIcon />} variant="contained" disabled={!form.employeeId || !form.shiftId || save.isPending} onClick={() => save.mutate(form)}>
+              <Button startIcon={<AddIcon />} variant="contained" disabled={!projectId || !form.employeeId || !form.shiftId || save.isPending} onClick={() => save.mutate(form)}>
                 {form.id ? "Save" : "Add"}
               </Button>
               {form.id && <Button onClick={() => setForm(EMPTY)}>Cancel</Button>}

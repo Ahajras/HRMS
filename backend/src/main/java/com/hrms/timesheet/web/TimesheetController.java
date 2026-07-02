@@ -35,8 +35,9 @@ public class TimesheetController {
     }
 
     @GetMapping
-    public List<TimesheetDto> listByPeriod(@RequestParam int year, @RequestParam int month) {
-        return service.listByPeriod(year, month);
+    public List<TimesheetDto> listByPeriod(@RequestParam int year, @RequestParam int month,
+                                           @RequestParam(required = false) UUID projectId) {
+        return service.listByPeriod(year, month, projectId);
     }
 
     @GetMapping("/{id}")
@@ -47,6 +48,11 @@ public class TimesheetController {
     @GetMapping("/{id}/summary")
     public TimesheetSummaryDto summary(@PathVariable UUID id) {
         return service.summarize(id);
+    }
+
+    @GetMapping("/eligible-employees")
+    public List<Map<String, Object>> eligibleEmployees(@RequestParam UUID periodId) {
+        return service.eligibleEmployees(periodId);
     }
 
     @PostMapping("/generate")
@@ -68,8 +74,15 @@ public class TimesheetController {
     }
 
     @PostMapping("/submit-all")
-    public Map<String, Integer> submitAll(@RequestParam int year, @RequestParam int month) {
-        return service.submitAll(year, month);
+    public Map<String, Integer> submitAll(@RequestParam int year, @RequestParam int month,
+                                          @RequestParam(required = false) UUID projectId) {
+        return service.submitAll(year, month, projectId);
+    }
+
+    @PostMapping("/approve-all")
+    public Map<String, Integer> approveAll(@RequestParam int year, @RequestParam int month,
+                                           @RequestParam(required = false) UUID projectId) {
+        return service.approveAll(year, month, projectId);
     }
 
     @PutMapping("/{id}/days")

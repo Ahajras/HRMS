@@ -36,8 +36,11 @@ public class EmployeeController {
     public PageResponse<EmployeeDto> findAll(@RequestParam(required = false) String q,
                                              @RequestParam(required = false) String payStatus,
                                              @RequestParam(required = false) UUID projectId,
+                                             @RequestParam(defaultValue = "false") boolean activeOnly,
+                                             @RequestParam(defaultValue = "false") boolean assignedOnly,
+                                             @RequestParam(defaultValue = "false") boolean unassigned,
                                              @PageableDefault(size = 20) Pageable pageable) {
-        return service.findAll(q, payStatus, projectId, pageable);
+        return service.findAll(q, payStatus, projectId, activeOnly, assignedOnly, unassigned, pageable);
     }
 
     @GetMapping("/summary")

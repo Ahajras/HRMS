@@ -124,19 +124,27 @@ export default function CalendarPage() {
 
 function ProjectLocksPanel({ periodId }: { periodId: string }) {
   const qc = useQueryClient();
+  const [payGroup, setPayGroup] = useState("ALL");
   const { data: rows = [] } = useQuery({
-    queryKey: ["periodLocks", periodId],
-    queryFn: () => periodLockApi.statuses(periodId),
+    queryKey: ["periodLocks", periodId, payGroup],
+    queryFn: () => periodLockApi.statuses(periodId, payGroup),
   });
   const act = useMutation({
     mutationFn: ({ projectId, a }: { projectId: string; a: "lock" | "close" | "reopen" }) =>
-      periodLockApi[a](periodId, projectId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["periodLocks", periodId] }),
+      periodLockApi[a](periodId, projectId, payGroup),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["periodLocks", periodId, payGroup] }),
   });
 
   return (
     <Box>
-      <Typography variant="subtitle2" gutterBottom>Lock per project (ready for payroll)</Typography>
+      <Stack direction="row" spacing={1.5} alignItems="center" mb={1}>
+        <Typography variant="subtitle2">Lock per project (ready for payroll)</Typography>
+        <TextField select size="small" label="Pay group" value={payGroup} onChange={(e) => setPayGroup(e.target.value)} sx={{ minWidth: 160 }}>
+          <MenuItem value="ALL">All</MenuItem>
+          <MenuItem value="DAILY">Daily</MenuItem>
+          <MenuItem value="MONTHLY">Monthly</MenuItem>
+        </TextField>
+      </Stack>
       <Table size="small">
         <TableHead>
           <TableRow>

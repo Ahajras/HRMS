@@ -24,6 +24,7 @@ import { DataGrid, type GridColDef, type GridPaginationModel } from "@mui/x-data
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
+import PrintIcon from "@mui/icons-material/Print";
 import SearchIcon from "@mui/icons-material/Search";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import {
@@ -38,12 +39,14 @@ import {
   employeeApi,
   employeeBankAccountApi,
   employeeDocumentApi,
+  employeeShiftApi,
   legacyRawApi,
   lookupApi,
   overtimeCategoryApi,
   organizationUnitApi,
   payrollComponentApi,
   projectApi,
+  shiftApi,
 } from "../api/resources";
 import type {
   Assignment,
@@ -454,10 +457,13 @@ interface SheetGroup {
   items: ContractPayItem[];
 }
 
-function PayItemsPanel({ contractId, employeeId, defaultCurrency }: {
+function PayItemsPanel({ contractId, employeeId, employeeName, employeeNumber, defaultCurrency, contractLabel }: {
   contractId: string;
   employeeId: string;
+  employeeName?: string;
+  employeeNumber?: string;
   defaultCurrency?: string;
+  contractLabel?: string;
 }) {
   const qc = useQueryClient();
   const components = usePayComponents();
@@ -474,7 +480,7 @@ function PayItemsPanel({ contractId, employeeId, defaultCurrency }: {
   const [showHistory, setShowHistory] = useState(false);
 
   const save = useMutation({
-    mutationFn: (i: ContractPayItem) => contractPayItemApi.create(i),
+    mutationFn: (i: ContractPayItem) => (i.id ? contractPayItemApi.update(i.id, i) : contractPayItemApi.create(i)),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["payitems", contractId] });
       setForm(EMPTY_ITEM(contractId, employeeId, defaultCurrency));
@@ -531,13 +537,95 @@ function PayItemsPanel({ contractId, employeeId, defaultCurrency }: {
     }, {}),
   ).sort((a, b) => (a.date < b.date ? 1 : -1));
 
+  const printActionSheet = () => {
+    const html = `
+      <html>
+        <head>
+          <title>Action Sheet ${escapeHtml(employeeNumber ?? employeeId)}</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 24px; color: #111827; }
+            h1,h2,h3,p { margin: 0; }
+            .header { display:flex; justify-content:space-between; margin-bottom:18px; }
+            .muted { color:#6b7280; font-size:12px; }
+            .section { margin-top:20px; }
+            .card { border:1px solid #d1d5db; border-radius:10px; padding:14px; margin-top:12px; }
+            table { width:100%; border-collapse: collapse; margin-top:10px; }
+            th, td { border:1px solid #d1d5db; padding:8px; text-align:left; vertical-align:top; }
+            th { background:#f3f4f6; }
+            .right { text-align:right; }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1>Employee Action Sheet</h1>
+              <p>${escapeHtml(employeeName ?? "")}</p>
+              <p class="muted">${escapeHtml(employeeNumber ?? "")}${contractLabel ? ` · ${escapeHtml(contractLabel)}` : ""}</p>
+            </div>
+            <div class="right">
+              <p class="muted">Current salary</p>
+              <h2>${fmt(net)} ${escapeHtml(defaultCurrency ?? "")}</h2>
+            </div>
+          </div>
+
+          <div class="section">
+            <h2>Current pay items</h2>
+            <table>
+              <thead>
+                <tr><th>Component</th><th>Effective from</th><th>Action sheet</th><th class="right">Amount</th></tr>
+              </thead>
+              <tbody>
+                ${active.map((i) => `
+                  <tr>
+                    <td>${escapeHtml(compLabel(i.payComponentId))}</td>
+                    <td>${escapeHtml(i.effectiveFrom)}</td>
+                    <td>${escapeHtml(sheetOf(i))}</td>
+                    <td class="right">${fmt(Number(i.amount))}</td>
+                  </tr>
+                `).join("")}
+              </tbody>
+            </table>
+          </div>
+
+          <div class="section">
+            <h2>Action sheet history</h2>
+            ${groups.map((g) => `
+              <div class="card">
+                <h3>${escapeHtml(g.key)}</h3>
+                <p class="muted">Effective from ${escapeHtml(g.date)}${g.key === currentSheetKey ? " · current" : ""}</p>
+                <table>
+                  <thead>
+                    <tr><th>Component</th><th>Status</th><th class="right">Amount</th></tr>
+                  </thead>
+                  <tbody>
+                    ${g.items.map((i) => `
+                      <tr>
+                        <td>${escapeHtml(compLabel(i.payComponentId))}</td>
+                        <td>${escapeHtml(i.status ?? "")}</td>
+                        <td class="right">${fmt(Number(i.amount))} ${escapeHtml(i.currencyCode ?? defaultCurrency ?? "")}</td>
+                      </tr>
+                    `).join("")}
+                  </tbody>
+                </table>
+              </div>
+            `).join("")}
+          </div>
+        </body>
+      </html>
+    `;
+    openPrintWindow(html);
+  };
+
   return (
     <Box sx={{ mt: 1.5 }}>
       {/* Current salary snapshot */}
       <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, mb: 1.5 }}>
         <Stack direction="row" justifyContent="space-between" alignItems="baseline" mb={1}>
           <Typography variant="subtitle2" color="text.secondary">Current salary</Typography>
-          <Typography variant="h6" color="primary">{fmt(net)} <Typography component="span" variant="caption" color="text.secondary">{defaultCurrency ?? ""}/mo</Typography></Typography>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <Button size="small" startIcon={<PrintIcon />} onClick={printActionSheet}>Print action sheet</Button>
+            <Typography variant="h6" color="primary">{fmt(net)} <Typography component="span" variant="caption" color="text.secondary">{defaultCurrency ?? ""}/mo</Typography></Typography>
+          </Stack>
         </Stack>
         {active.length === 0 && <Typography variant="body2" color="text.secondary">No active pay items. Add one below.</Typography>}
         {active.map((i) => (
@@ -554,6 +642,8 @@ function PayItemsPanel({ contractId, employeeId, defaultCurrency }: {
               <Typography variant="body2" fontWeight={600} sx={{ minWidth: 90, textAlign: "right" }}>
                 {fmt(Number(i.amount))}
               </Typography>
+              <Button size="small" onClick={() => setForm(i)}>Edit</Button>
+              <IconButton size="small" color="error" onClick={() => i.id && del.mutate(i.id)}><DeleteIcon fontSize="small" /></IconButton>
             </Stack>
           </Stack>
         ))}
@@ -592,6 +682,7 @@ function PayItemsPanel({ contractId, employeeId, defaultCurrency }: {
                             <Typography variant="caption" color="text.secondary" sx={{ textDecoration: "line-through" }}>{fmt(prev)}</Typography>
                           )}
                           <Typography variant="caption" fontWeight={600}>{fmt(Number(i.amount))} {i.currencyCode ?? defaultCurrency ?? ""}</Typography>
+                          <Button size="small" onClick={() => setForm(i)}>Edit</Button>
                           <IconButton size="small" color="error" onClick={() => i.id && del.mutate(i.id)}><DeleteIcon fontSize="small" /></IconButton>
                         </Stack>
                       </Stack>
@@ -630,14 +721,15 @@ function PayItemsPanel({ contractId, employeeId, defaultCurrency }: {
         <Grid item xs={12}>
           <Button variant="contained" size="small"
             disabled={!form.payComponentId || !form.amount || save.isPending}
-            onClick={() => save.mutate(form)}>Apply</Button>
+            onClick={() => save.mutate(form)}>{form.id ? "Update" : "Apply"}</Button>
+          {form.id && <Button size="small" sx={{ ml: 1 }} onClick={() => setForm(EMPTY_ITEM(contractId, employeeId, defaultCurrency))}>Cancel</Button>}
           {save.isError && <Typography variant="caption" color="error" sx={{ ml: 2 }}>
             Could not apply. The new effective date must be after the current item's date.
           </Typography>}
         </Grid>
       </Grid>
       <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-        Adding a component that already has an active item supersedes the old one — it moves to history under its action sheet, the new one becomes current.
+        New rows supersede by effective date. Editing a selected row updates that row in place.
       </Typography>
     </Box>
   );
@@ -653,7 +745,7 @@ const EMPTY_CONTRACT = (employeeId: string): Contract => ({
   status: "ACTIVE",
 });
 
-function ContractsTab({ employeeId }: { employeeId: string }) {
+function ContractsTab({ employeeId, employeeName, employeeNumber }: { employeeId: string; employeeName?: string; employeeNumber?: string }) {
   const qc = useQueryClient();
   const types = useLookup("CONTRACT_TYPE");
   const statuses = useLookup("CONTRACT_STATUS");
@@ -699,7 +791,14 @@ function ContractsTab({ employeeId }: { employeeId: string }) {
             </Box>
           </Stack>
           {openItems === c.id && c.id && (
-            <PayItemsPanel contractId={c.id} employeeId={employeeId} defaultCurrency={c.baseCurrencyCode} />
+            <PayItemsPanel
+              contractId={c.id}
+              employeeId={employeeId}
+              employeeName={employeeName}
+              employeeNumber={employeeNumber}
+              defaultCurrency={c.baseCurrencyCode}
+              contractLabel={`${typeLabel(c.contractType)}${c.contractNumber ? ` · ${c.contractNumber}` : ""}`}
+            />
           )}
         </Paper>
       ))}
@@ -866,11 +965,20 @@ function AssignmentTab({ employeeId }: { employeeId: string }) {
 
   const save = useMutation({
     mutationFn: (a: Assignment) => (a.id ? assignmentApi.update(a.id, a) : assignmentApi.create(a)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["assignments", employeeId] }); setForm(EMPTY_ASSIGNMENT(employeeId)); },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["assignments", employeeId] });
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: ["employees-summary"] });
+      setForm(EMPTY_ASSIGNMENT(employeeId));
+    },
   });
   const del = useMutation({
     mutationFn: (id: string) => assignmentApi.remove(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["assignments", employeeId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["assignments", employeeId] });
+      qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: ["employees-summary"] });
+    },
   });
 
   const set = (k: keyof Assignment, v: string | boolean) => setForm({ ...form, [k]: v } as Assignment);
@@ -945,6 +1053,7 @@ export default function EmployeesPage() {
   const [debounced, setDebounced] = useState("");
   const [payFilter, setPayFilter] = useState(""); // "" = all, MONTHLY, DAILY
   const [projectId, setProjectId] = useState(""); // "" = all projects
+  const [unassignedOnly, setUnassignedOnly] = useState(false);
   useEffect(() => {
     const t = setTimeout(() => {
       setDebounced(search);
@@ -958,7 +1067,7 @@ export default function EmployeesPage() {
     staleTime: 5 * 60 * 1000,
   });
   const { data, isLoading } = useQuery({
-    queryKey: ["employees", pagination.page, pagination.pageSize, debounced, payFilter, projectId],
+    queryKey: ["employees", pagination.page, pagination.pageSize, debounced, payFilter, projectId, unassignedOnly],
     queryFn: () =>
       employeeApi.list(
         pagination.page,
@@ -966,12 +1075,36 @@ export default function EmployeesPage() {
         debounced || undefined,
         payFilter || undefined,
         projectId || undefined,
+        { unassigned: unassignedOnly },
       ),
   });
   const { data: summary } = useQuery({
     queryKey: ["employees-summary", debounced, projectId],
     queryFn: () => employeeApi.summary(debounced || undefined, projectId || undefined),
   });
+  const { data: projectEmployees } = useQuery({
+    queryKey: ["employees-project-validation", projectId],
+    queryFn: () => employeeApi.list(0, 500, undefined, undefined, projectId || undefined, { assignedOnly: true }),
+    enabled: !!projectId,
+  });
+  const { data: projectShifts = [] } = useQuery({
+    queryKey: ["shifts", projectId || "all"],
+    queryFn: () => shiftApi.list(projectId || undefined),
+    enabled: !!projectId,
+  });
+  const { data: roster = [] } = useQuery({
+    queryKey: ["roster"],
+    queryFn: () => employeeShiftApi.list(),
+    enabled: !!projectId,
+  });
+  const projectShiftIds = new Set(projectShifts.map((s) => s.id).filter(Boolean));
+  const employeesMissingShift = projectId
+    ? (projectEmployees?.content ?? []).filter((emp) => emp.id && !roster.some((r) =>
+        r.employeeId === emp.id
+        && r.status !== "INACTIVE"
+        && r.shiftId
+        && projectShiftIds.has(r.shiftId)))
+    : [];
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState(0);
   const [form, setForm] = useState<Employee>(EMPTY);
@@ -1025,7 +1158,7 @@ export default function EmployeesPage() {
         size="small"
         label="Project"
         value={projectId}
-        onChange={(e) => { setProjectId(e.target.value); setPagination((p) => ({ ...p, page: 0 })); }}
+        onChange={(e) => { setProjectId(e.target.value); setUnassignedOnly(false); setPagination((p) => ({ ...p, page: 0 })); }}
         sx={{ minWidth: 260, mb: 2 }}
       >
         <MenuItem value="">All projects</MenuItem>
@@ -1041,9 +1174,25 @@ export default function EmployeesPage() {
           { label: "Not Active", value: summary?.notActive, color: "error.main" },
           { label: "Monthly", value: summary?.monthly, color: "primary.main" },
           { label: "Daily", value: summary?.daily, color: "warning.main" },
+          { label: "Without Project", value: summary?.withoutProject, color: "secondary.main", action: "unassigned" },
+          ...(projectId ? [{ label: "Need Shift", value: employeesMissingShift.length, color: "warning.dark" }] : []),
         ].map((c) => (
-          <Grid item xs={6} sm={4} md={2.4} key={c.label}>
-            <Paper variant="outlined" sx={{ p: 2, textAlign: "center" }}>
+          <Grid item xs={6} sm={4} md={2} key={c.label}>
+            <Paper variant="outlined"
+              onClick={() => {
+                if (c.action === "unassigned") {
+                  setUnassignedOnly((v) => !v);
+                  setProjectId("");
+                  setPagination((p) => ({ ...p, page: 0 }));
+                }
+              }}
+              sx={{
+                p: 2,
+                textAlign: "center",
+                cursor: c.action ? "pointer" : "default",
+                borderColor: c.action === "unassigned" && unassignedOnly ? "secondary.main" : "divider",
+                bgcolor: c.action === "unassigned" && unassignedOnly ? "action.hover" : "background.paper",
+              }}>
               <Typography variant="h5" sx={{ color: c.color, fontWeight: 600 }}>
                 {c.value ?? "—"}
               </Typography>
@@ -1052,6 +1201,12 @@ export default function EmployeesPage() {
           </Grid>
         ))}
       </Grid>
+
+      {projectId && employeesMissingShift.length > 0 && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          {employeesMissingShift.length} employee(s) on this project do not have a matching shift roster. Assign a shared shift or a shift for this project before generating timesheets.
+        </Alert>
+      )}
 
       <Tabs
         value={payFilter}
@@ -1151,7 +1306,7 @@ export default function EmployeesPage() {
           )}
           {tab === 1 && isSaved && <DocumentsTab employeeId={form.id!} />}
           {tab === 2 && isSaved && <BankTab employeeId={form.id!} />}
-          {tab === 3 && isSaved && <ContractsTab employeeId={form.id!} />}
+          {tab === 3 && isSaved && <ContractsTab employeeId={form.id!} employeeName={`${form.firstName ?? ""} ${form.lastName ?? ""}`.trim()} employeeNumber={form.employeeNumber} />}
           {tab === 4 && isSaved && <AssignmentTab employeeId={form.id!} />}
           {tab === 5 && isSaved && <LegacyTab employeeId={form.id!} />}
 
@@ -1169,4 +1324,23 @@ export default function EmployeesPage() {
       </Dialog>
     </Box>
   );
+}
+
+function openPrintWindow(html: string) {
+  const win = window.open("", "_blank", "width=1100,height=900");
+  if (!win) return;
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  win.onload = () => win.print();
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
 }

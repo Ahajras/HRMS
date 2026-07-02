@@ -12,6 +12,10 @@ public interface ContractPayItemRepository extends JpaRepository<ContractPayItem
 
     List<ContractPayItem> findByContractIdOrderByEffectiveFromDesc(UUID contractId);
 
+    List<ContractPayItem> findByEmployeeIdOrderByEffectiveFromDesc(UUID employeeId);
+
+    void deleteByContractId(UUID contractId);
+
     List<ContractPayItem> findByContractIdAndPayComponentIdAndStatus(UUID contractId, UUID payComponentId, String status);
 
     Optional<ContractPayItem> findByContractIdAndPayComponentIdAndEffectiveFrom(

@@ -23,22 +23,26 @@ public class ProjectLockController {
     }
 
     @GetMapping
-    public List<Map<String, Object>> statuses(@RequestParam UUID periodId) {
-        return service.projectLockStatuses(periodId);
+    public List<Map<String, Object>> statuses(@RequestParam UUID periodId,
+                                              @RequestParam(required = false) String payGroup) {
+        return service.projectLockStatuses(periodId, payGroup);
     }
 
     @PostMapping("/lock")
-    public Map<String, Object> lock(@RequestParam UUID periodId, @RequestParam UUID projectId) {
-        return service.lockProject(periodId, projectId);
+    public Map<String, Object> lock(@RequestParam UUID periodId, @RequestParam UUID projectId,
+                                    @RequestParam(required = false) String payGroup) {
+        return service.lockProject(periodId, projectId, payGroup);
     }
 
     @PostMapping("/close")
-    public Map<String, Object> close(@RequestParam UUID periodId, @RequestParam UUID projectId) {
-        return service.closeProject(periodId, projectId);
+    public Map<String, Object> close(@RequestParam UUID periodId, @RequestParam UUID projectId,
+                                     @RequestParam(required = false) String payGroup) {
+        return service.closeProject(periodId, projectId, payGroup);
     }
 
     @PostMapping("/reopen")
-    public Map<String, Object> reopen(@RequestParam UUID periodId, @RequestParam UUID projectId) {
-        return service.reopenProject(periodId, projectId);
+    public Map<String, Object> reopen(@RequestParam UUID periodId, @RequestParam UUID projectId,
+                                      @RequestParam(required = false) String payGroup) {
+        return service.reopenProject(periodId, projectId, payGroup);
     }
 }
