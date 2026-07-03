@@ -53,6 +53,9 @@ public class TimeTypePayrollRuleService {
         entity.setAction(dto.getAction());
         entity.setPercent(dto.getPercent());
         entity.setBasis(dto.getBasis());
+        entity.setThresholdDays(dto.getThresholdDays());
+        entity.setThresholdScope(dto.getThresholdScope());
+        entity.setYearBasis(dto.getYearBasis());
         entity.setAffectsOvertime(dto.isAffectsOvertime());
         entity.setProcessSeparately(dto.isProcessSeparately());
         entity.setSortOrder(dto.getSortOrder());
@@ -91,6 +94,9 @@ public class TimeTypePayrollRuleService {
         dto.setAction(entity.getAction());
         dto.setPercent(entity.getPercent());
         dto.setBasis(entity.getBasis());
+        dto.setThresholdDays(entity.getThresholdDays());
+        dto.setThresholdScope(entity.getThresholdScope());
+        dto.setYearBasis(entity.getYearBasis());
         dto.setAffectsOvertime(entity.isAffectsOvertime());
         dto.setProcessSeparately(entity.isProcessSeparately());
         dto.setSortOrder(entity.getSortOrder());

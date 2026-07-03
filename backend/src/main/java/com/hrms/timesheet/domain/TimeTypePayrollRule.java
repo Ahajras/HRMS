@@ -30,6 +30,15 @@ public class TimeTypePayrollRule extends AuditableEntity {
     @Column(name = "basis", nullable = false, length = 20)
     private String basis = "HOURS";
 
+    @Column(name = "threshold_days", nullable = false)
+    private int thresholdDays = 0;
+
+    @Column(name = "threshold_scope", nullable = false, length = 20)
+    private String thresholdScope = "NONE";
+
+    @Column(name = "year_basis", nullable = false, length = 20)
+    private String yearBasis = "CALENDAR";
+
     @Column(name = "affects_overtime", nullable = false)
     private boolean affectsOvertime;
 
@@ -54,6 +63,12 @@ public class TimeTypePayrollRule extends AuditableEntity {
     public void setPercent(BigDecimal percent) { this.percent = percent; }
     public String getBasis() { return basis; }
     public void setBasis(String basis) { this.basis = basis; }
+    public int getThresholdDays() { return thresholdDays; }
+    public void setThresholdDays(int thresholdDays) { this.thresholdDays = thresholdDays; }
+    public String getThresholdScope() { return thresholdScope; }
+    public void setThresholdScope(String thresholdScope) { this.thresholdScope = thresholdScope; }
+    public String getYearBasis() { return yearBasis; }
+    public void setYearBasis(String yearBasis) { this.yearBasis = yearBasis; }
     public boolean isAffectsOvertime() { return affectsOvertime; }
     public void setAffectsOvertime(boolean affectsOvertime) { this.affectsOvertime = affectsOvertime; }
     public boolean isProcessSeparately() { return processSeparately; }

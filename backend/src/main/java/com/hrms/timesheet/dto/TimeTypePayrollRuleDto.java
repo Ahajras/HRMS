@@ -12,6 +12,9 @@ public class TimeTypePayrollRuleDto {
     private String action = "PAY";
     private BigDecimal percent = new BigDecimal("100.00");
     private String basis = "HOURS";
+    private int thresholdDays = 0;
+    private String thresholdScope = "NONE";
+    private String yearBasis = "CALENDAR";
     private boolean affectsOvertime;
     private boolean processSeparately;
     private int sortOrder = 100;
@@ -33,6 +36,12 @@ public class TimeTypePayrollRuleDto {
     public void setPercent(BigDecimal percent) { this.percent = percent; }
     public String getBasis() { return basis; }
     public void setBasis(String basis) { this.basis = basis; }
+    public int getThresholdDays() { return thresholdDays; }
+    public void setThresholdDays(int thresholdDays) { this.thresholdDays = thresholdDays; }
+    public String getThresholdScope() { return thresholdScope; }
+    public void setThresholdScope(String thresholdScope) { this.thresholdScope = thresholdScope; }
+    public String getYearBasis() { return yearBasis; }
+    public void setYearBasis(String yearBasis) { this.yearBasis = yearBasis; }
     public boolean isAffectsOvertime() { return affectsOvertime; }
     public void setAffectsOvertime(boolean affectsOvertime) { this.affectsOvertime = affectsOvertime; }
     public boolean isProcessSeparately() { return processSeparately; }

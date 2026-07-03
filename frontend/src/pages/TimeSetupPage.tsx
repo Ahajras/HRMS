@@ -36,6 +36,9 @@ const EMPTY_RULE: TimeTypePayrollRule = {
   action: "PAY",
   percent: 100,
   basis: "HOURS",
+  thresholdDays: 0,
+  thresholdScope: "NONE",
+  yearBasis: "CALENDAR",
   affectsOvertime: false,
   processSeparately: false,
   sortOrder: 100,
@@ -150,6 +153,7 @@ function TimeTypesSection() {
               <TextField select fullWidth size="small" label="Action" value={ruleForm.action} onChange={(e) => setRuleForm({ ...ruleForm, action: e.target.value })}>
                 <MenuItem value="PAY">Pay</MenuItem>
                 <MenuItem value="DEDUCT">Deduct</MenuItem>
+                <MenuItem value="SUSPEND">Suspend (stop)</MenuItem>
                 <MenuItem value="IGNORE">Ignore</MenuItem>
               </TextField>
             </Grid>
@@ -165,6 +169,22 @@ function TimeTypesSection() {
             </Grid>
             <Grid item xs={6} sm={2}>
               <TextField fullWidth size="small" type="number" label="Sort" value={ruleForm.sortOrder} onChange={(e) => setRuleForm({ ...ruleForm, sortOrder: Number(e.target.value) })} />
+            </Grid>
+            <Grid item xs={6} sm={2}>
+              <TextField fullWidth size="small" type="number" label="After N days" value={ruleForm.thresholdDays ?? 0} onChange={(e) => setRuleForm({ ...ruleForm, thresholdDays: Number(e.target.value) })} helperText="0 = immediate" />
+            </Grid>
+            <Grid item xs={6} sm={2}>
+              <TextField select fullWidth size="small" label="Count" value={ruleForm.thresholdScope ?? "NONE"} onChange={(e) => setRuleForm({ ...ruleForm, thresholdScope: e.target.value })}>
+                <MenuItem value="NONE">No threshold</MenuItem>
+                <MenuItem value="CONSECUTIVE">Consecutive</MenuItem>
+                <MenuItem value="ANNUAL">Annual</MenuItem>
+              </TextField>
+            </Grid>
+            <Grid item xs={6} sm={2}>
+              <TextField select fullWidth size="small" label="Year from" value={ruleForm.yearBasis ?? "CALENDAR"} onChange={(e) => setRuleForm({ ...ruleForm, yearBasis: e.target.value })}>
+                <MenuItem value="CALENDAR">January</MenuItem>
+                <MenuItem value="HIRE_DATE">Hire date</MenuItem>
+              </TextField>
             </Grid>
             <Grid item xs={12}>
               <Stack direction="row" spacing={2} flexWrap="wrap">
@@ -189,7 +209,7 @@ function TimeTypesSection() {
                   <Box>
                     <Typography fontWeight={600}>{rule.payrollComponentCode} - {rule.payrollComponentName}</Typography>
                     <Typography variant="caption" color="text.secondary">
-                      {rule.action} · {rule.percent}% · {rule.basis}{rule.affectsOvertime ? " · affects OT" : ""}{rule.processSeparately ? " · separate" : ""}
+                      {rule.action} · {rule.percent}% · {rule.basis}{rule.thresholdDays ? ` · after ${rule.thresholdDays}d (${rule.thresholdScope})` : ""}{rule.affectsOvertime ? " · affects OT" : ""}{rule.processSeparately ? " · separate" : ""}
                     </Typography>
                   </Box>
                   <IconButton size="small" color="error" onClick={() => deleteRule.mutate(rule.payrollComponentId)}>

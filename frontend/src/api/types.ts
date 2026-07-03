@@ -465,6 +465,9 @@ export interface TimeTypePayrollRule {
   action: string;
   percent: number;
   basis: string;
+  thresholdDays?: number;
+  thresholdScope?: string;
+  yearBasis?: string;
   affectsOvertime: boolean;
   processSeparately: boolean;
   sortOrder: number;
