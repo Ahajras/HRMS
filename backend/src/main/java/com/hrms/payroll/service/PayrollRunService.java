@@ -421,7 +421,45 @@ public class PayrollRunService {
                         .put(ruleRow.getPayrollComponentId(), ruleRow);
             }
         }
-        return new PayrollPolicyContext(days, types, rulesByTimeType, rule);
+        Map<UUID, Integer> consecutivePos = new HashMap<>();
+        Map<UUID, Integer> annualPos = new HashMap<>();
+        computeThresholdPositions(days, types, consecutivePos, annualPos);
+        return new PayrollPolicyContext(days, types, rulesByTimeType, rule, consecutivePos, annualPos);
+    }
+
+    /**
+     * For each day, record its position in the running count of its own time type:
+     *  - consecutivePos: length of the current unbroken spell (REST/HOLIDAY days
+     *    bridge the spell and are not counted; any other time type breaks it).
+     *  - annualPos: cumulative count of that time type within the period.
+     * These feed the "apply effect only after N days" thresholds. (Annual counting
+     * is within the current period for now; cross-period carry-in is a follow-up.)
+     */
+    private void computeThresholdPositions(List<TimesheetDay> days, Map<UUID, TimeType> types,
+                                           Map<UUID, Integer> consecutivePos, Map<UUID, Integer> annualPos) {
+        Map<UUID, Integer> spell = new HashMap<>();
+        Map<UUID, Integer> annual = new HashMap<>();
+        for (TimesheetDay d : days) {
+            UUID tt = d.getTimeTypeId();
+            if (tt == null) {
+                continue;
+            }
+            TimeType type = types.get(tt);
+            String cat = type != null ? type.getCategory() : "REGULAR";
+            annualPos.put(d.getId(), annual.merge(tt, 1, Integer::sum));
+            boolean bridge = "REST".equalsIgnoreCase(cat) || "HOLIDAY".equalsIgnoreCase(cat);
+            if (bridge) {
+                continue; // keep all spells alive, do not count
+            }
+            int c = spell.getOrDefault(tt, 0) + 1;
+            for (UUID k : new java.util.ArrayList<>(spell.keySet())) {
+                if (!k.equals(tt)) {
+                    spell.put(k, 0);
+                }
+            }
+            spell.put(tt, c);
+            consecutivePos.put(d.getId(), c);
+        }
     }
 
     private ComponentPolicyBreakdown componentPolicyBreakdown(PayrollComponent component, ContractPayItem item,
@@ -439,6 +477,17 @@ public class PayrollRunService {
                     : legacyEffect(type, day, rule);
             if (!effect.hasAny()) {
                 continue;
+            }
+            // Threshold gate: for a rule with a threshold, the first N qualifying
+            // days are protected — the effect applies only from day N+1 onward.
+            if (explicit != null && explicit.getThresholdDays() > 0
+                    && !"NONE".equalsIgnoreCase(explicit.getThresholdScope())) {
+                Integer pos = "ANNUAL".equalsIgnoreCase(explicit.getThresholdScope())
+                        ? policy.annualPos().get(day.getId())
+                        : policy.consecutivePos().get(day.getId());
+                if (pos == null || pos <= explicit.getThresholdDays()) {
+                    continue; // still within the protected window
+                }
             }
             touched = true;
             basis = effect.basis();
@@ -657,7 +706,9 @@ public class PayrollRunService {
     private record PayrollPolicyContext(List<TimesheetDay> days,
                                         Map<UUID, TimeType> types,
                                         Map<UUID, Map<UUID, TimeTypePayrollRule>> rulesByTimeType,
-                                        PayrollRule payrollRule) {
+                                        PayrollRule payrollRule,
+                                        Map<UUID, Integer> consecutivePos,
+                                        Map<UUID, Integer> annualPos) {
         boolean hasConfiguredRules() {
             return rulesByTimeType.values().stream().anyMatch(map -> map != null && !map.isEmpty());
         }
