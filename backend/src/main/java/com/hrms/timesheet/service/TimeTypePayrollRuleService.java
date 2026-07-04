@@ -54,7 +54,7 @@ public class TimeTypePayrollRuleService {
         entity.setPercent(dto.getPercent());
         entity.setBasis(dto.getBasis());
         entity.setThresholdDays(dto.getThresholdDays());
-        entity.setThresholdScope(dto.getThresholdScope());
+        entity.setThresholdScope(normalizeThresholdScope(dto.getThresholdScope(), dto.getThresholdDays()));
         entity.setYearBasis(dto.getYearBasis());
         entity.setAffectsOvertime(dto.isAffectsOvertime());
         entity.setProcessSeparately(dto.isProcessSeparately());
@@ -84,6 +84,16 @@ public class TimeTypePayrollRuleService {
             throw new ResourceNotFoundException("Payroll component not found: " + componentId);
         }
         return component;
+    }
+
+    private static String normalizeThresholdScope(String thresholdScope, int thresholdDays) {
+        if (thresholdDays <= 0) {
+            return "NONE";
+        }
+        if (thresholdScope != null && "ANNUAL".equalsIgnoreCase(thresholdScope)) {
+            return "ANNUAL";
+        }
+        return "CONSECUTIVE";
     }
 
     private TimeTypePayrollRuleDto toDto(TimeTypePayrollRule entity) {

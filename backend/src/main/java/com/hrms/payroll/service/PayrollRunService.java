@@ -525,9 +525,9 @@ public class PayrollRunService {
             }
             // Threshold gate: for a rule with a threshold, the first N qualifying
             // days are protected — the effect applies only from day N+1 onward.
-            if (explicit != null && explicit.getThresholdDays() > 0
-                    && !"NONE".equalsIgnoreCase(explicit.getThresholdScope())) {
-                Integer pos = "ANNUAL".equalsIgnoreCase(explicit.getThresholdScope())
+            if (explicit != null && explicit.getThresholdDays() > 0) {
+                String thresholdScope = normalizeThresholdScope(explicit.getThresholdScope(), explicit.getThresholdDays());
+                Integer pos = "ANNUAL".equalsIgnoreCase(thresholdScope)
                         ? policy.annualPos().get(day.getId())
                         : policy.consecutivePos().get(day.getId());
                 if (pos == null || pos <= explicit.getThresholdDays()) {
@@ -801,6 +801,16 @@ public class PayrollRunService {
             return normalized;
         }
         return "INHERIT";
+    }
+
+    private static String normalizeThresholdScope(String thresholdScope, int thresholdDays) {
+        if (thresholdDays <= 0) {
+            return "NONE";
+        }
+        if (thresholdScope != null && "ANNUAL".equalsIgnoreCase(thresholdScope)) {
+            return "ANNUAL";
+        }
+        return "CONSECUTIVE";
     }
 
     private static BigDecimal safeHours(PayrollRule rule) {
