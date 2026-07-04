@@ -9,6 +9,7 @@ import PayrollReportsPage from "./pages/PayrollReportsPage";
 import PayrollRunsPage from "./pages/PayrollRunsPage";
 import PayrollRulesPage from "./pages/PayrollRulesPage";
 import CountriesPage from "./pages/CountriesPage";
+import CompanyProfilePage from "./pages/CompanyProfilePage";
 import CountryLawPage from "./pages/CountryLawPage";
 import OvertimeCategoriesPage from "./pages/OvertimeCategoriesPage";
 import ProjectsPage from "./pages/ProjectsPage";
@@ -59,6 +60,7 @@ export default function App() {
         <Route path="/payroll-rules" element={<PayrollRulesPage />} />
         <Route path="/payroll-runs" element={<PayrollRunsPage />} />
         <Route path="/countries" element={<CountriesPage />} />
+        <Route path="/company-profile" element={<CompanyProfilePage />} />
         <Route path="/country-law" element={<CountryLawPage />} />
         <Route path="/overtime-categories" element={<OvertimeCategoriesPage />} />
         <Route path="/projects" element={<ProjectsPage />} />

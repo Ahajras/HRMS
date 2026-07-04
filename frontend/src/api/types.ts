@@ -77,6 +77,20 @@ export interface Role {
   permissions: string[];
 }
 
+export interface CompanyProfile {
+  id?: string;
+  companyId?: string;
+  companyName: string;
+  legalName?: string;
+  taxNumber?: string;
+  registrationNo?: string;
+  email?: string;
+  phone?: string;
+  website?: string;
+  addressLine?: string;
+  logoUrl?: string;
+}
+
 export interface PageResponse<T> {
   content: T[];
   page: number;

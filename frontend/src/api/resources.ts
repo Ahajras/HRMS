@@ -38,7 +38,13 @@ import type {
   Timesheet,
   TimesheetDay,
   TimesheetSummary,
+  CompanyProfile,
 } from "./types";
+
+export const companyProfileApi = {
+  get: () => api.get<CompanyProfile>("/company-profile").then((r) => r.data),
+  save: (payload: CompanyProfile) => api.put<CompanyProfile>("/company-profile", payload).then((r) => r.data),
+};
 
 // --- Assignments ---
 export const assignmentApi = {

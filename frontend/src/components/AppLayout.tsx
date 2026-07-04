@@ -28,6 +28,7 @@ import PublicIcon from "@mui/icons-material/Public";
 import GavelIcon from "@mui/icons-material/Gavel";
 import TimerIcon from "@mui/icons-material/Timer";
 import WorkIcon from "@mui/icons-material/Work";
+import BusinessIcon from "@mui/icons-material/Business";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import EventBusyIcon from "@mui/icons-material/EventBusy";
@@ -88,6 +89,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Configuration",
     items: [
       { to: "/projects", label: "Projects", icon: <WorkIcon />, authority: "reference.read" },
+      { to: "/company-profile", label: "Company Profile", icon: <BusinessIcon />, authority: "reference.read" },
       { to: "/org-unit-types", label: "Org Levels", icon: <LayersIcon />, authority: "organization.read" },
       { to: "/countries", label: "Countries", icon: <PublicIcon />, authority: "reference.read" },
       { to: "/country-law", label: "Country Law", icon: <GavelIcon />, authority: "reference.read" },
