@@ -26,6 +26,21 @@ public class PayrollRuleService {
         return repository.findByCompanyIdOrderByPayGroup(companyId).stream().map(this::toDto).toList();
     }
 
+    public PayrollRuleDto create(PayrollRuleDto dto) {
+        PayrollRule rule = new PayrollRule();
+        rule.setCompanyId(TenantContext.requireCompanyId());
+        rule.setPayGroup(dto.getPayGroup());
+        rule.setProjectId(dto.getProjectId());
+        rule.setPayItemBasis(dto.getPayItemBasis());
+        rule.setOtMultiplier(dto.getOtMultiplier());
+        rule.setRestDayOtMultiplier(dto.getRestDayOtMultiplier());
+        rule.setStandardHoursPerDay(dto.getStandardHoursPerDay());
+        rule.setMonthDivisor(dto.getMonthDivisor());
+        if (dto.getDivisorMode() != null) rule.setDivisorMode(dto.getDivisorMode());
+        rule.setWeeklyRestPaid(dto.isWeeklyRestPaid());
+        return toDto(repository.save(rule));
+    }
+
     public PayrollRuleDto update(UUID id, PayrollRuleDto dto) {
         PayrollRule rule = repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Payroll rule not found: " + id));
@@ -38,6 +53,7 @@ public class PayrollRuleService {
         rule.setStandardHoursPerDay(dto.getStandardHoursPerDay());
         rule.setMonthDivisor(dto.getMonthDivisor());
         if (dto.getDivisorMode() != null) rule.setDivisorMode(dto.getDivisorMode());
+        rule.setProjectId(dto.getProjectId());
         rule.setWeeklyRestPaid(dto.isWeeklyRestPaid());
         return toDto(repository.save(rule));
     }
@@ -52,6 +68,7 @@ public class PayrollRuleService {
         dto.setStandardHoursPerDay(rule.getStandardHoursPerDay());
         dto.setMonthDivisor(rule.getMonthDivisor());
         dto.setDivisorMode(rule.getDivisorMode());
+        dto.setProjectId(rule.getProjectId());
         dto.setWeeklyRestPaid(rule.isWeeklyRestPaid());
         dto.setStatus(rule.getStatus());
         return dto;

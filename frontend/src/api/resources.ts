@@ -396,6 +396,7 @@ export const payrollRunApi = {
 
 export const payrollRuleApi = {
   list: () => api.get<import("./types").PayrollRule[]>("/payroll-rules").then((r) => r.data),
+  create: (payload: import("./types").PayrollRule) => api.post<import("./types").PayrollRule>("/payroll-rules", payload).then((r) => r.data),
   update: (id: string, payload: import("./types").PayrollRule) =>
     api.put<import("./types").PayrollRule>(`/payroll-rules/${id}`, payload).then((r) => r.data),
 };

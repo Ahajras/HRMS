@@ -15,6 +15,9 @@ public class PayrollRule extends AuditableEntity {
     @Column(name = "company_id", nullable = false)
     private UUID companyId;
 
+    @Column(name = "project_id")
+    private UUID projectId;
+
     @Column(name = "pay_group", nullable = false, length = 20)
     private String payGroup;
 
@@ -44,6 +47,8 @@ public class PayrollRule extends AuditableEntity {
 
     public UUID getCompanyId() { return companyId; }
     public void setCompanyId(UUID companyId) { this.companyId = companyId; }
+    public UUID getProjectId() { return projectId; }
+    public void setProjectId(UUID projectId) { this.projectId = projectId; }
     public String getPayGroup() { return payGroup; }
     public void setPayGroup(String payGroup) { this.payGroup = payGroup; }
     public String getPayItemBasis() { return payItemBasis; }

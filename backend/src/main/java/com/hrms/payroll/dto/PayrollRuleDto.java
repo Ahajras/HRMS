@@ -13,6 +13,7 @@ public class PayrollRuleDto {
     private boolean weeklyRestPaid;
     private BigDecimal monthDivisor;
     private String divisorMode;
+    private java.util.UUID projectId;
     private String status;
 
     public UUID getId() { return id; }
@@ -33,6 +34,8 @@ public class PayrollRuleDto {
     public void setMonthDivisor(BigDecimal monthDivisor) { this.monthDivisor = monthDivisor; }
     public String getDivisorMode() { return divisorMode; }
     public void setDivisorMode(String divisorMode) { this.divisorMode = divisorMode; }
+    public java.util.UUID getProjectId() { return projectId; }
+    public void setProjectId(java.util.UUID projectId) { this.projectId = projectId; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
 }

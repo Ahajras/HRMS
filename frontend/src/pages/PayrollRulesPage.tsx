@@ -17,7 +17,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { payrollRuleApi } from "../api/resources";
+import { payrollRuleApi, projectApi } from "../api/resources";
 import type { PayrollRule } from "../api/types";
 
 const BASIS = [
@@ -28,7 +28,23 @@ const BASIS = [
 export default function PayrollRulesPage() {
   const qc = useQueryClient();
   const { data: rules = [] } = useQuery({ queryKey: ["payrollRules"], queryFn: payrollRuleApi.list });
+  const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
   const [drafts, setDrafts] = useState<Record<string, PayrollRule>>({});
+  const [projectId, setProjectId] = useState<string>("");  // "" = default (all projects)
+
+  const createRule = useMutation({
+    mutationFn: (payload: PayrollRule) => payrollRuleApi.create(payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["payrollRules"] }),
+  });
+
+  const shownRules = rules.filter((r) => (r.projectId ?? "") === projectId);
+  const cloneForProject = () => {
+    const defaults = rules.filter((r) => !r.projectId);
+    defaults.forEach((d) => {
+      const { id, ...rest } = d;
+      createRule.mutate({ ...(rest as PayrollRule), projectId });
+    });
+  };
 
   const save = useMutation({
     mutationFn: (rule: PayrollRule) => payrollRuleApi.update(rule.id!, rule),
@@ -46,6 +62,22 @@ export default function PayrollRulesPage() {
   return (
     <Box>
       <Typography variant="h5" mb={2}>Payroll Rules</Typography>
+      <Stack direction="row" spacing={1.5} mb={2} alignItems="center">
+        <TextField select size="small" label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)} sx={{ minWidth: 260 }}>
+          <MenuItem value="">Default (all projects)</MenuItem>
+          {projects.map((p: { id?: string; code?: string; name?: string }) => (
+            <MenuItem key={p.id} value={p.id}>{p.code} — {p.name}</MenuItem>
+          ))}
+        </TextField>
+        {projectId && shownRules.length === 0 && (
+          <Button variant="contained" disabled={createRule.isPending} onClick={cloneForProject}>
+            Create payroll structure for this project
+          </Button>
+        )}
+      </Stack>
+      {projectId && shownRules.length === 0 ? (
+        <Alert severity="info">This project uses the default payroll structure. Click the button above to give it its own settings.</Alert>
+      ) : (
       <Paper variant="outlined" sx={{ borderRadius: 2 }}>
         <Table size="small">
           <TableHead>
@@ -62,7 +94,7 @@ export default function PayrollRulesPage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {rules.map((rule) => {
+            {shownRules.map((rule) => {
               const row = value(rule);
               return (
                 <TableRow key={rule.id}>
@@ -105,6 +137,7 @@ export default function PayrollRulesPage() {
           </TableBody>
         </Table>
       </Paper>
+      )}
 
       <Paper variant="outlined" sx={{ borderRadius: 2, p: 2, mt: 2 }}>
         <Typography variant="subtitle1" gutterBottom>How pay is calculated</Typography>

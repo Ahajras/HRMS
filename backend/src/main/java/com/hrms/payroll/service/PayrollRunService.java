@@ -157,7 +157,8 @@ public class PayrollRunService {
             if (emp == null || !matchesScope(emp, run)) {
                 continue;
             }
-            PayrollRule rule = payrollRule(run.getCompanyId(), emp.getPayStatus());
+            UUID empProject = run.getProjectId() != null ? run.getProjectId() : employeeProject(emp.getId());
+            PayrollRule rule = payrollRule(run.getCompanyId(), empProject, emp.getPayStatus());
             PayableBreakdown breakdown = payableBreakdown(ts, rule);
             PayrollPolicyContext policy = payrollPolicyContext(run.getCompanyId(), ts, rule);
             PayrollResult result = buildResult(run, ts, emp, rule, breakdown);
@@ -599,9 +600,18 @@ public class PayrollRunService {
         return line;
     }
 
-    private PayrollRule payrollRule(UUID companyId, String payStatus) {
+    private PayrollRule payrollRule(UUID companyId, UUID projectId, String payStatus) {
         String group = normalizePayGroup(payStatus);
-        return ruleRepo.findByCompanyIdAndPayGroupAndStatus(companyId, group, "ACTIVE")
+        // Project-specific rule first, then the company-wide default (project_id NULL).
+        if (projectId != null) {
+            Optional<PayrollRule> projectRule =
+                    ruleRepo.findByCompanyIdAndProjectIdAndPayGroupAndStatus(companyId, projectId, group, "ACTIVE");
+            if (projectRule.isPresent()) {
+                return projectRule.get();
+            }
+        }
+        return ruleRepo.findByCompanyIdAndProjectIdAndPayGroupAndStatus(companyId, null, group, "ACTIVE")
+                .or(() -> ruleRepo.findByCompanyIdAndPayGroupAndStatus(companyId, group, "ACTIVE"))
                 .orElseGet(() -> defaultRule(companyId, group));
     }
 

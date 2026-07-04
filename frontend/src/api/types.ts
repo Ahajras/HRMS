@@ -669,5 +669,6 @@ export interface PayrollRule {
   weeklyRestPaid: boolean;
   monthDivisor: number;
   divisorMode?: string;
+  projectId?: string | null;
   status?: string;
 }

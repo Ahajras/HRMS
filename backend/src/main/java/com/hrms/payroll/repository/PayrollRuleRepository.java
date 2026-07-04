@@ -10,4 +10,5 @@ import java.util.UUID;
 public interface PayrollRuleRepository extends JpaRepository<PayrollRule, UUID> {
     List<PayrollRule> findByCompanyIdOrderByPayGroup(UUID companyId);
     Optional<PayrollRule> findByCompanyIdAndPayGroupAndStatus(UUID companyId, String payGroup, String status);
+    Optional<PayrollRule> findByCompanyIdAndProjectIdAndPayGroupAndStatus(UUID companyId, UUID projectId, String payGroup, String status);
 }
