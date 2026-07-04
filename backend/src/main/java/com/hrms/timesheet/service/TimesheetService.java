@@ -257,6 +257,10 @@ public class TimesheetService {
         }
         UUID project = employeeProject(ts.getEmployeeId());
         String st = projectStatus(ts.getPeriodId(), project, payGroup(ts.getEmployeeId()));
+        if ("LOCKED".equals(st)) {
+            throw new BusinessRuleException("period.project.locked",
+                    "This project is LOCKED for the period - reopen it from Payroll Calendar first.");
+        }
         if ("CLOSED".equals(st)) {
             throw new BusinessRuleException("period.project.closed",
                     "This project is CLOSED for the period - timesheets are read-only.");
@@ -274,6 +278,7 @@ public class TimesheetService {
                     "Cannot lock — timesheets not ready: " + String.join("  •  ", blockers));
         }
         setProjectStatus(companyId, periodId, projectId, group, "LOCKED");
+        setProjectTimesheetsLocked(companyId, periodId, projectId, group);
         return Map.of("status", "LOCKED", "payGroup", group);
     }
 
@@ -294,8 +299,46 @@ public class TimesheetService {
     public Map<String, Object> reopenProject(UUID periodId, UUID projectId, String payGroup) {
         UUID companyId = TenantContext.requireCompanyId();
         String group = normalizePayGroup(payGroup);
+        PayrollPeriodProject pp = periodProjectRepo
+                .findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(companyId, periodId, projectId, group).orElse(null);
+        if (pp != null && "CLOSED".equals(pp.getStatus())) {
+            throw new BusinessRuleException("period.project.reopen.closed",
+                    "A CLOSED project period cannot be reopened.");
+        }
         setProjectStatus(companyId, periodId, projectId, group, "OPEN");
+        reopenProjectTimesheets(companyId, periodId, projectId, group);
         return Map.of("status", "OPEN", "payGroup", group);
+    }
+
+    private void setProjectTimesheetsLocked(UUID companyId, UUID periodId, UUID projectId, String payGroup) {
+        PayrollPeriod period = periodRepo.findById(periodId)
+                .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
+        for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
+                companyId, period.getPeriodYear(), period.getPeriodMonth())) {
+            if (projectId.equals(employeeProject(t.getEmployeeId()))
+                    && payGroupMatches(t.getEmployeeId(), payGroup)
+                    && APPROVED.equals(t.getStatus())) {
+                t.setStatus(LOCKED);
+                timesheetRepo.save(t);
+            }
+        }
+    }
+
+    private void reopenProjectTimesheets(UUID companyId, UUID periodId, UUID projectId, String payGroup) {
+        PayrollPeriod period = periodRepo.findById(periodId)
+                .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
+        for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
+                companyId, period.getPeriodYear(), period.getPeriodMonth())) {
+            if (projectId.equals(employeeProject(t.getEmployeeId()))
+                    && payGroupMatches(t.getEmployeeId(), payGroup)
+                    && LOCKED.equals(t.getStatus())) {
+                t.setStatus(DRAFT);
+                t.setSubmittedAt(null);
+                t.setApprovedAt(null);
+                t.setApprovedBy(null);
+                timesheetRepo.save(t);
+            }
+        }
     }
 
     private void setProjectStatus(UUID companyId, UUID periodId, UUID projectId, String payGroup, String status) {
@@ -479,6 +522,10 @@ public class TimesheetService {
         }
         UUID employeeProjectId = employeeProject(req.getEmployeeId());
         String pst = projectStatus(req.getPeriodId(), employeeProjectId, payGroup(req.getEmployeeId()));
+        if ("LOCKED".equals(pst)) {
+            throw new BusinessRuleException("period.project.locked",
+                    "This employee's project is LOCKED for the period - reopen it from Payroll Calendar first.");
+        }
         if ("CLOSED".equals(pst)) {
             throw new BusinessRuleException("period.project.closed",
                     "This employee's project is CLOSED for the period - can't generate.");
@@ -1383,4 +1430,3 @@ public class TimesheetService {
         return dto;
     }
 }
-
