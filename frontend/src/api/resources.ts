@@ -400,3 +400,8 @@ export const payrollRuleApi = {
   update: (id: string, payload: import("./types").PayrollRule) =>
     api.put<import("./types").PayrollRule>(`/payroll-rules/${id}`, payload).then((r) => r.data),
 };
+
+export const payrollReportApi = {
+  payrollListing: (runId: string) =>
+    api.get<import("./types").PayrollListingReport>(`/payroll/reports/payroll-listing/${runId}`).then((r) => r.data),
+};

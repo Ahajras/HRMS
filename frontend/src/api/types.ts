@@ -683,3 +683,50 @@ export interface PayrollCategoryRule {
   monthDivisor?: number | null;
   status?: string;
 }
+
+export interface PayrollListingReport {
+  runId: string;
+  periodId: string;
+  periodName?: string;
+  periodStartDate?: string;
+  periodEndDate?: string;
+  projectId?: string | null;
+  projectCode?: string;
+  projectName?: string;
+  payGroup?: string;
+  status?: string;
+  employeeCount: number;
+  totalBasic: number;
+  totalAllowances: number;
+  totalOvertime: number;
+  totalDeductions: number;
+  totalGross: number;
+  totalNet: number;
+  componentCodes: string[];
+  rows: PayrollListingRow[];
+}
+
+export interface PayrollListingRow {
+  employeeId: string;
+  employeeNumber?: string;
+  employeeName?: string;
+  payGroup?: string;
+  projectId?: string | null;
+  projectCode?: string;
+  projectName?: string;
+  costCodeId?: string | null;
+  costCode?: string;
+  costCodeName?: string;
+  workedDays: number;
+  normalHours: number;
+  otHours: number;
+  basic: number;
+  allowances: number;
+  overtime: number;
+  deductions: number;
+  gross: number;
+  net: number;
+  status?: string;
+  message?: string;
+  componentAmounts: Record<string, number>;
+}
