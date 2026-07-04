@@ -232,10 +232,16 @@ public class TimesheetService {
         UUID companyId = TenantContext.requireCompanyId();
         String all = periodProjectRepo.findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(companyId, periodId, projectId, "ALL")
                 .map(PayrollPeriodProject::getStatus).orElse("OPEN");
-        String group = "ALL".equals(payGroup) ? all
-                : periodProjectRepo.findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(companyId, periodId, projectId, payGroup)
-                .map(PayrollPeriodProject::getStatus).orElse("OPEN");
-        return strongestStatus(all, group);
+        String group = normalizePayGroup(payGroup);
+        if ("ALL".equals(group)) {
+            return all;
+        }
+        if ("CLOSED".equals(all)) {
+            return "CLOSED";
+        }
+        return periodProjectRepo.findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(companyId, periodId, projectId, group)
+                .map(PayrollPeriodProject::getStatus)
+                .orElse(all);
     }
 
     private static String strongestStatus(String a, String b) {
@@ -449,9 +455,13 @@ public class TimesheetService {
             row.put("projectId", e.getKey().toString());
             row.put("projectLabel", e.getValue());
             row.put("payGroup", group);
-            row.put("status", strongestStatus(
-                    allStatusByProject.getOrDefault(e.getKey(), "OPEN"),
-                    groupStatusByProject.getOrDefault(e.getKey(), "OPEN")));
+            String allStatus = allStatusByProject.getOrDefault(e.getKey(), "OPEN");
+            String status = "ALL".equals(group)
+                    ? allStatus
+                    : ("CLOSED".equals(allStatus)
+                    ? "CLOSED"
+                    : groupStatusByProject.getOrDefault(e.getKey(), allStatus));
+            row.put("status", status);
             out.add(row);
         }
         return out;
