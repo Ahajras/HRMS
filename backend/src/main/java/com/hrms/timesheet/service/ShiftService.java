@@ -110,7 +110,7 @@ public class ShiftService {
         e.setStartTime(dto.getStartTime());
         e.setEndTime(dto.getEndTime());
         e.setBreakMinutes(dto.getBreakMinutes());
-        e.setStandardHours(dto.getStandardHours());
+        e.setStandardHours(resolveStandardHours(dto));
         e.setCrossesMidnight(dto.isCrossesMidnight());
         e.setWeeklyOff(dto.getWeeklyOff());
         e.setEffectiveFrom(dto.getEffectiveFrom() != null ? dto.getEffectiveFrom() : LocalDate.of(2020, 1, 1));
@@ -118,6 +118,20 @@ public class ShiftService {
         if (dto.getStatus() != null) {
             e.setStatus(dto.getStatus());
         }
+    }
+
+    private BigDecimal resolveStandardHours(ShiftDto dto) {
+        if (dto.getDays() != null) {
+            BigDecimal maxNormal = dto.getDays().stream()
+                    .map(ShiftDayDto::getNormalHours)
+                    .filter(v -> v != null && v.compareTo(BigDecimal.ZERO) > 0)
+                    .max(BigDecimal::compareTo)
+                    .orElse(null);
+            if (maxNormal != null) {
+                return maxNormal;
+            }
+        }
+        return dto.getStandardHours() != null ? dto.getStandardHours() : BigDecimal.ZERO;
     }
 
     private ShiftDto toDto(Shift e) {
