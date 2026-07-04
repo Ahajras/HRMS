@@ -481,6 +481,7 @@ public class PayrollRunService {
                                                               PayrollRule rule, PayrollPolicyContext policy) {
         BigDecimal payQty = BigDecimal.ZERO;
         BigDecimal deductQty = BigDecimal.ZERO;
+        BigDecimal legacyPayHours = BigDecimal.ZERO;
         String basis = "HOURS";
         boolean touched = false;
         for (TimesheetDay day : policy.days()) {
@@ -508,6 +509,16 @@ public class PayrollRunService {
             basis = effect.basis();
             payQty = payQty.add(effect.payQuantity());
             deductQty = deductQty.add(effect.deductQuantity());
+            if (explicit == null) {
+                legacyPayHours = legacyPayHours.add(effect.payQuantity());
+            }
+        }
+        // Monthly: an allowance paid per present day is normalised to the divisor, so it
+        // is the same every month (divisor × shift-hours) regardless of 28/30/31 days.
+        // Unpaid days still reduce it through the deduction quantity.
+        if (!isDailyRule(rule) && legacyPayHours.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal divisorFull = safeMonthDivisor(rule).multiply(safeHours(rule));
+            payQty = payQty.subtract(legacyPayHours).add(divisorFull);
         }
         return new ComponentPolicyBreakdown(payQty, deductQty, basis, touched);
     }
