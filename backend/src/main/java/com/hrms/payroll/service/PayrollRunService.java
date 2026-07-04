@@ -249,7 +249,11 @@ public class PayrollRunService {
                                                PayrollResult result, PayrollRule rule, PayableBreakdown breakdown,
                                                PayrollPolicyContext policy) {
         ComponentPolicyBreakdown policyBreakdown = componentPolicyBreakdown(component, item, rule, policy);
-        if (policyBreakdown.hasAny()) {
+        // Monthly base salary is always paid as the fixed full amount (paid leave counts
+        // like a normal day). Time-type rules apply only as DEDUCTIONS on top of it,
+        // instead of replacing the whole base calculation.
+        boolean monthlyBase = isSalaryComponent(component) && isPayItemEarning(component) && !isDailyRule(rule);
+        if (policyBreakdown.hasAny() && !monthlyBase) {
             return buildPolicyLines(companyId, resultId, component, item, result, rule, policyBreakdown);
         }
         if (isPayItemEarning(component)) {
@@ -270,12 +274,23 @@ public class PayrollRunService {
                 BigDecimal componentAmount = round(rate.multiply(z(breakdown.paidHours()).divide(baseHours, 8, RoundingMode.HALF_UP)));
                 BigDecimal normalAmount = round(hourly.multiply(z(breakdown.regularPaidHours())));
                 BigDecimal restAmount = componentAmount.subtract(normalAmount);
-                return List.of(
+                List<PayrollResultLine> lines = new java.util.ArrayList<>(java.util.stream.Stream.of(
                         payItemLine(companyId, resultId, component, component.getName() + " - Normal paid hours",
                                 breakdown.regularPaidHours(), hourly, normalAmount, "REGULAR_HOURS", component.getPriority()),
                         payItemLine(companyId, resultId, component, component.getName() + " - Weekend/Holiday paid hours",
                                 breakdown.restPaidHours(), hourly, restAmount, "WEEKLY_REST", component.getPriority() + 1)
-                ).stream().filter(l -> z(l.getQuantity()).compareTo(BigDecimal.ZERO) > 0).toList();
+                ).filter(l -> z(l.getQuantity()).compareTo(BigDecimal.ZERO) > 0).toList());
+                // Apply time-type deductions (e.g. sick-after-N, unpaid) on top of the fixed base.
+                if (monthlyBase) {
+                    BigDecimal deductQty = z(policyBreakdown.deductQuantity());
+                    if (deductQty.compareTo(BigDecimal.ZERO) > 0) {
+                        lines.add(manualLine(companyId, resultId, component.getCode(),
+                                component.getName() + " - Time type deduction", "DEDUCTION", component.getCategory(),
+                                deductQty, hourly, round(hourly.multiply(deductQty)),
+                                "TIME_TYPE_RULE_DEDUCT", component.getPriority() + 2));
+                    }
+                }
+                return lines;
             }
             return List.of(
                     payItemLine(companyId, resultId, component, component.getName() + " - Regular paid days", breakdown.regularPaidDays(), rate, "REGULAR_DAYS", component.getPriority()),
