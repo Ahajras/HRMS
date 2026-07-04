@@ -611,8 +611,7 @@ public class PayrollRunService {
                 return projectRule.get();
             }
         }
-        return ruleRepo.findByCompanyIdAndProjectIdAndPayGroupAndStatus(companyId, null, group, "ACTIVE")
-                .or(() -> ruleRepo.findByCompanyIdAndPayGroupAndStatus(companyId, group, "ACTIVE"))
+        return ruleRepo.findDefaultByCompanyIdAndPayGroupAndStatus(companyId, group, "ACTIVE")
                 .orElseGet(() -> defaultRule(companyId, group));
     }
 
