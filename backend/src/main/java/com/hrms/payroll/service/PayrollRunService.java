@@ -310,9 +310,10 @@ public class PayrollRunService {
                 if (monthlyBase) {
                     BigDecimal deductQty = z(policyBreakdown.deductQuantity());
                     if (deductQty.compareTo(BigDecimal.ZERO) > 0) {
+                        BigDecimal deductionRate = unitRate(rate, rule, policyBreakdown.basis(), shiftHours, categoryPolicy, periodDays);
                         lines.add(manualLine(companyId, resultId, component.getCode(),
                                 component.getName() + " - Time type deduction", "DEDUCTION", component.getCategory(),
-                                deductQty, hourly, round(hourly.multiply(deductQty)),
+                                deductQty, deductionRate, round(deductionRate.multiply(deductQty)),
                                 "TIME_TYPE_RULE_DEDUCT", component.getPriority() + 2));
                     }
                 }
