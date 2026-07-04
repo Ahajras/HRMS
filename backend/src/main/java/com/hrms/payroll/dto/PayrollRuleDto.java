@@ -12,6 +12,7 @@ public class PayrollRuleDto {
     private BigDecimal restDayOtMultiplier;
     private boolean weeklyRestPaid;
     private BigDecimal monthDivisor;
+    private String divisorMode;
     private String status;
 
     public UUID getId() { return id; }
@@ -30,6 +31,8 @@ public class PayrollRuleDto {
     public void setWeeklyRestPaid(boolean weeklyRestPaid) { this.weeklyRestPaid = weeklyRestPaid; }
     public BigDecimal getMonthDivisor() { return monthDivisor; }
     public void setMonthDivisor(BigDecimal monthDivisor) { this.monthDivisor = monthDivisor; }
+    public String getDivisorMode() { return divisorMode; }
+    public void setDivisorMode(String divisorMode) { this.divisorMode = divisorMode; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
 }

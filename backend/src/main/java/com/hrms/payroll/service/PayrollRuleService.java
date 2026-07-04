@@ -37,6 +37,7 @@ public class PayrollRuleService {
         rule.setRestDayOtMultiplier(dto.getRestDayOtMultiplier());
         rule.setStandardHoursPerDay(dto.getStandardHoursPerDay());
         rule.setMonthDivisor(dto.getMonthDivisor());
+        if (dto.getDivisorMode() != null) rule.setDivisorMode(dto.getDivisorMode());
         rule.setWeeklyRestPaid(dto.isWeeklyRestPaid());
         return toDto(repository.save(rule));
     }
@@ -50,6 +51,7 @@ public class PayrollRuleService {
         dto.setRestDayOtMultiplier(rule.getRestDayOtMultiplier());
         dto.setStandardHoursPerDay(rule.getStandardHoursPerDay());
         dto.setMonthDivisor(rule.getMonthDivisor());
+        dto.setDivisorMode(rule.getDivisorMode());
         dto.setWeeklyRestPaid(rule.isWeeklyRestPaid());
         dto.setStatus(rule.getStatus());
         return dto;

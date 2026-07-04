@@ -668,5 +668,6 @@ export interface PayrollRule {
   standardHoursPerDay: number;
   weeklyRestPaid: boolean;
   monthDivisor: number;
+  divisorMode?: string;
   status?: string;
 }

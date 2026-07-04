@@ -636,7 +636,17 @@ public class PayrollRunService {
             BigDecimal divisor = safeMonthDivisor(rule);
             BigDecimal maxRegularDays = divisor.subtract(restPaidDays).max(BigDecimal.ZERO);
             BigDecimal maxRegularHours = maxRegularDays.multiply(standardHours);
-            if (regularPaidHours.compareTo(maxRegularHours) > 0) {
+            boolean fixed = rule == null || rule.getDivisorMode() == null
+                    || !"ACTUAL_MONTH".equalsIgnoreCase(rule.getDivisorMode());
+            if (fixed) {
+                // Fixed divisor: pay the full month (divisor-based) regardless of how
+                // many calendar days it has, reduced only by actual unpaid days.
+                BigDecimal billable = maxRegularHours.subtract(unpaidHours).max(BigDecimal.ZERO);
+                regularPaidHours = billable;
+                regularPaidDays = standardHours.compareTo(BigDecimal.ZERO) > 0
+                        ? billable.divide(standardHours, 2, RoundingMode.HALF_UP) : BigDecimal.ZERO;
+            } else if (regularPaidHours.compareTo(maxRegularHours) > 0) {
+                // Actual-month mode: keep actual paid hours, capped at the divisor ceiling.
                 regularPaidHours = maxRegularHours;
                 regularPaidDays = maxRegularDays;
             }

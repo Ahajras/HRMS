@@ -57,6 +57,7 @@ export default function PayrollRulesPage() {
               <TableCell align="right">Rest day OT</TableCell>
               <TableCell align="right">Hours / day</TableCell>
               <TableCell align="right">Month divisor</TableCell>
+              <TableCell>Divisor mode</TableCell>
               <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
@@ -89,6 +90,12 @@ export default function PayrollRulesPage() {
                   <TableCell align="right">
                     <TextField size="small" type="number" value={row.monthDivisor} onChange={(e) => set(rule, { monthDivisor: Number(e.target.value) })} inputProps={{ step: "1" }} />
                   </TableCell>
+                  <TableCell>
+                    <TextField select size="small" fullWidth value={row.divisorMode ?? "FIXED"} onChange={(e) => set(rule, { divisorMode: e.target.value })}>
+                      <MenuItem value="FIXED">Fixed value</MenuItem>
+                      <MenuItem value="ACTUAL_MONTH">By month days</MenuItem>
+                    </TextField>
+                  </TableCell>
                   <TableCell align="right">
                     <Button size="small" variant="contained" disabled={!drafts[rule.id ?? ""] || save.isPending} onClick={() => save.mutate(row)}>Save</Button>
                   </TableCell>
@@ -97,6 +104,29 @@ export default function PayrollRulesPage() {
             })}
           </TableBody>
         </Table>
+      </Paper>
+
+      <Paper variant="outlined" sx={{ borderRadius: 2, p: 2, mt: 2 }}>
+        <Typography variant="subtitle1" gutterBottom>How pay is calculated</Typography>
+        <Typography variant="body2" component="div" color="text.secondary">
+          <b>Monthly employee:</b> the salary is fixed by the month divisor.<br />
+          &nbsp;&nbsp;Hourly rate = Salary ÷ (Month&nbsp;divisor × Shift&nbsp;hours)<br />
+          &nbsp;&nbsp;Base pay = full divisor amount, reduced only by unpaid days.<br />
+          <b>Daily employee:</b> pay = worked days × daily rate.<br />
+          &nbsp;&nbsp;Hourly rate = Daily&nbsp;rate ÷ Shift&nbsp;hours<br />
+          <b>Overtime</b> = Hourly&nbsp;rate × OT&nbsp;hours × OT&nbsp;multiplier<br />
+          <b>Net</b> = Gross − Total&nbsp;deductions<br /><br />
+          <b>Divisor mode:</b> “Fixed value” always uses the divisor above (e.g. 30) so pay is
+          the same every month; “By month days” uses the real number of days in the month.<br />
+          <b>Shift hours</b> come from each employee’s assigned shift.
+        </Typography>
+        <Typography variant="subtitle2" sx={{ mt: 2 }} gutterBottom>Variables available (database)</Typography>
+        <Typography variant="body2" component="div" color="text.secondary">
+          payroll_rule.month_divisor, payroll_rule.divisor_mode, payroll_rule.ot_multiplier,
+          payroll_rule.rest_day_ot_multiplier, payroll_rule.weekly_rest_paid ·
+          payroll_result.daily_rate, hourly_rate, worked_days, normal_hours, ot_hours,
+          gross, total_deductions, net · shift.standard_hours (employee’s shift)
+        </Typography>
       </Paper>
       {save.isError && (
         <Alert severity="error" sx={{ mt: 2 }}>{(save.error as any)?.response?.data?.message ?? "Could not save payroll rule."}</Alert>

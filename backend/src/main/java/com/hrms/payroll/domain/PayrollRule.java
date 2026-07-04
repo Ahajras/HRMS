@@ -30,6 +30,9 @@ public class PayrollRule extends AuditableEntity {
     @Column(name = "month_divisor", nullable = false, precision = 6, scale = 2)
     private BigDecimal monthDivisor = new BigDecimal("30.00");
 
+    @Column(name = "divisor_mode", nullable = false, length = 20)
+    private String divisorMode = "FIXED";
+
     @Column(name = "rest_day_ot_multiplier", nullable = false, precision = 8, scale = 4)
     private BigDecimal restDayOtMultiplier = new BigDecimal("1.5000");
 
@@ -51,6 +54,8 @@ public class PayrollRule extends AuditableEntity {
     public void setStandardHoursPerDay(BigDecimal standardHoursPerDay) { this.standardHoursPerDay = standardHoursPerDay; }
     public BigDecimal getMonthDivisor() { return monthDivisor; }
     public void setMonthDivisor(BigDecimal monthDivisor) { this.monthDivisor = monthDivisor; }
+    public String getDivisorMode() { return divisorMode; }
+    public void setDivisorMode(String divisorMode) { this.divisorMode = divisorMode; }
     public BigDecimal getRestDayOtMultiplier() { return restDayOtMultiplier; }
     public void setRestDayOtMultiplier(BigDecimal restDayOtMultiplier) { this.restDayOtMultiplier = restDayOtMultiplier; }
     public boolean isWeeklyRestPaid() { return weeklyRestPaid; }
