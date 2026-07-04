@@ -671,4 +671,15 @@ export interface PayrollRule {
   divisorMode?: string;
   projectId?: string | null;
   status?: string;
+  categoryRules?: PayrollCategoryRule[];
+}
+
+export interface PayrollCategoryRule {
+  id?: string;
+  payrollRuleId?: string;
+  category: string;
+  basis: string;
+  divisorMode?: string;
+  monthDivisor?: number | null;
+  status?: string;
 }

@@ -2,8 +2,11 @@ package com.hrms.payroll.service;
 
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
+import com.hrms.payroll.domain.PayrollCategoryRule;
 import com.hrms.payroll.domain.PayrollRule;
+import com.hrms.payroll.dto.PayrollCategoryRuleDto;
 import com.hrms.payroll.dto.PayrollRuleDto;
+import com.hrms.payroll.repository.PayrollCategoryRuleRepository;
 import com.hrms.payroll.repository.PayrollRuleRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,9 +18,12 @@ import java.util.UUID;
 @Transactional
 public class PayrollRuleService {
     private final PayrollRuleRepository repository;
+    private final PayrollCategoryRuleRepository categoryRuleRepository;
 
-    public PayrollRuleService(PayrollRuleRepository repository) {
+    public PayrollRuleService(PayrollRuleRepository repository,
+                              PayrollCategoryRuleRepository categoryRuleRepository) {
         this.repository = repository;
+        this.categoryRuleRepository = categoryRuleRepository;
     }
 
     @Transactional(readOnly = true)
@@ -46,7 +52,10 @@ public class PayrollRuleService {
         rule.setDivisorMode(dto.getDivisorMode() != null ? dto.getDivisorMode() : "FIXED");
         rule.setWeeklyRestPaid(dto.isWeeklyRestPaid());
         rule.setStatus("ACTIVE");
-        return toDto(repository.save(rule));
+        rule = repository.save(rule);
+        saveCategoryRules(companyId, rule.getId(), dto.getCategoryRules());
+        ensureDefaultCategoryRules(companyId, rule.getId());
+        return toDto(rule);
     }
 
     public PayrollRuleDto update(UUID id, PayrollRuleDto dto) {
@@ -63,7 +72,52 @@ public class PayrollRuleService {
         if (dto.getDivisorMode() != null) rule.setDivisorMode(dto.getDivisorMode());
         rule.setProjectId(dto.getProjectId());
         rule.setWeeklyRestPaid(dto.isWeeklyRestPaid());
-        return toDto(repository.save(rule));
+        rule = repository.save(rule);
+        saveCategoryRules(rule.getCompanyId(), rule.getId(), dto.getCategoryRules());
+        ensureDefaultCategoryRules(rule.getCompanyId(), rule.getId());
+        return toDto(rule);
+    }
+
+    private void saveCategoryRules(UUID companyId, UUID payrollRuleId, List<PayrollCategoryRuleDto> rows) {
+        if (rows == null || rows.isEmpty()) {
+            return;
+        }
+        for (PayrollCategoryRuleDto dto : rows) {
+            if (dto.getCategory() == null || dto.getCategory().isBlank()) {
+                continue;
+            }
+            String category = dto.getCategory().trim().toUpperCase();
+            PayrollCategoryRule row = categoryRuleRepository
+                    .findByPayrollRuleIdAndCategoryAndStatus(payrollRuleId, category, "ACTIVE")
+                    .orElseGet(PayrollCategoryRule::new);
+            row.setCompanyId(companyId);
+            row.setPayrollRuleId(payrollRuleId);
+            row.setCategory(category);
+            row.setBasis(dto.getBasis() != null ? dto.getBasis() : "ACTUAL_PAYABLE");
+            row.setDivisorMode(dto.getDivisorMode() != null ? dto.getDivisorMode() : "INHERIT");
+            row.setMonthDivisor(dto.getMonthDivisor());
+            row.setStatus("ACTIVE");
+            categoryRuleRepository.save(row);
+        }
+    }
+
+    private void ensureDefaultCategoryRules(UUID companyId, UUID payrollRuleId) {
+        ensureDefaultCategoryRule(companyId, payrollRuleId, "SALARY", "FULL_MONTH");
+        ensureDefaultCategoryRule(companyId, payrollRuleId, "ALLOWANCE", "ACTUAL_PAYABLE");
+    }
+
+    private void ensureDefaultCategoryRule(UUID companyId, UUID payrollRuleId, String category, String basis) {
+        if (categoryRuleRepository.findByPayrollRuleIdAndCategoryAndStatus(payrollRuleId, category, "ACTIVE").isPresent()) {
+            return;
+        }
+        PayrollCategoryRule row = new PayrollCategoryRule();
+        row.setCompanyId(companyId);
+        row.setPayrollRuleId(payrollRuleId);
+        row.setCategory(category);
+        row.setBasis(basis);
+        row.setDivisorMode("INHERIT");
+        row.setStatus("ACTIVE");
+        categoryRuleRepository.save(row);
     }
 
     private PayrollRuleDto toDto(PayrollRule rule) {
@@ -79,6 +133,21 @@ public class PayrollRuleService {
         dto.setProjectId(rule.getProjectId());
         dto.setWeeklyRestPaid(rule.isWeeklyRestPaid());
         dto.setStatus(rule.getStatus());
+        dto.setCategoryRules(categoryRuleRepository
+                .findByPayrollRuleIdAndStatusOrderByCategory(rule.getId(), "ACTIVE")
+                .stream().map(this::toCategoryDto).toList());
+        return dto;
+    }
+
+    private PayrollCategoryRuleDto toCategoryDto(PayrollCategoryRule row) {
+        PayrollCategoryRuleDto dto = new PayrollCategoryRuleDto();
+        dto.setId(row.getId());
+        dto.setPayrollRuleId(row.getPayrollRuleId());
+        dto.setCategory(row.getCategory());
+        dto.setBasis(row.getBasis());
+        dto.setDivisorMode(row.getDivisorMode());
+        dto.setMonthDivisor(row.getMonthDivisor());
+        dto.setStatus(row.getStatus());
         return dto;
     }
 }

@@ -1,6 +1,8 @@
 package com.hrms.payroll.dto;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public class PayrollRuleDto {
@@ -15,6 +17,7 @@ public class PayrollRuleDto {
     private String divisorMode;
     private java.util.UUID projectId;
     private String status;
+    private List<PayrollCategoryRuleDto> categoryRules = new ArrayList<>();
 
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
@@ -38,4 +41,6 @@ public class PayrollRuleDto {
     public void setProjectId(java.util.UUID projectId) { this.projectId = projectId; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public List<PayrollCategoryRuleDto> getCategoryRules() { return categoryRules; }
+    public void setCategoryRules(List<PayrollCategoryRuleDto> categoryRules) { this.categoryRules = categoryRules; }
 }
