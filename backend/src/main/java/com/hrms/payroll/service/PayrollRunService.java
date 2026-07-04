@@ -24,12 +24,14 @@ import com.hrms.payroll.repository.PayrollRuleRepository;
 import com.hrms.payroll.repository.PayrollRunRepository;
 import com.hrms.timesheet.domain.PayrollPeriod;
 import com.hrms.timesheet.domain.PayrollPeriodProject;
+import com.hrms.timesheet.domain.Shift;
 import com.hrms.timesheet.domain.TimeType;
 import com.hrms.timesheet.domain.Timesheet;
 import com.hrms.timesheet.domain.TimesheetDay;
 import com.hrms.timesheet.domain.TimeTypePayrollRule;
 import com.hrms.timesheet.repository.PayrollPeriodProjectRepository;
 import com.hrms.timesheet.repository.PayrollPeriodRepository;
+import com.hrms.timesheet.repository.ShiftRepository;
 import com.hrms.timesheet.repository.TimeTypeRepository;
 import com.hrms.timesheet.repository.TimeTypePayrollRuleRepository;
 import com.hrms.timesheet.repository.TimesheetDayRepository;
@@ -65,6 +67,7 @@ public class PayrollRunService {
     private final PayrollPeriodProjectRepository periodProjectRepo;
     private final TimesheetRepository timesheetRepo;
     private final TimesheetDayRepository dayRepo;
+    private final ShiftRepository shiftRepo;
     private final TimeTypeRepository timeTypeRepo;
     private final TimeTypePayrollRuleRepository timeTypePayrollRuleRepo;
     private final EmployeeRepository employeeRepo;
@@ -80,6 +83,7 @@ public class PayrollRunService {
                              PayrollPeriodProjectRepository periodProjectRepo,
                              TimesheetRepository timesheetRepo,
                              TimesheetDayRepository dayRepo,
+                             ShiftRepository shiftRepo,
                              TimeTypeRepository timeTypeRepo,
                              TimeTypePayrollRuleRepository timeTypePayrollRuleRepo,
                              EmployeeRepository employeeRepo,
@@ -94,6 +98,7 @@ public class PayrollRunService {
         this.periodProjectRepo = periodProjectRepo;
         this.timesheetRepo = timesheetRepo;
         this.dayRepo = dayRepo;
+        this.shiftRepo = shiftRepo;
         this.timeTypeRepo = timeTypeRepo;
         this.timeTypePayrollRuleRepo = timeTypePayrollRuleRepo;
         this.employeeRepo = employeeRepo;
@@ -160,8 +165,9 @@ public class PayrollRunService {
             }
             UUID empProject = run.getProjectId() != null ? run.getProjectId() : employeeProject(emp.getId());
             PayrollRule rule = payrollRule(run.getCompanyId(), empProject, emp.getPayStatus());
-            PayableBreakdown breakdown = payableBreakdown(ts, rule);
-            PayrollPolicyContext policy = payrollPolicyContext(run.getCompanyId(), ts, rule);
+            BigDecimal shiftHours = shiftHours(ts, rule);
+            PayableBreakdown breakdown = payableBreakdown(ts, rule, shiftHours);
+            PayrollPolicyContext policy = payrollPolicyContext(run.getCompanyId(), ts, rule, shiftHours);
             PayrollResult result = buildResult(run, ts, emp, rule, breakdown);
             result = resultRepo.save(result);
             BigDecimal earnings = BigDecimal.ZERO;
@@ -171,7 +177,7 @@ public class PayrollRunService {
                 if (component == null) {
                     continue;
                 }
-                for (PayrollResultLine line : buildLines(run.getCompanyId(), result.getId(), item, component, result, rule, breakdown, policy)) {
+                for (PayrollResultLine line : buildLines(run.getCompanyId(), result.getId(), item, component, result, rule, breakdown, policy, shiftHours)) {
                     lineRepo.save(line);
                     if ("DEDUCTION".equalsIgnoreCase(line.getComponentType())) {
                         deductions = deductions.add(line.getAmount());
@@ -249,29 +255,29 @@ public class PayrollRunService {
 
     private List<PayrollResultLine> buildLines(UUID companyId, UUID resultId, ContractPayItem item, PayrollComponent component,
                                                PayrollResult result, PayrollRule rule, PayableBreakdown breakdown,
-                                               PayrollPolicyContext policy) {
+                                               PayrollPolicyContext policy, BigDecimal shiftHours) {
         ComponentPolicyBreakdown policyBreakdown = componentPolicyBreakdown(component, item, rule, policy);
         // Monthly base salary is always paid as the fixed full amount (paid leave counts
         // like a normal day). Time-type rules apply only as DEDUCTIONS on top of it,
         // instead of replacing the whole base calculation.
         boolean monthlyBase = isSalaryComponent(component) && isPayItemEarning(component) && !isDailyRule(rule);
         if (policyBreakdown.hasAny() && !monthlyBase) {
-            return buildPolicyLines(companyId, resultId, component, item, result, rule, policyBreakdown);
+            return buildPolicyLines(companyId, resultId, component, item, result, rule, policyBreakdown, shiftHours);
         }
         if (isPayItemEarning(component)) {
             BigDecimal rate = z(item.getAmount());
             if (isSalaryComponent(component) && result.getDailyRate().compareTo(BigDecimal.ZERO) == 0) {
                 if (isDailyRule(rule)) {
                     result.setDailyRate(rate);
-                    result.setHourlyRate(rate.divide(safeHours(rule), 4, RoundingMode.HALF_UP));
+                    result.setHourlyRate(rate.divide(shiftHours, 4, RoundingMode.HALF_UP));
                 } else {
-                    BigDecimal hourly = rate.divide(safeMonthDivisor(rule).multiply(safeHours(rule)), 4, RoundingMode.HALF_UP);
+                    BigDecimal hourly = rate.divide(safeMonthDivisor(rule).multiply(shiftHours), 4, RoundingMode.HALF_UP);
                     result.setHourlyRate(hourly);
-                    result.setDailyRate(hourly.multiply(safeHours(rule)));
+                    result.setDailyRate(hourly.multiply(shiftHours));
                 }
             }
             if (!isDailyRule(rule)) {
-                BigDecimal baseHours = safeMonthDivisor(rule).multiply(safeHours(rule));
+                BigDecimal baseHours = safeMonthDivisor(rule).multiply(shiftHours);
                 BigDecimal hourly = rate.divide(baseHours, 4, RoundingMode.HALF_UP);
                 BigDecimal componentAmount = round(rate.multiply(z(breakdown.paidHours()).divide(baseHours, 8, RoundingMode.HALF_UP)));
                 BigDecimal normalAmount = round(hourly.multiply(z(breakdown.regularPaidHours())));
@@ -304,22 +310,22 @@ public class PayrollRunService {
         if (isSalaryComponent(component) && result.getDailyRate().compareTo(BigDecimal.ZERO) == 0) {
             BigDecimal dailyRate = z(item.getAmount()).divide(new BigDecimal("30"), 4, RoundingMode.HALF_UP);
             result.setDailyRate(dailyRate);
-            result.setHourlyRate(dailyRate.divide(safeHours(rule), 4, RoundingMode.HALF_UP));
+            result.setHourlyRate(dailyRate.divide(shiftHours, 4, RoundingMode.HALF_UP));
         }
         return List.of(line);
     }
 
     private List<PayrollResultLine> buildPolicyLines(UUID companyId, UUID resultId, PayrollComponent component,
                                                      ContractPayItem item, PayrollResult result, PayrollRule rule,
-                                                     ComponentPolicyBreakdown breakdown) {
+                                                     ComponentPolicyBreakdown breakdown, BigDecimal shiftHours) {
         BigDecimal amount = z(item.getAmount());
-        BigDecimal unitRate = unitRate(amount, rule, breakdown.basis());
+        BigDecimal unitRate = unitRate(amount, rule, breakdown.basis(), shiftHours);
         if (isSalaryComponent(component) && result.getDailyRate().compareTo(BigDecimal.ZERO) == 0) {
             if (isDailyRule(rule)) {
                 result.setDailyRate(amount);
-                result.setHourlyRate(amount.divide(safeHours(rule), 4, RoundingMode.HALF_UP));
+                result.setHourlyRate(amount.divide(shiftHours, 4, RoundingMode.HALF_UP));
             } else {
-                BigDecimal hourly = amount.divide(safeMonthDivisor(rule).multiply(safeHours(rule)), 4, RoundingMode.HALF_UP);
+                BigDecimal hourly = amount.divide(safeMonthDivisor(rule).multiply(shiftHours), 4, RoundingMode.HALF_UP);
                 result.setHourlyRate(hourly);
                 result.setDailyRate(amount.divide(safeMonthDivisor(rule), 4, RoundingMode.HALF_UP));
             }
@@ -419,7 +425,7 @@ public class PayrollRunService {
         return line;
     }
 
-    private PayrollPolicyContext payrollPolicyContext(UUID companyId, Timesheet ts, PayrollRule rule) {
+    private PayrollPolicyContext payrollPolicyContext(UUID companyId, Timesheet ts, PayrollRule rule, BigDecimal shiftHours) {
         List<TimesheetDay> days = dayRepo.findByTimesheetIdOrderByWorkDate(ts.getId());
         Set<UUID> timeTypeIds = new HashSet<>();
         for (TimesheetDay day : days) {
@@ -441,7 +447,7 @@ public class PayrollRunService {
         Map<UUID, Integer> consecutivePos = new HashMap<>();
         Map<UUID, Integer> annualPos = new HashMap<>();
         computeThresholdPositions(days, types, consecutivePos, annualPos);
-        return new PayrollPolicyContext(days, types, rulesByTimeType, rule, consecutivePos, annualPos);
+        return new PayrollPolicyContext(days, types, rulesByTimeType, rule, shiftHours, consecutivePos, annualPos);
     }
 
     /**
@@ -491,8 +497,8 @@ public class PayrollRunService {
             Map<UUID, TimeTypePayrollRule> byComponent = day.getTimeTypeId() != null ? policy.rulesByTimeType().get(day.getTimeTypeId()) : null;
             TimeTypePayrollRule explicit = byComponent != null ? byComponent.get(item.getPayComponentId()) : null;
             DayEffect effect = explicit != null
-                    ? explicitEffect(explicit, day, type, rule)
-                    : legacyEffect(type, day, rule);
+                    ? explicitEffect(explicit, day, type, rule, policy.shiftHours())
+                    : legacyEffect(type, day, rule, policy.shiftHours());
             if (!effect.hasAny()) {
                 continue;
             }
@@ -519,17 +525,17 @@ public class PayrollRunService {
         // is the same every month (divisor × shift-hours) regardless of 28/30/31 days.
         // Unpaid days still reduce it through the deduction quantity.
         if (!isDailyRule(rule) && legacyPayHours.compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal divisorFull = safeMonthDivisor(rule).multiply(safeHours(rule));
+            BigDecimal divisorFull = safeMonthDivisor(rule).multiply(policy.shiftHours());
             payQty = payQty.subtract(legacyPayHours).add(divisorFull);
         }
         return new ComponentPolicyBreakdown(payQty, deductQty, basis, touched);
     }
 
-    private DayEffect explicitEffect(TimeTypePayrollRule explicit, TimesheetDay day, TimeType type, PayrollRule rule) {
-        BigDecimal baseQuantity = quantityForBasis(day, explicit.getBasis(), rule);
+    private DayEffect explicitEffect(TimeTypePayrollRule explicit, TimesheetDay day, TimeType type, PayrollRule rule, BigDecimal shiftHours) {
+        BigDecimal baseQuantity = quantityForBasis(day, explicit.getBasis(), shiftHours);
         BigDecimal scaled = baseQuantity.multiply(z(explicit.getPercent()).divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP));
         if ("DEDUCT".equalsIgnoreCase(explicit.getAction())) {
-            DayEffect legacy = legacyEffect(type, day, rule);
+            DayEffect legacy = legacyEffect(type, day, rule, shiftHours);
             return new DayEffect(legacy.payQuantity(), scaled, explicit.getBasis());
         }
         if ("PAY".equalsIgnoreCase(explicit.getAction())) {
@@ -538,11 +544,11 @@ public class PayrollRunService {
         return DayEffect.none();
     }
 
-    private DayEffect legacyEffect(TimeType type, TimesheetDay day, PayrollRule rule) {
+    private DayEffect legacyEffect(TimeType type, TimesheetDay day, PayrollRule rule, BigDecimal shiftHours) {
         String category = type != null ? type.getCategory() : "REGULAR";
         boolean rest = "REST".equalsIgnoreCase(category) || "HOLIDAY".equalsIgnoreCase(category);
         boolean daily = isDailyRule(rule);
-        BigDecimal standardHours = safeHours(rule);
+        BigDecimal standardHours = shiftHours;
         if (rest) {
             if (!daily && (type == null || type.isPaid() || rule.isWeeklyRestPaid())) {
                 return new DayEffect(restHours(day, standardHours), BigDecimal.ZERO, "HOURS");
@@ -558,9 +564,9 @@ public class PayrollRunService {
         return DayEffect.none();
     }
 
-    private BigDecimal quantityForBasis(TimesheetDay day, String basis, PayrollRule rule) {
+    private BigDecimal quantityForBasis(TimesheetDay day, String basis, BigDecimal shiftHours) {
         String normalized = basis == null ? "HOURS" : basis.toUpperCase();
-        BigDecimal standardHours = safeHours(rule);
+        BigDecimal standardHours = shiftHours;
         if ("DAYS".equals(normalized) || "FIXED".equals(normalized)) {
             BigDecimal hours = payrollHours(day, standardHours);
             if (hours.compareTo(BigDecimal.ZERO) <= 0) {
@@ -571,7 +577,7 @@ public class PayrollRunService {
         return payrollHours(day, standardHours);
     }
 
-    private BigDecimal unitRate(BigDecimal amount, PayrollRule rule, String basis) {
+    private BigDecimal unitRate(BigDecimal amount, PayrollRule rule, String basis, BigDecimal shiftHours) {
         String normalized = basis == null ? "HOURS" : basis.toUpperCase();
         if ("DAYS".equals(normalized) || "FIXED".equals(normalized)) {
             return isDailyRule(rule)
@@ -579,8 +585,8 @@ public class PayrollRunService {
                     : amount.divide(safeMonthDivisor(rule), 4, RoundingMode.HALF_UP);
         }
         return isDailyRule(rule)
-                ? amount.divide(safeHours(rule), 4, RoundingMode.HALF_UP)
-                : amount.divide(safeMonthDivisor(rule).multiply(safeHours(rule)), 4, RoundingMode.HALF_UP);
+                ? amount.divide(shiftHours, 4, RoundingMode.HALF_UP)
+                : amount.divide(safeMonthDivisor(rule).multiply(shiftHours), 4, RoundingMode.HALF_UP);
     }
 
     private PayrollResultLine manualLine(UUID companyId, UUID resultId, String code, String name, String componentType,
@@ -627,9 +633,8 @@ public class PayrollRunService {
         return rule;
     }
 
-    private PayableBreakdown payableBreakdown(Timesheet ts, PayrollRule rule) {
-        BigDecimal standardHours = z(rule.getStandardHoursPerDay()).compareTo(BigDecimal.ZERO) > 0
-                ? rule.getStandardHoursPerDay() : new BigDecimal("8.00");
+    private PayableBreakdown payableBreakdown(Timesheet ts, PayrollRule rule, BigDecimal shiftHours) {
+        BigDecimal standardHours = shiftHours;
         BigDecimal regularPaidDays = BigDecimal.ZERO;
         BigDecimal restPaidDays = BigDecimal.ZERO;
         BigDecimal unpaidDays = BigDecimal.ZERO;
@@ -731,6 +736,17 @@ public class PayrollRunService {
         return hours.compareTo(BigDecimal.ZERO) > 0 ? hours : new BigDecimal("8.00");
     }
 
+    private BigDecimal shiftHours(Timesheet ts, PayrollRule rule) {
+        if (ts != null && ts.getShiftId() != null) {
+            Shift shift = shiftRepo.findById(ts.getShiftId()).orElse(null);
+            if (shift != null && shift.getStandardHours() != null
+                    && z(shift.getStandardHours()).compareTo(BigDecimal.ZERO) > 0) {
+                return shift.getStandardHours();
+            }
+        }
+        return safeHours(rule);
+    }
+
     private static BigDecimal safeMonthDivisor(PayrollRule rule) {
         BigDecimal divisor = rule != null ? z(rule.getMonthDivisor()) : BigDecimal.ZERO;
         return divisor.compareTo(BigDecimal.ZERO) > 0 ? divisor : new BigDecimal("30.00");
@@ -753,6 +769,7 @@ public class PayrollRunService {
                                         Map<UUID, TimeType> types,
                                         Map<UUID, Map<UUID, TimeTypePayrollRule>> rulesByTimeType,
                                         PayrollRule payrollRule,
+                                        BigDecimal shiftHours,
                                         Map<UUID, Integer> consecutivePos,
                                         Map<UUID, Integer> annualPos) {
         boolean hasConfiguredRules() {
