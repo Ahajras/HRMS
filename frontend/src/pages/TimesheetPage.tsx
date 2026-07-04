@@ -259,7 +259,7 @@ export default function TimesheetPage() {
     },
   });
 
-  const periodOpen = period?.status === "OPEN";
+  const periodEditable = period?.status !== "CLOSED";
   const filtered = list.filter((t) => {
     const s = q.trim().toLowerCase();
     if (!s) return true;
@@ -299,14 +299,14 @@ export default function TimesheetPage() {
           {period && (
             <Grid item xs={12}>
               <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
-                <Button size="small" variant="outlined" disabled={!periodOpen || generateAll.isPending} onClick={() => generateAll.mutate()}>
+                <Button size="small" variant="outlined" disabled={!periodEditable || generateAll.isPending} onClick={() => generateAll.mutate()}>
                   Generate all (roster)
                 </Button>
                 <TextField select size="small" label="Crew" value={genCrew} onChange={(e) => setGenCrew(e.target.value)} sx={{ minWidth: 180 }}>
                   <MenuItem value="">(pick a crew)</MenuItem>
                   {allCrews.map((c) => <MenuItem key={c.id} value={c.id}>{c.code} — {c.name}</MenuItem>)}
                 </TextField>
-                <Button size="small" variant="outlined" disabled={!periodOpen || !genCrew || generateCrew.isPending} onClick={() => generateCrew.mutate()}>
+                <Button size="small" variant="outlined" disabled={!periodEditable || !genCrew || generateCrew.isPending} onClick={() => generateCrew.mutate()}>
                   Generate for crew
                 </Button>
                 <Button size="small" variant="outlined" disabled={list.every((t) => t.status !== "DRAFT") || submitAll.isPending} onClick={() => submitAll.mutate()}>
@@ -319,7 +319,7 @@ export default function TimesheetPage() {
                   size="small"
                   variant="outlined"
                   color="warning"
-                  disabled={!projectId || !periodOpen || lockProject.isPending}
+                  disabled={!projectId || !periodEditable || lockProject.isPending}
                   onClick={() => lockProject.mutate()}
                 >
                   Lock all approved
@@ -338,9 +338,9 @@ export default function TimesheetPage() {
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
         <Typography variant="subtitle2" gutterBottom>Generate timesheet</Typography>
-        {!periodOpen && period && (
+        {!periodEditable && period && (
           <Typography variant="body2" color="warning.main" mb={1}>
-            This period is {period.status}. Reopen it in Payroll Calendar to add or edit timesheets.
+            This period is CLOSED and cannot be edited.
           </Typography>
         )}
         <Grid container spacing={1.5} alignItems="center">
@@ -368,7 +368,7 @@ export default function TimesheetPage() {
             </TextField>
           </Grid>
           <Grid item xs={6} sm={3}>
-            <Button variant="contained" disabled={!genEmployee || !periodOpen || generate.isPending} onClick={() => generate.mutate()}>
+            <Button variant="contained" disabled={!genEmployee || !periodEditable || generate.isPending} onClick={() => generate.mutate()}>
               Generate
             </Button>
           </Grid>
@@ -401,9 +401,7 @@ export default function TimesheetPage() {
                 <TableCell align="right">{t.totalAbsenceDays ?? 0}</TableCell>
                 <TableCell align="right">
                   <Button size="small" onClick={() => setSelectedId(t.id ?? null)}>Open</Button>
-                  {t.status !== "LOCKED" && (
-                    <Button size="small" color="error" onClick={() => t.id && del.mutate(t.id)}>Delete</Button>
-                  )}
+                  <Button size="small" color="error" onClick={() => t.id && del.mutate(t.id)}>Delete</Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -563,8 +561,8 @@ function TimesheetDetail({
           {timesheet.status === "DRAFT" && <Button size="small" onClick={() => onLifecycle("submit")}>Submit</Button>}
           {timesheet.status === "SUBMITTED" && <Button size="small" color="success" onClick={() => onLifecycle("approve")}>Approve</Button>}
           {timesheet.status === "APPROVED" && <Button size="small" color="warning" onClick={() => onLifecycle("lock")}>Lock</Button>}
-          {(timesheet.status === "SUBMITTED" || timesheet.status === "APPROVED") && <Button size="small" onClick={() => onLifecycle("reopen")}>Reopen</Button>}
-          {timesheet.status !== "LOCKED" && <Button size="small" color="error" onClick={onDelete}>Delete</Button>}
+          {(timesheet.status === "SUBMITTED" || timesheet.status === "APPROVED" || timesheet.status === "LOCKED") && <Button size="small" onClick={() => onLifecycle("reopen")}>Reopen</Button>}
+          <Button size="small" color="error" onClick={onDelete}>Delete</Button>
         </Stack>
       </Stack>
 

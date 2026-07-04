@@ -11,4 +11,6 @@ public interface EmployeeShiftRepository extends JpaRepository<EmployeeShift, UU
     List<EmployeeShift> findByCompanyIdOrderByEffectiveFromDesc(UUID companyId);
 
     List<EmployeeShift> findByCompanyIdAndEmployeeIdOrderByEffectiveFromDesc(UUID companyId, UUID employeeId);
+
+    List<EmployeeShift> findByEmployeeIdOrderByEffectiveFromDesc(UUID employeeId);
 }

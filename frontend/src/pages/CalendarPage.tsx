@@ -161,7 +161,7 @@ function ProjectLocksPanel({ periodId }: { periodId: string }) {
               <TableCell align="right">
                 {r.status === "OPEN" && <Button size="small" color="warning" disabled={act.isPending} onClick={() => act.mutate({ projectId: r.projectId, a: "lock" })}>Lock</Button>}
                 {r.status === "LOCKED" && <Button size="small" color="error" disabled={act.isPending} onClick={() => act.mutate({ projectId: r.projectId, a: "close" })}>Close</Button>}
-                {r.status !== "OPEN" && <Button size="small" disabled={act.isPending} onClick={() => act.mutate({ projectId: r.projectId, a: "reopen" })}>Reopen</Button>}
+                {r.status === "LOCKED" && <Button size="small" disabled={act.isPending} onClick={() => act.mutate({ projectId: r.projectId, a: "reopen" })}>Reopen</Button>}
               </TableCell>
             </TableRow>
           ))}

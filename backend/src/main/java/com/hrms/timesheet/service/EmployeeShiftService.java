@@ -57,12 +57,14 @@ public class EmployeeShiftService {
         EmployeeShift entity = new EmployeeShift();
         entity.setCompanyId(companyId);
         apply(dto, entity);
+        validateNoOverlap(entity);
         return toDto(repository.save(entity), null);
     }
 
     public EmployeeShiftDto update(UUID id, EmployeeShiftDto dto) {
         EmployeeShift entity = getEntity(id);
         apply(dto, entity);
+        validateNoOverlap(entity);
         return toDto(repository.save(entity), null);
     }
 
@@ -92,6 +94,7 @@ public class EmployeeShiftService {
             e.setShiftId(req.getShiftId());
             e.setEffectiveFrom(from);
             validateShiftProject(e);
+            validateNoOverlap(e);
             repository.save(e);
             created++;
         }
@@ -129,6 +132,33 @@ public class EmployeeShiftService {
             throw new BusinessRuleException("employee-shift.project.mismatch",
                     "Shift project must match the employee's active project assignment.");
         }
+    }
+
+    private void validateNoOverlap(EmployeeShift candidate) {
+        if (candidate.getEmployeeId() == null || candidate.getEffectiveFrom() == null) {
+            return;
+        }
+        LocalDate candidateFrom = candidate.getEffectiveFrom();
+        LocalDate candidateTo = candidate.getEffectiveTo();
+        for (EmployeeShift existing : repository.findByCompanyIdAndEmployeeIdOrderByEffectiveFromDesc(
+                candidate.getCompanyId(), candidate.getEmployeeId())) {
+            if (candidate.getId() != null && candidate.getId().equals(existing.getId())) {
+                continue;
+            }
+            if (!"ACTIVE".equalsIgnoreCase(existing.getStatus())) {
+                continue;
+            }
+            if (overlaps(candidateFrom, candidateTo, existing.getEffectiveFrom(), existing.getEffectiveTo())) {
+                throw new BusinessRuleException("employee-shift.overlap",
+                        "Employee already has a shift assignment overlapping this date range.");
+            }
+        }
+    }
+
+    private static boolean overlaps(LocalDate aFrom, LocalDate aTo, LocalDate bFrom, LocalDate bTo) {
+        LocalDate aEnd = aTo != null ? aTo : LocalDate.MAX;
+        LocalDate bEnd = bTo != null ? bTo : LocalDate.MAX;
+        return !aFrom.isAfter(bEnd) && !bFrom.isAfter(aEnd);
     }
 
     private EmployeeShiftDto toDto(EmployeeShift e, Map<UUID, String> shiftCodes) {

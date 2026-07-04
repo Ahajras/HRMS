@@ -4,9 +4,14 @@ import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.employee.domain.Assignment;
 import com.hrms.employee.dto.AssignmentDto;
 import com.hrms.employee.repository.AssignmentRepository;
+import com.hrms.timesheet.domain.EmployeeShift;
+import com.hrms.timesheet.domain.Shift;
+import com.hrms.timesheet.repository.EmployeeShiftRepository;
+import com.hrms.timesheet.repository.ShiftRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.UUID;
 
@@ -18,9 +23,15 @@ import java.util.UUID;
 public class AssignmentService {
 
     private final AssignmentRepository repository;
+    private final EmployeeShiftRepository employeeShiftRepository;
+    private final ShiftRepository shiftRepository;
 
-    public AssignmentService(AssignmentRepository repository) {
+    public AssignmentService(AssignmentRepository repository,
+                             EmployeeShiftRepository employeeShiftRepository,
+                             ShiftRepository shiftRepository) {
         this.repository = repository;
+        this.employeeShiftRepository = employeeShiftRepository;
+        this.shiftRepository = shiftRepository;
     }
 
     @Transactional(readOnly = true)
@@ -38,13 +49,17 @@ public class AssignmentService {
         Assignment entity = new Assignment();
         entity.setEmployeeId(dto.getEmployeeId());
         apply(dto, entity);
-        return toDto(repository.save(entity));
+        entity = repository.save(entity);
+        closeOldProjectShifts(entity);
+        return toDto(entity);
     }
 
     public AssignmentDto update(UUID id, AssignmentDto dto) {
         Assignment entity = getEntity(id);
         apply(dto, entity);
-        return toDto(repository.save(entity));
+        entity = repository.save(entity);
+        closeOldProjectShifts(entity);
+        return toDto(entity);
     }
 
     public void delete(UUID id) {
@@ -68,6 +83,39 @@ public class AssignmentService {
         if (dto.getStatus() != null) {
             entity.setStatus(dto.getStatus());
         }
+    }
+
+    private void closeOldProjectShifts(Assignment assignment) {
+        if (assignment.getEmployeeId() == null || assignment.getEffectiveFrom() == null
+                || !"ACTIVE".equalsIgnoreCase(assignment.getStatus())) {
+            return;
+        }
+        LocalDate changeDate = assignment.getEffectiveFrom();
+        LocalDate closeDate = changeDate.minusDays(1);
+        for (EmployeeShift employeeShift : employeeShiftRepository
+                .findByEmployeeIdOrderByEffectiveFromDesc(assignment.getEmployeeId())) {
+            if (!"ACTIVE".equalsIgnoreCase(employeeShift.getStatus())) {
+                continue;
+            }
+            if (!activeOn(employeeShift.getEffectiveFrom(), employeeShift.getEffectiveTo(), changeDate)) {
+                continue;
+            }
+            Shift shift = shiftRepository.findById(employeeShift.getShiftId()).orElse(null);
+            UUID shiftProject = shift != null ? shift.getProjectId() : null;
+            if (shiftProject == null || shiftProject.equals(assignment.getProjectId())) {
+                continue;
+            }
+            if (employeeShift.getEffectiveFrom().isAfter(closeDate)) {
+                employeeShift.setStatus("INACTIVE");
+            } else {
+                employeeShift.setEffectiveTo(closeDate);
+            }
+            employeeShiftRepository.save(employeeShift);
+        }
+    }
+
+    private static boolean activeOn(LocalDate from, LocalDate to, LocalDate date) {
+        return from != null && !from.isAfter(date) && (to == null || !to.isBefore(date));
     }
 
     private AssignmentDto toDto(Assignment entity) {

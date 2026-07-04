@@ -250,14 +250,18 @@ public class TimesheetService {
 
     /** Block edits when the timesheet's project is locked/closed for its period. */
     private void assertEditable(Timesheet ts) {
+        PayrollPeriod period = periodRepo.findById(ts.getPeriodId()).orElse(null);
+        if (period != null && "CLOSED".equals(period.getStatus())) {
+            throw new BusinessRuleException("period.closed",
+                    "This period is CLOSED - timesheets are read-only.");
+        }
         UUID project = employeeProject(ts.getEmployeeId());
         String st = projectStatus(ts.getPeriodId(), project, payGroup(ts.getEmployeeId()));
-        if (!"OPEN".equals(st)) {
-            throw new BusinessRuleException("period.project.locked",
-                    "This project is " + st + " for the period — timesheets are read-only.");
+        if ("CLOSED".equals(st)) {
+            throw new BusinessRuleException("period.project.closed",
+                    "This project is CLOSED for the period - timesheets are read-only.");
         }
     }
-
     /** Lock a project for a period after validating its timesheets are ready. */
     public Map<String, Object> lockProject(UUID periodId, UUID projectId, String payGroup) {
         UUID companyId = TenantContext.requireCompanyId();
@@ -465,9 +469,9 @@ public class TimesheetService {
         // A timesheet must live inside an OPEN payroll period.
         PayrollPeriod period = periodRepo.findById(req.getPeriodId())
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + req.getPeriodId()));
-        if (!"OPEN".equals(period.getStatus())) {
+        if ("CLOSED".equals(period.getStatus())) {
             throw new BusinessRuleException("period.not.open",
-                    "The period is " + period.getStatus() + ". Reopen it to edit timesheets.");
+                    "The period is CLOSED. It cannot be edited.");
         }
         if (!employmentOverlapsPeriod(employee, period)) {
             throw new BusinessRuleException("employee.not.active.period",
@@ -475,9 +479,9 @@ public class TimesheetService {
         }
         UUID employeeProjectId = employeeProject(req.getEmployeeId());
         String pst = projectStatus(req.getPeriodId(), employeeProjectId, payGroup(req.getEmployeeId()));
-        if (!"OPEN".equals(pst)) {
-            throw new BusinessRuleException("period.project.locked",
-                    "This employee's project is " + pst + " for the period — can't generate.");
+        if ("CLOSED".equals(pst)) {
+            throw new BusinessRuleException("period.project.closed",
+                    "This employee's project is CLOSED for the period - can't generate.");
         }
         int year = period.getPeriodYear();
         int month = period.getPeriodMonth();
@@ -588,9 +592,9 @@ public class TimesheetService {
         UUID companyId = TenantContext.requireCompanyId();
         PayrollPeriod period = periodRepo.findById(periodId)
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
-        if (!"OPEN".equals(period.getStatus())) {
+        if ("CLOSED".equals(period.getStatus())) {
             throw new BusinessRuleException("period.not.open",
-                    "The period is " + period.getStatus() + ". Reopen it to add timesheets.");
+                    "The period is CLOSED. It cannot be edited.");
         }
         Set<UUID> allowed = restrictedProjects();
         Set<UUID> emps = new java.util.LinkedHashSet<>();
@@ -627,9 +631,9 @@ public class TimesheetService {
         UUID companyId = TenantContext.requireCompanyId();
         PayrollPeriod period = periodRepo.findById(periodId)
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
-        if (!"OPEN".equals(period.getStatus())) {
+        if ("CLOSED".equals(period.getStatus())) {
             throw new BusinessRuleException("period.not.open",
-                    "The period is " + period.getStatus() + ". Reopen it to add timesheets.");
+                    "The period is CLOSED. It cannot be edited.");
         }
         Set<UUID> allowed = restrictedProjects();
         // Most-recent membership row per employee (rows are ordered effectiveFrom desc).
@@ -899,9 +903,6 @@ public class TimesheetService {
     /** Send a SUBMITTED/APPROVED timesheet back to DRAFT, invalidating the approval. */
     public TimesheetDto reopen(UUID id) {
         Timesheet ts = getEntity(id);
-        if (LOCKED.equals(ts.getStatus())) {
-            throw new BusinessRuleException("timesheet.reopen.locked", "A LOCKED timesheet cannot be reopened.");
-        }
         assertEditable(ts);
         if (DRAFT.equals(ts.getStatus())) {
             return toFullDto(ts);
@@ -915,9 +916,6 @@ public class TimesheetService {
 
     public void delete(UUID id) {
         Timesheet ts = getEntity(id);
-        if (LOCKED.equals(ts.getStatus())) {
-            throw new BusinessRuleException("timesheet.delete.locked", "A LOCKED timesheet cannot be deleted.");
-        }
         assertEditable(ts);
         timesheetRepo.delete(ts);
     }
