@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
+import java.util.List;
 
 /**
  * CRUD for employees (FTDD Vol.1 Ch.2). Company-scoped via {@link TenantContext}.
@@ -102,6 +103,19 @@ public class EmployeeService {
             throw new ResourceNotFoundException("Timekeeper employee not found: " + timekeeperEmployeeId);
         }
         return repository.assignTimekeeperForActiveProjectEmployees(companyId, projectId, timekeeperEmployeeId);
+    }
+
+    public int assignTimekeeperForEmployees(List<UUID> employeeIds, UUID timekeeperEmployeeId, UUID projectId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        if (employeeIds == null || employeeIds.isEmpty()) {
+            return 0;
+        }
+        Employee timekeeper = repository.findById(timekeeperEmployeeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Timekeeper employee not found: " + timekeeperEmployeeId));
+        if (!companyId.equals(timekeeper.getCompanyId())) {
+            throw new ResourceNotFoundException("Timekeeper employee not found: " + timekeeperEmployeeId);
+        }
+        return repository.assignTimekeeperForEmployees(companyId, employeeIds, timekeeperEmployeeId, projectId);
     }
 
     private Employee getEntity(UUID id) {

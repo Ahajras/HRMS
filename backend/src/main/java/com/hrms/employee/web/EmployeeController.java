@@ -24,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.util.UUID;
 import java.util.Map;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/employees")
@@ -82,6 +83,13 @@ public class EmployeeController {
     public Map<String, Integer> assignTimekeeperForProject(@RequestParam UUID projectId,
                                                            @RequestParam UUID timekeeperEmployeeId) {
         return Map.of("updated", service.assignTimekeeperForProject(projectId, timekeeperEmployeeId));
+    }
+
+    @PutMapping("/timekeeper/by-employees")
+    public Map<String, Integer> assignTimekeeperForEmployees(@RequestParam UUID timekeeperEmployeeId,
+                                                             @RequestParam(required = false) UUID projectId,
+                                                             @RequestBody List<UUID> employeeIds) {
+        return Map.of("updated", service.assignTimekeeperForEmployees(employeeIds, timekeeperEmployeeId, projectId));
     }
 
     @DeleteMapping("/{id}")

@@ -154,6 +154,7 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
             set e.timekeeperEmployeeId = :timekeeperEmployeeId
             where e.companyId = :companyId
               and upper(coalesce(e.status, '')) = 'ACTIVE'
+              and e.timekeeperEmployeeId is null
               and exists (
                     select 1 from Assignment a
                     where a.employeeId = e.id
@@ -165,4 +166,25 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
     int assignTimekeeperForActiveProjectEmployees(@Param("companyId") UUID companyId,
                                                   @Param("projectId") UUID projectId,
                                                   @Param("timekeeperEmployeeId") UUID timekeeperEmployeeId);
+
+    @Modifying
+    @Query("""
+            update Employee e
+            set e.timekeeperEmployeeId = :timekeeperEmployeeId
+            where e.companyId = :companyId
+              and e.id in :employeeIds
+              and upper(coalesce(e.status, '')) = 'ACTIVE'
+              and e.timekeeperEmployeeId is null
+              and (:projectId is null or exists (
+                    select 1 from Assignment a
+                    where a.employeeId = e.id
+                      and a.projectId = :projectId
+                      and upper(coalesce(a.status, '')) = 'ACTIVE'
+                      and (a.effectiveTo is null or a.effectiveTo >= current_date)
+              ))
+            """)
+    int assignTimekeeperForEmployees(@Param("companyId") UUID companyId,
+                                     @Param("employeeIds") List<UUID> employeeIds,
+                                     @Param("timekeeperEmployeeId") UUID timekeeperEmployeeId,
+                                     @Param("projectId") UUID projectId);
 }

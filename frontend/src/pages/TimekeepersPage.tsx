@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   Box,
   Button,
+  Checkbox,
   Chip,
   Divider,
   Grid,
@@ -38,19 +39,25 @@ export default function TimekeepersPage() {
   const theme = useTheme();
   const compact = useMediaQuery(theme.breakpoints.down("md"));
   const canManage = hasAuthority("employee.write") || hasAuthority("employee.read");
-  const { data: rows = [] } = useQuery({ queryKey: ["timekeeperProjects"], queryFn: timekeeperApi.list, enabled: canManage });
-  const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list, enabled: canManage });
-  const { data: employees } = useQuery({ queryKey: ["employeesAll"], queryFn: () => employeeApi.list(0, 500), enabled: canManage });
-  const empList = employees?.content ?? [];
-
   const [employeeId, setEmployeeId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [bulkProjectId, setBulkProjectId] = useState("");
   const [bulkTimekeeperId, setBulkTimekeeperId] = useState("");
+  const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
   const [consoleTk, setConsoleTk] = useState("");
   const [workDate, setWorkDate] = useState(today());
   const [inTimes, setInTimes] = useState<Record<string, string>>({});
   const [outTimes, setOutTimes] = useState<Record<string, string>>({});
+  const { data: rows = [] } = useQuery({ queryKey: ["timekeeperProjects"], queryFn: timekeeperApi.list, enabled: canManage });
+  const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list, enabled: canManage });
+  const { data: employees } = useQuery({ queryKey: ["employeesAll"], queryFn: () => employeeApi.list(0, 500), enabled: canManage });
+  const { data: projectEmployees } = useQuery({
+    queryKey: ["timekeeperProjectCandidates", bulkProjectId],
+    queryFn: () => employeeApi.list(0, 1000, undefined, undefined, bulkProjectId, { activeOnly: true }),
+    enabled: canManage && !!bulkProjectId,
+  });
+  const empList = employees?.content ?? [];
+  const candidateEmployees = (projectEmployees?.content ?? []).filter((emp) => !emp.timekeeperEmployeeId);
 
   const consoleRows = useQuery({
     queryKey: ["timekeeperConsole", workDate, consoleTk],
@@ -71,10 +78,14 @@ export default function TimekeepersPage() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["timekeeperConsole"] }),
   });
   const bulkAssign = useMutation({
-    mutationFn: () => employeeApi.assignTimekeeperByProject(bulkProjectId, bulkTimekeeperId),
+    mutationFn: (employeeIds: string[]) => employeeIds.length
+      ? employeeApi.assignTimekeeperByEmployees(employeeIds, bulkTimekeeperId, bulkProjectId)
+      : employeeApi.assignTimekeeperByProject(bulkProjectId, bulkTimekeeperId),
     onSuccess: () => {
+      setSelectedEmployeeIds([]);
       qc.invalidateQueries({ queryKey: ["employeesAll"] });
       qc.invalidateQueries({ queryKey: ["timekeeperConsole"] });
+      qc.invalidateQueries({ queryKey: ["timekeeperProjectCandidates"] });
     },
   });
 
@@ -88,6 +99,17 @@ export default function TimekeepersPage() {
       if (tk?.id) setBulkTimekeeperId(tk.id);
     }
   }, [bulkProjectId, bulkTimekeeperId, projects, empList]);
+
+  useEffect(() => {
+    setSelectedEmployeeIds([]);
+  }, [bulkProjectId]);
+
+  const allCandidateIds = candidateEmployees.map((emp) => emp.id!).filter(Boolean);
+  const allSelected = allCandidateIds.length > 0 && allCandidateIds.every((id) => selectedEmployeeIds.includes(id));
+  const toggleAllCandidates = () => setSelectedEmployeeIds(allSelected ? [] : allCandidateIds);
+  const toggleCandidate = (id: string) => {
+    setSelectedEmployeeIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
 
   const submitMark = (employeeId: string, action: TimekeeperMarkRequest["action"]) => {
     mark.mutate({
@@ -141,11 +163,52 @@ export default function TimekeepersPage() {
                 </TextField>
               </Grid>
               <Grid item xs={12} sm={2}>
-                <Button fullWidth variant="contained" disabled={!bulkProjectId || !bulkTimekeeperId || bulkAssign.isPending} onClick={() => bulkAssign.mutate()}>
-                  Apply
+                <Button fullWidth variant="contained" disabled={!bulkProjectId || !bulkTimekeeperId || candidateEmployees.length === 0 || bulkAssign.isPending} onClick={() => bulkAssign.mutate([])}>
+                  Assign all
                 </Button>
               </Grid>
             </Grid>
+            {bulkProjectId && (
+              <Box mt={1.5}>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+                  <Typography variant="body2" color="text.secondary">
+                    Unassigned employees: {candidateEmployees.length}
+                  </Typography>
+                  <Button size="small" variant="outlined" disabled={!bulkTimekeeperId || selectedEmployeeIds.length === 0 || bulkAssign.isPending} onClick={() => bulkAssign.mutate(selectedEmployeeIds)}>
+                    Assign selected ({selectedEmployeeIds.length})
+                  </Button>
+                </Stack>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell padding="checkbox">
+                        <Checkbox size="small" checked={allSelected} indeterminate={selectedEmployeeIds.length > 0 && !allSelected} onChange={toggleAllCandidates} />
+                      </TableCell>
+                      <TableCell>Employee</TableCell>
+                      <TableCell>Job title</TableCell>
+                      <TableCell>Pay</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {candidateEmployees.map((emp) => (
+                      <TableRow key={emp.id} hover>
+                        <TableCell padding="checkbox">
+                          <Checkbox size="small" checked={!!emp.id && selectedEmployeeIds.includes(emp.id)} onChange={() => emp.id && toggleCandidate(emp.id)} />
+                        </TableCell>
+                        <TableCell>{emp.employeeNumber} - {emp.firstName} {emp.lastName}</TableCell>
+                        <TableCell>{emp.jobTitle ?? "-"}</TableCell>
+                        <TableCell>{emp.payStatus ?? "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                    {candidateEmployees.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4}><Typography variant="body2" color="text.secondary" p={1}>No unassigned active employees for this project.</Typography></TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </Box>
+            )}
             {bulkAssign.isSuccess && <Typography color="success.main" variant="body2" mt={1}>Updated {bulkAssign.data?.updated ?? 0} active employee(s).</Typography>}
             {bulkAssign.isError && <Typography color="error" variant="body2" mt={1}>{(bulkAssign.error as any)?.response?.data?.message ?? "Failed."}</Typography>}
           </Paper>
