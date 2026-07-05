@@ -50,6 +50,7 @@ interface NavItem {
   label: string;
   icon: React.ReactNode;
   authority?: string;
+  authorities?: string[];
 }
 
 interface NavGroup {
@@ -64,7 +65,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/employees", label: "Employees", icon: <PeopleIcon />, authority: "employee.read" },
       { to: "/organization", label: "Organization", icon: <AccountTreeIcon />, authority: "organization.read" },
       { to: "/crews", label: "Crews", icon: <GroupsIcon />, authority: "employee.read" },
-      { to: "/timekeepers", label: "Timekeepers", icon: <ManageAccountsIcon />, authority: "employee.read" },
+      { to: "/timekeepers", label: "Timekeepers", icon: <ManageAccountsIcon />, authorities: ["employee.read", "timekeeper.attendance"] },
     ],
   },
   {
@@ -124,8 +125,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const needsCompany = isPlatformAdmin && !company.trim();
 
   // Keep only groups/items the user is allowed to see.
+  const canSee = (item: NavItem) => {
+    if (item.authorities?.length) return item.authorities.some(hasAuthority);
+    return !item.authority || hasAuthority(item.authority);
+  };
   const groups = NAV_GROUPS
-    .map((g) => ({ ...g, items: g.items.filter((i) => !i.authority || hasAuthority(i.authority)) }))
+    .map((g) => ({ ...g, items: g.items.filter(canSee) }))
     .filter((g) => g.items.length > 0);
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});

@@ -8,6 +8,7 @@ import com.hrms.timesheet.service.TimesheetService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -36,29 +37,34 @@ public class TimekeeperController {
     }
 
     @GetMapping
+    @PreAuthorize("hasAuthority('employee.read')")
     public List<TimekeeperProjectDto> findAll() {
         return service.findAll();
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
+    @PreAuthorize("hasAuthority('employee.write')")
     public TimekeeperProjectDto create(@Valid @RequestBody TimekeeperProjectDto dto) {
         return service.create(dto);
     }
 
     @DeleteMapping("/{id}")
+    @PreAuthorize("hasAuthority('employee.write')")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);
         return ResponseEntity.noContent().build();
     }
 
     @GetMapping("/console")
+    @PreAuthorize("hasAuthority('timekeeper.attendance') or hasAuthority('employee.read')")
     public List<TimekeeperDayDto> console(@RequestParam(required = false) UUID timekeeperEmployeeId,
                                           @RequestParam(required = false) LocalDate date) {
         return timesheetService.timekeeperConsole(timekeeperEmployeeId, date);
     }
 
     @PostMapping("/console/mark")
+    @PreAuthorize("hasAuthority('timekeeper.attendance') or hasAuthority('employee.write')")
     public TimekeeperDayDto mark(@RequestBody TimekeeperMarkRequest request) {
         return timesheetService.markTimekeeperDay(request);
     }

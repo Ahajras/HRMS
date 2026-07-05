@@ -24,15 +24,18 @@ import LogoutIcon from "@mui/icons-material/Logout";
 import EventBusyIcon from "@mui/icons-material/EventBusy";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import { employeeApi, projectApi, timekeeperApi } from "../api/resources";
+import { useAuth } from "../auth/AuthContext";
 import type { TimekeeperMarkRequest, TimekeeperProject } from "../api/types";
 
 const today = () => new Date().toISOString().slice(0, 10);
 
 export default function TimekeepersPage() {
   const qc = useQueryClient();
-  const { data: rows = [] } = useQuery({ queryKey: ["timekeeperProjects"], queryFn: timekeeperApi.list });
-  const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
-  const { data: employees } = useQuery({ queryKey: ["employeesAll"], queryFn: () => employeeApi.list(0, 500) });
+  const { hasAuthority } = useAuth();
+  const canManage = hasAuthority("employee.write") || hasAuthority("employee.read");
+  const { data: rows = [] } = useQuery({ queryKey: ["timekeeperProjects"], queryFn: timekeeperApi.list, enabled: canManage });
+  const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list, enabled: canManage });
+  const { data: employees } = useQuery({ queryKey: ["employeesAll"], queryFn: () => employeeApi.list(0, 500), enabled: canManage });
   const empList = employees?.content ?? [];
 
   const [employeeId, setEmployeeId] = useState("");
@@ -75,58 +78,64 @@ export default function TimekeepersPage() {
     <Box>
       <Typography variant="h5" mb={2}>Timekeepers</Typography>
 
-      <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
-        <Typography variant="subtitle2" gutterBottom>Project access</Typography>
-        <Grid container spacing={1.5} alignItems="center">
-          <Grid item xs={12} sm={5}>
-            <TextField select fullWidth size="small" label="Timekeeper (employee)" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
-              {empList.map((emp) => <MenuItem key={emp.id} value={emp.id}>{emp.employeeNumber} - {emp.firstName} {emp.lastName}</MenuItem>)}
-            </TextField>
-          </Grid>
-          <Grid item xs={12} sm={4}>
-            <TextField select fullWidth size="small" label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-              {projects.map((p) => <MenuItem key={p.id} value={p.id}>{p.code} - {p.name}</MenuItem>)}
-            </TextField>
-          </Grid>
-          <Grid item xs={12} sm={3}>
-            <Button startIcon={<AddIcon />} variant="contained" disabled={!employeeId || !projectId || save.isPending} onClick={() => save.mutate()}>
-              Assign
-            </Button>
-          </Grid>
-        </Grid>
-        {save.isError && <Typography color="error" variant="body2" mt={1}>{(save.error as any)?.response?.data?.message ?? "Failed."}</Typography>}
-      </Paper>
+      {canManage && (
+        <>
+          <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>Project access</Typography>
+            <Grid container spacing={1.5} alignItems="center">
+              <Grid item xs={12} sm={5}>
+                <TextField select fullWidth size="small" label="Timekeeper (employee)" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)}>
+                  {empList.map((emp) => <MenuItem key={emp.id} value={emp.id}>{emp.employeeNumber} - {emp.firstName} {emp.lastName}</MenuItem>)}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField select fullWidth size="small" label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+                  {projects.map((p) => <MenuItem key={p.id} value={p.id}>{p.code} - {p.name}</MenuItem>)}
+                </TextField>
+              </Grid>
+              <Grid item xs={12} sm={3}>
+                <Button startIcon={<AddIcon />} variant="contained" disabled={!employeeId || !projectId || save.isPending} onClick={() => save.mutate()}>
+                  Assign
+                </Button>
+              </Grid>
+            </Grid>
+            {save.isError && <Typography color="error" variant="body2" mt={1}>{(save.error as any)?.response?.data?.message ?? "Failed."}</Typography>}
+          </Paper>
 
-      <Paper variant="outlined" sx={{ borderRadius: 2, mb: 2 }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Timekeeper</TableCell>
-              <TableCell>Project</TableCell>
-              <TableCell align="right" />
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {rows.map((r) => (
-              <TableRow key={r.id} hover>
-                <TableCell>{r.employeeNumber} - {r.employeeName}</TableCell>
-                <TableCell>{r.projectCode}</TableCell>
-                <TableCell align="right"><IconButton size="small" color="error" onClick={() => r.id && del.mutate(r.id)}><DeleteIcon fontSize="small" /></IconButton></TableCell>
-              </TableRow>
-            ))}
-            {rows.length === 0 && <TableRow><TableCell colSpan={3}><Typography variant="body2" color="text.secondary" p={1}>No project access assigned yet.</Typography></TableCell></TableRow>}
-          </TableBody>
-        </Table>
-      </Paper>
+          <Paper variant="outlined" sx={{ borderRadius: 2, mb: 2 }}>
+            <Table size="small">
+              <TableHead>
+                <TableRow>
+                  <TableCell>Timekeeper</TableCell>
+                  <TableCell>Project</TableCell>
+                  <TableCell align="right" />
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {rows.map((r) => (
+                  <TableRow key={r.id} hover>
+                    <TableCell>{r.employeeNumber} - {r.employeeName}</TableCell>
+                    <TableCell>{r.projectCode}</TableCell>
+                    <TableCell align="right"><IconButton size="small" color="error" onClick={() => r.id && del.mutate(r.id)}><DeleteIcon fontSize="small" /></IconButton></TableCell>
+                  </TableRow>
+                ))}
+                {rows.length === 0 && <TableRow><TableCell colSpan={3}><Typography variant="body2" color="text.secondary" p={1}>No project access assigned yet.</Typography></TableCell></TableRow>}
+              </TableBody>
+            </Table>
+          </Paper>
+        </>
+      )}
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ xs: "stretch", md: "center" }} mb={2}>
           <Typography variant="subtitle2" sx={{ minWidth: 160 }}>Daily console</Typography>
           <TextField size="small" type="date" label="Date" InputLabelProps={{ shrink: true }} value={workDate} inputProps={{ max: today() }} onChange={(e) => setWorkDate(e.target.value)} />
-          <TextField select size="small" label="Timekeeper" value={consoleTk} onChange={(e) => setConsoleTk(e.target.value)} sx={{ minWidth: 280 }}>
-            <MenuItem value="">Current login</MenuItem>
-            {empList.map((emp) => <MenuItem key={emp.id} value={emp.id}>{emp.employeeNumber} - {emp.firstName} {emp.lastName}</MenuItem>)}
-          </TextField>
+          {canManage && (
+            <TextField select size="small" label="Timekeeper" value={consoleTk} onChange={(e) => setConsoleTk(e.target.value)} sx={{ minWidth: 280 }}>
+              <MenuItem value="">Current login</MenuItem>
+              {empList.map((emp) => <MenuItem key={emp.id} value={emp.id}>{emp.employeeNumber} - {emp.firstName} {emp.lastName}</MenuItem>)}
+            </TextField>
+          )}
         </Stack>
         {mark.isError && <Typography color="error" variant="body2" mb={1}>{(mark.error as any)?.response?.data?.message ?? "Failed to mark attendance."}</Typography>}
         {consoleRows.isError && <Typography color="error" variant="body2" mb={1}>{(consoleRows.error as any)?.response?.data?.message ?? "Failed to load console."}</Typography>}
