@@ -94,6 +94,16 @@ public class EmployeeService {
         repository.delete(getEntity(id));
     }
 
+    public int assignTimekeeperForProject(UUID projectId, UUID timekeeperEmployeeId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        Employee timekeeper = repository.findById(timekeeperEmployeeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Timekeeper employee not found: " + timekeeperEmployeeId));
+        if (!companyId.equals(timekeeper.getCompanyId())) {
+            throw new ResourceNotFoundException("Timekeeper employee not found: " + timekeeperEmployeeId);
+        }
+        return repository.assignTimekeeperForActiveProjectEmployees(companyId, projectId, timekeeperEmployeeId);
+    }
+
     private Employee getEntity(UUID id) {
         return repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + id));

@@ -3,6 +3,7 @@ package com.hrms.employee.repository;
 import com.hrms.employee.domain.Employee;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -20,6 +21,8 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
     List<Employee> findByCompanyIdAndTimekeeperEmployeeIdOrderByEmployeeNumber(UUID companyId, UUID timekeeperEmployeeId);
 
     Optional<Employee> findByCompanyIdAndEmployeeNumber(UUID companyId, String employeeNumber);
+
+    Optional<Employee> findByCompanyIdAndEmployeeNumberIgnoreCase(UUID companyId, String employeeNumber);
 
     boolean existsByCompanyIdAndEmployeeNumber(UUID companyId, String employeeNumber);
 
@@ -144,4 +147,22 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
             """)
     Object[] summaryCounts(@Param("companyId") UUID companyId, @Param("q") String q,
                            @Param("projectId") UUID projectId);
+
+    @Modifying
+    @Query("""
+            update Employee e
+            set e.timekeeperEmployeeId = :timekeeperEmployeeId
+            where e.companyId = :companyId
+              and upper(coalesce(e.status, '')) = 'ACTIVE'
+              and exists (
+                    select 1 from Assignment a
+                    where a.employeeId = e.id
+                      and a.projectId = :projectId
+                      and upper(coalesce(a.status, '')) = 'ACTIVE'
+                      and (a.effectiveTo is null or a.effectiveTo >= current_date)
+              )
+            """)
+    int assignTimekeeperForActiveProjectEmployees(@Param("companyId") UUID companyId,
+                                                  @Param("projectId") UUID projectId,
+                                                  @Param("timekeeperEmployeeId") UUID timekeeperEmployeeId);
 }

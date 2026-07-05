@@ -240,6 +240,8 @@ export const employeeApi = {
     api.get<import("./types").EmployeeTimeTypeUsage>(`/employees/${id}/time-type-usage`, { params: { year } }).then((r) => r.data),
   create: (d: Employee) => api.post<Employee>("/employees", d).then((r) => r.data),
   update: (id: string, d: Employee) => api.put<Employee>(`/employees/${id}`, d).then((r) => r.data),
+  assignTimekeeperByProject: (projectId: string, timekeeperEmployeeId: string) =>
+    api.put<{ updated: number }>("/employees/timekeeper/by-project", null, { params: { projectId, timekeeperEmployeeId } }).then((r) => r.data),
   remove: (id: string) => api.delete(`/employees/${id}`).then(() => undefined),
 };
 
