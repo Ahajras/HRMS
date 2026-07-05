@@ -121,6 +121,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   // Platform/super-admin accounts have no company in their token; let them target one.
   const isPlatformAdmin = !user?.companyId;
+  const needsCompany = isPlatformAdmin && !company.trim();
 
   // Keep only groups/items the user is allowed to see.
   const groups = NAV_GROUPS
@@ -214,7 +215,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <Box component="main" sx={{ flexGrow: 1, p: 3 }}>
         <Toolbar />
-        {children}
+        {needsCompany ? (
+          <Alert severity="info" sx={{ maxWidth: 760 }}>
+            Enter a Company ID in the top bar to open company-scoped screens.
+          </Alert>
+        ) : children}
       </Box>
 
       <Snackbar

@@ -17,6 +17,8 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
 
     List<Employee> findByCompanyIdOrderByEmployeeNumber(UUID companyId);
 
+    List<Employee> findByCompanyIdAndTimekeeperEmployeeIdOrderByEmployeeNumber(UUID companyId, UUID timekeeperEmployeeId);
+
     Optional<Employee> findByCompanyIdAndEmployeeNumber(UUID companyId, String employeeNumber);
 
     boolean existsByCompanyIdAndEmployeeNumber(UUID companyId, String employeeNumber);

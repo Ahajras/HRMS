@@ -122,6 +122,7 @@ public class EmployeeService {
         entity.setBand(dto.getBand());
         entity.setArabicName(dto.getArabicName());
         entity.setSupervisorEmployeeId(dto.getSupervisorEmployeeId());
+        entity.setTimekeeperEmployeeId(dto.getTimekeeperEmployeeId());
         entity.setPhotoUrl(dto.getPhotoUrl());
         if (dto.getStatus() != null) {
             if (requiresTerminationDate(dto.getStatus()) && dto.getTerminationDate() == null) {
@@ -162,10 +163,15 @@ public class EmployeeService {
         dto.setBand(entity.getBand());
         dto.setArabicName(entity.getArabicName());
         dto.setSupervisorEmployeeId(entity.getSupervisorEmployeeId());
+        dto.setTimekeeperEmployeeId(entity.getTimekeeperEmployeeId());
         dto.setPhotoUrl(entity.getPhotoUrl());
         if (entity.getSupervisorEmployeeId() != null) {
             repository.findById(entity.getSupervisorEmployeeId()).ifPresent(sup ->
                     dto.setSupervisorName((sup.getFirstName() + " " + sup.getLastName()).trim()));
+        }
+        if (entity.getTimekeeperEmployeeId() != null) {
+            repository.findById(entity.getTimekeeperEmployeeId()).ifPresent(tk ->
+                    dto.setTimekeeperName((tk.getFirstName() + " " + tk.getLastName()).trim()));
         }
         dto.setStatus(entity.getStatus());
         return dto;

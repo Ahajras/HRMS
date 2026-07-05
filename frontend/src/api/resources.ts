@@ -30,6 +30,8 @@ import type {
   CrewMember,
   CrewTrade,
   TimekeeperProject,
+  TimekeeperDay,
+  TimekeeperMarkRequest,
   Rule,
   RulePackage,
   OvertimeCategory,
@@ -372,6 +374,9 @@ export const timekeeperApi = {
   list: () => api.get<TimekeeperProject[]>("/timekeeper-projects").then((r) => r.data),
   create: (d: TimekeeperProject) => api.post<TimekeeperProject>("/timekeeper-projects", d).then((r) => r.data),
   remove: (id: string) => api.delete(`/timekeeper-projects/${id}`).then(() => undefined),
+  console: (date: string, timekeeperEmployeeId?: string) =>
+    api.get<TimekeeperDay[]>("/timekeeper-projects/console", { params: { date, timekeeperEmployeeId } }).then((r) => r.data),
+  mark: (d: TimekeeperMarkRequest) => api.post<TimekeeperDay>("/timekeeper-projects/console/mark", d).then((r) => r.data),
 };
 
 // --- Timesheet: monthly timesheets ---

@@ -180,6 +180,8 @@ export interface Employee {
   arabicName?: string;
   supervisorEmployeeId?: string;
   supervisorName?: string;
+  timekeeperEmployeeId?: string;
+  timekeeperName?: string;
   photoUrl?: string;
 }
 
@@ -779,6 +781,38 @@ export interface PayrollCategoryRule {
   divisorMode?: string;
   monthDivisor?: number | null;
   status?: string;
+}
+
+export interface TimekeeperDay {
+  employeeId: string;
+  employeeNumber?: string;
+  employeeName?: string;
+  timesheetId?: string;
+  timesheetDayId?: string;
+  workDate: string;
+  timesheetStatus?: string;
+  shiftCode?: string;
+  shiftName?: string;
+  plannedIn?: string;
+  plannedOut?: string;
+  actualIn?: string;
+  actualOut?: string;
+  timeTypeCode?: string;
+  plannedHours?: number;
+  workedHours?: number;
+  normalHours?: number;
+  otHours?: number;
+  editable: boolean;
+  blockedReason?: string;
+}
+
+export interface TimekeeperMarkRequest {
+  employeeId: string;
+  workDate: string;
+  action: "ATTEND" | "LATE" | "CHECK_OUT" | "OUT_CUSTOM" | "ABSENT";
+  actualIn?: string;
+  actualOut?: string;
+  remarks?: string;
 }
 
 export interface PayrollListingReport {

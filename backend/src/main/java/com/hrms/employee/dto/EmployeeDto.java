@@ -84,6 +84,8 @@ public class EmployeeDto {
 
     private UUID supervisorEmployeeId;
     private String supervisorName;
+    private UUID timekeeperEmployeeId;
+    private String timekeeperName;
     private String photoUrl;
 
     public UUID getSupervisorEmployeeId() { return supervisorEmployeeId; }
@@ -91,6 +93,12 @@ public class EmployeeDto {
 
     public String getSupervisorName() { return supervisorName; }
     public void setSupervisorName(String supervisorName) { this.supervisorName = supervisorName; }
+
+    public UUID getTimekeeperEmployeeId() { return timekeeperEmployeeId; }
+    public void setTimekeeperEmployeeId(UUID timekeeperEmployeeId) { this.timekeeperEmployeeId = timekeeperEmployeeId; }
+
+    public String getTimekeeperName() { return timekeeperName; }
+    public void setTimekeeperName(String timekeeperName) { this.timekeeperName = timekeeperName; }
 
     public String getPhotoUrl() { return photoUrl; }
     public void setPhotoUrl(String photoUrl) { this.photoUrl = photoUrl; }

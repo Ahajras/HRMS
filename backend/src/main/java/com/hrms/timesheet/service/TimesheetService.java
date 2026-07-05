@@ -31,6 +31,8 @@ import com.hrms.timesheet.domain.Timesheet;
 import com.hrms.timesheet.domain.TimesheetDay;
 import com.hrms.timesheet.domain.TimesheetDayCost;
 import com.hrms.timesheet.dto.GenerateTimesheetRequest;
+import com.hrms.timesheet.dto.TimekeeperDayDto;
+import com.hrms.timesheet.dto.TimekeeperMarkRequest;
 import com.hrms.timesheet.dto.TimesheetDayCostDto;
 import com.hrms.timesheet.dto.TimesheetDayDto;
 import com.hrms.timesheet.dto.TimesheetSummaryDto;
@@ -793,6 +795,178 @@ public class TimesheetService {
             }
         }
         return Map.of("approved", approved);
+    }
+
+    // --- timekeeper console ----------------------------------------
+
+    @Transactional(readOnly = true)
+    public List<TimekeeperDayDto> timekeeperConsole(UUID timekeeperEmployeeId, LocalDate date) {
+        UUID companyId = TenantContext.requireCompanyId();
+        LocalDate workDate = date != null ? date : LocalDate.now();
+        UUID tkId = timekeeperEmployeeId != null ? timekeeperEmployeeId : currentEmployeeId();
+        if (tkId == null) {
+            throw new BusinessRuleException("timekeeper.employee.required",
+                    "Choose a timekeeper employee before opening the console.");
+        }
+        List<TimekeeperDayDto> out = new ArrayList<>();
+        for (Employee employee : employeeRepo.findByCompanyIdAndTimekeeperEmployeeIdOrderByEmployeeNumber(companyId, tkId)) {
+            out.add(toTimekeeperDay(employee, workDate));
+        }
+        return out;
+    }
+
+    public TimekeeperDayDto markTimekeeperDay(TimekeeperMarkRequest req) {
+        UUID companyId = TenantContext.requireCompanyId();
+        LocalDate workDate = req.getWorkDate() != null ? req.getWorkDate() : LocalDate.now();
+        if (workDate.isAfter(LocalDate.now())) {
+            throw new BusinessRuleException("timekeeper.future-date", "Future attendance cannot be entered.");
+        }
+        Employee employee = employeeRepo.findById(req.getEmployeeId())
+                .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + req.getEmployeeId()));
+        if (!companyId.equals(employee.getCompanyId())) {
+            throw new ResourceNotFoundException("Employee not found: " + req.getEmployeeId());
+        }
+        UUID currentTk = currentEmployeeId();
+        if (currentTk != null && !currentTk.equals(employee.getTimekeeperEmployeeId())) {
+            throw new BusinessRuleException("timekeeper.employee.scope",
+                    "This employee is not assigned to your timekeeper list.");
+        }
+        if (!isEmployedOn(employee, workDate) || !"ACTIVE".equalsIgnoreCase(employee.getStatus())) {
+            throw new BusinessRuleException("timekeeper.employee.inactive",
+                    "This employee is not active on the selected date.");
+        }
+
+        Timesheet ts = timesheetRepo.findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(
+                        companyId, employee.getId(), workDate.getYear(), workDate.getMonthValue())
+                .orElseThrow(() -> new BusinessRuleException("timekeeper.timesheet.missing",
+                        "Generate this employee's monthly timesheet before entering attendance."));
+        requireDraft(ts);
+        assertEditable(ts);
+        TimesheetDay day = dayRepo.findByTimesheetIdAndWorkDate(ts.getId(), workDate)
+                .orElseThrow(() -> new ResourceNotFoundException("Timesheet day not found: " + workDate));
+        if (day.getLeaveRequestId() != null) {
+            throw new BusinessRuleException("timekeeper.approved-leave",
+                    "This day has an approved leave request and cannot be marked by the timekeeper.");
+        }
+
+        applyTimekeeperAction(ts, day, req);
+        Map<UUID, Shift> shiftCache = new HashMap<>();
+        Map<UUID, TimeType> typeCache = new HashMap<>();
+        Map<UUID, Map<String, ShiftDay>> weekCache = new HashMap<>();
+        recomputeDay(day, ts, shiftCache, typeCache, weekCache, isMonthlyPaid(ts), isOtEligible(ts));
+        dayRepo.save(day);
+        recomputeTotals(ts);
+        timesheetRepo.save(ts);
+        return toTimekeeperDay(employee, workDate);
+    }
+
+    private void applyTimekeeperAction(Timesheet ts, TimesheetDay day, TimekeeperMarkRequest req) {
+        String action = req.getAction() != null ? req.getAction().toUpperCase() : "ATTEND";
+        Shift shift = resolveDayShift(day, ts, new HashMap<>());
+        UUID normalTypeId = timeTypeRepo.findByCompanyIdAndCode(ts.getCompanyId(), "N").map(TimeType::getId).orElse(day.getTimeTypeId());
+        UUID absenceTypeId = timeTypeRepo.findByCompanyIdOrderBySortOrderAscNameAsc(ts.getCompanyId()).stream()
+                .filter(t -> "ABSENCE".equalsIgnoreCase(t.getCategory()))
+                .findFirst()
+                .map(TimeType::getId)
+                .orElseGet(() -> timeTypeRepo.findByCompanyIdAndCode(ts.getCompanyId(), "U").map(TimeType::getId).orElse(normalTypeId));
+        day.setLeaveRequestId(null);
+        day.setRemarks(req.getRemarks());
+        switch (action) {
+            case "LATE" -> {
+                day.setTimeTypeId(normalTypeId);
+                day.setActualIn(requiredTime(req.getActualIn(), "Actual in is required for late attendance."));
+            }
+            case "OUT_CUSTOM" -> {
+                day.setTimeTypeId(normalTypeId);
+                if (day.getActualIn() == null && shift != null) {
+                    day.setActualIn(shift.getStartTime());
+                }
+                day.setActualOut(requiredTime(req.getActualOut(), "Actual out is required for custom checkout."));
+            }
+            case "CHECK_OUT" -> {
+                day.setTimeTypeId(normalTypeId);
+                if (day.getActualIn() == null && shift != null) {
+                    day.setActualIn(shift.getStartTime());
+                }
+                day.setActualOut(shift != null ? shift.getEndTime() : req.getActualOut());
+            }
+            case "ABSENT" -> {
+                day.setTimeTypeId(absenceTypeId);
+                day.setActualIn(null);
+                day.setActualOut(null);
+                day.setWorkedHours(BigDecimal.ZERO);
+                day.setOtHours(BigDecimal.ZERO);
+            }
+            default -> {
+                day.setTimeTypeId(normalTypeId);
+                day.setActualIn(shift != null ? shift.getStartTime() : req.getActualIn());
+            }
+        }
+    }
+
+    private TimekeeperDayDto toTimekeeperDay(Employee employee, LocalDate workDate) {
+        TimekeeperDayDto dto = new TimekeeperDayDto();
+        dto.setEmployeeId(employee.getId());
+        dto.setEmployeeNumber(employee.getEmployeeNumber());
+        dto.setEmployeeName((employee.getFirstName() + " " + employee.getLastName()).trim());
+        dto.setWorkDate(workDate);
+        boolean future = workDate.isAfter(LocalDate.now());
+        boolean active = isEmployedOn(employee, workDate) && "ACTIVE".equalsIgnoreCase(employee.getStatus());
+        Timesheet ts = timesheetRepo.findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(
+                employee.getCompanyId(), employee.getId(), workDate.getYear(), workDate.getMonthValue()).orElse(null);
+        if (ts == null) {
+            dto.setEditable(false);
+            dto.setBlockedReason(future ? "Future date" : active ? "Timesheet not generated" : "Inactive employee");
+            return dto;
+        }
+        dto.setTimesheetId(ts.getId());
+        dto.setTimesheetStatus(ts.getStatus());
+        TimesheetDay day = dayRepo.findByTimesheetIdAndWorkDate(ts.getId(), workDate).orElse(null);
+        if (day == null) {
+            dto.setEditable(false);
+            dto.setBlockedReason("Timesheet day not found");
+            return dto;
+        }
+        dto.setTimesheetDayId(day.getId());
+        dto.setActualIn(day.getActualIn());
+        dto.setActualOut(day.getActualOut());
+        dto.setPlannedHours(day.getPlannedHours());
+        dto.setWorkedHours(day.getWorkedHours());
+        dto.setNormalHours(day.getNormalHours());
+        dto.setOtHours(day.getOtHours());
+        if (day.getTimeTypeId() != null) {
+            timeTypeRepo.findById(day.getTimeTypeId()).ifPresent(t -> dto.setTimeTypeCode(t.getCode()));
+        }
+        Shift shift = resolveDayShift(day, ts, new HashMap<>());
+        if (shift != null) {
+            dto.setShiftCode(shift.getCode());
+            dto.setShiftName(shift.getName());
+            dto.setPlannedIn(shift.getStartTime());
+            dto.setPlannedOut(shift.getEndTime());
+        }
+        if (future) {
+            dto.setEditable(false);
+            dto.setBlockedReason("Future date");
+        } else if (!active) {
+            dto.setEditable(false);
+            dto.setBlockedReason("Inactive employee");
+        } else if (!DRAFT.equals(ts.getStatus())) {
+            dto.setEditable(false);
+            dto.setBlockedReason("Timesheet is " + ts.getStatus());
+        } else if (day.getLeaveRequestId() != null) {
+            dto.setEditable(false);
+            dto.setBlockedReason("Approved leave");
+        } else {
+            dto.setEditable(true);
+        }
+        return dto;
+    }
+
+    private static LocalTime requiredTime(LocalTime time, String message) {
+        if (time == null) {
+            throw new BusinessRuleException("timekeeper.time.required", message);
+        }
+        return time;
     }
 
     // --- editing -----------------------------------------------------

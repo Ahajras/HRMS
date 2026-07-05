@@ -53,6 +53,7 @@ import {
   payrollComponentApi,
   projectApi,
   shiftApi,
+  timekeeperApi,
 } from "../api/resources";
 import type {
   Assignment,
@@ -161,9 +162,15 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
 
   // Supervisor candidates + the employee's current crew (read-only).
   const { data: empPage } = useQuery({ queryKey: ["employeesAll"], queryFn: () => employeeApi.list(0, 500) });
+  const { data: timekeeperRows = [] } = useQuery({ queryKey: ["timekeeperProjects"], queryFn: timekeeperApi.list });
   const supervisorOpts = (empPage?.content ?? [])
     .filter((e) => e.id !== form.id)
     .map((e) => ({ value: e.id!, label: `${e.employeeNumber} — ${e.firstName} ${e.lastName}` }));
+  const timekeeperOpts = Array.from(new Map(timekeeperRows.map((t) => [
+    t.employeeId,
+    { value: t.employeeId, label: `${t.employeeNumber ?? ""} - ${t.employeeName ?? ""}` },
+  ])).values());
+  const effectiveTimekeeperOpts = timekeeperOpts.length ? timekeeperOpts : supervisorOpts;
   const { data: crew } = useQuery({
     queryKey: ["crewByEmp", form.id],
     queryFn: () => crewApi.byEmployee(form.id!),
@@ -241,6 +248,10 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
       <Grid item xs={12} sm={4}>
         <SelectField label="Supervisor (for approvals)" value={form.supervisorEmployeeId}
           onChange={(v) => set("supervisorEmployeeId", v)} options={supervisorOpts} />
+      </Grid>
+      <Grid item xs={12} sm={4}>
+        <SelectField label="Timekeeper" value={form.timekeeperEmployeeId}
+          onChange={(v) => set("timekeeperEmployeeId", v)} options={effectiveTimekeeperOpts} />
       </Grid>
       <Grid item xs={12} sm={4}>
         <TextField fullWidth label="Crew" value={crew ? `${crew.code} — ${crew.name}` : "—"}

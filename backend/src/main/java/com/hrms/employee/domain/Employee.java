@@ -88,11 +88,17 @@ public class Employee extends AuditableEntity {
     @Column(name = "supervisor_employee_id")
     private UUID supervisorEmployeeId;
 
+    @Column(name = "timekeeper_employee_id")
+    private UUID timekeeperEmployeeId;
+
     @Column(name = "photo_url")
     private String photoUrl;
 
     public UUID getSupervisorEmployeeId() { return supervisorEmployeeId; }
     public void setSupervisorEmployeeId(UUID supervisorEmployeeId) { this.supervisorEmployeeId = supervisorEmployeeId; }
+
+    public UUID getTimekeeperEmployeeId() { return timekeeperEmployeeId; }
+    public void setTimekeeperEmployeeId(UUID timekeeperEmployeeId) { this.timekeeperEmployeeId = timekeeperEmployeeId; }
 
     public String getPhotoUrl() { return photoUrl; }
     public void setPhotoUrl(String photoUrl) { this.photoUrl = photoUrl; }
