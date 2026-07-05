@@ -15,7 +15,10 @@ import {
 import { DataGrid, type GridColDef } from "@mui/x-data-grid";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import AddIcon from "@mui/icons-material/Add";
+import { employeeApi } from "../api/resources";
 import { roleApi, userApi } from "../api/auth";
+import { getCompanyId } from "../api/client";
+import { useAuth } from "../auth/AuthContext";
 import type { AuthUser, UserPayload } from "../api/types";
 
 const EMPTY: UserPayload = {
@@ -28,14 +31,19 @@ const EMPTY: UserPayload = {
 };
 
 const STATUSES = ["ACTIVE", "DISABLED", "LOCKED"];
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export default function UsersPage() {
   const qc = useQueryClient();
+  const { user } = useAuth();
   const { data = [], isLoading } = useQuery({ queryKey: ["users"], queryFn: userApi.list });
   const { data: roles = [] } = useQuery({ queryKey: ["roles"], queryFn: roleApi.list });
+  const { data: employees } = useQuery({ queryKey: ["employeesAll"], queryFn: () => employeeApi.list(0, 500) });
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<UserPayload>(EMPTY);
   const editing = !!form.id;
+  const companyInvalid = !!form.companyId && !UUID_RE.test(form.companyId);
+  const empList = employees?.content ?? [];
 
   const save = useMutation({
     mutationFn: (u: UserPayload) => (u.id ? userApi.update(u.id, u) : userApi.create(u)),
@@ -79,7 +87,10 @@ export default function UsersPage() {
     <Box>
       <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
         <Typography variant="h5">Users</Typography>
-        <Button startIcon={<AddIcon />} variant="contained" onClick={() => { setForm(EMPTY); setOpen(true); }}>
+        <Button startIcon={<AddIcon />} variant="contained" onClick={() => {
+          setForm({ ...EMPTY, companyId: user?.companyId ?? (getCompanyId() || undefined) });
+          setOpen(true);
+        }}>
           New User
         </Button>
       </Stack>
@@ -112,8 +123,16 @@ export default function UsersPage() {
               value={form.password ?? ""}
               onChange={(e) => setForm({ ...form, password: e.target.value })}
             />
-            <TextField label="Company ID (blank = platform admin)" value={form.companyId ?? ""}
-              onChange={(e) => setForm({ ...form, companyId: e.target.value || undefined })} />
+            <TextField label="Company ID (UUID; blank uses selected company)" value={form.companyId ?? ""}
+              error={companyInvalid}
+              helperText={companyInvalid ? "Company ID must be a UUID, not an employee/project number." : "For the default demo company use 00000000-0000-0000-0000-0000000000c1."}
+              onChange={(e) => setForm({ ...form, companyId: e.target.value.trim() || undefined })} />
+            <TextField select label="Linked employee" value={form.employeeId ?? ""}
+              helperText="Required for TIMEKEEPER users so the system knows their employee identity."
+              onChange={(e) => setForm({ ...form, employeeId: e.target.value || undefined })}>
+              <MenuItem value="">None</MenuItem>
+              {empList.map((emp) => <MenuItem key={emp.id} value={emp.id}>{emp.employeeNumber} - {emp.firstName} {emp.lastName}</MenuItem>)}
+            </TextField>
             <Autocomplete
               multiple
               options={roleCodes}
@@ -129,7 +148,7 @@ export default function UsersPage() {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Cancel</Button>
-          <Button variant="contained" onClick={() => save.mutate(form)} disabled={save.isPending}>Save</Button>
+          <Button variant="contained" onClick={() => save.mutate(form)} disabled={save.isPending || companyInvalid}>Save</Button>
         </DialogActions>
       </Dialog>
     </Box>
