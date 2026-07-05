@@ -192,6 +192,24 @@ export interface EmployeeSummary {
   withoutProject: number;
 }
 
+export interface EmployeeTimeTypeUsage {
+  year: number;
+  rows: EmployeeTimeTypeUsageRow[];
+}
+
+export interface EmployeeTimeTypeUsageRow {
+  timeTypeCode: string;
+  timeTypeName: string;
+  category: string;
+  usedDays: number;
+  usedHours: number;
+  occurrences: number;
+  firstDate?: string;
+  lastDate?: string;
+  thresholdDays: number;
+  thresholdScope?: string;
+}
+
 export interface LookupValue {
   id?: string;
   companyId?: string;

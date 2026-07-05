@@ -3,7 +3,9 @@ package com.hrms.employee.web;
 import com.hrms.common.web.PageResponse;
 import com.hrms.employee.dto.EmployeeDto;
 import com.hrms.employee.dto.EmployeeSummaryDto;
+import com.hrms.employee.dto.EmployeeTimeTypeUsageDto;
 import com.hrms.employee.service.EmployeeService;
+import com.hrms.employee.service.EmployeeTimeTypeUsageService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
@@ -27,9 +29,12 @@ import java.util.UUID;
 public class EmployeeController {
 
     private final EmployeeService service;
+    private final EmployeeTimeTypeUsageService timeTypeUsageService;
 
-    public EmployeeController(EmployeeService service) {
+    public EmployeeController(EmployeeService service,
+                              EmployeeTimeTypeUsageService timeTypeUsageService) {
         this.service = service;
+        this.timeTypeUsageService = timeTypeUsageService;
     }
 
     @GetMapping
@@ -52,6 +57,13 @@ public class EmployeeController {
     @GetMapping("/{id}")
     public EmployeeDto findById(@PathVariable UUID id) {
         return service.findById(id);
+    }
+
+    @GetMapping("/{id}/time-type-usage")
+    public EmployeeTimeTypeUsageDto timeTypeUsage(@PathVariable UUID id,
+                                                  @RequestParam(defaultValue = "0") int year) {
+        int targetYear = year > 0 ? year : java.time.LocalDate.now().getYear();
+        return timeTypeUsageService.usage(id, targetYear);
     }
 
     @PostMapping

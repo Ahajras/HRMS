@@ -16,6 +16,11 @@ import {
   Paper,
   Stack,
   Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableRow,
   Tabs,
   TextField,
   Typography,
@@ -55,6 +60,7 @@ import type {
   Employee,
   EmployeeBankAccount,
   EmployeeDocument,
+  EmployeeTimeTypeUsageRow,
 } from "../api/types";
 
 const EMPTY: Employee = {
@@ -434,6 +440,84 @@ function BankTab({ employeeId }: { employeeId: string }) {
         </Grid>
       </Grid>
     </Stack>
+  );
+}
+
+// =======================================================================
+// Time type usage tab
+// =======================================================================
+function TimeUsageTab({ employeeId }: { employeeId: string }) {
+  const [year, setYear] = useState(new Date().getFullYear());
+  const { data, isLoading } = useQuery({
+    queryKey: ["employeeTimeUsage", employeeId, year],
+    queryFn: () => employeeApi.timeTypeUsage(employeeId, year),
+  });
+  const rows = data?.rows ?? [];
+  const totalDays = rows.reduce((sum, row) => sum + Number(row.usedDays ?? 0), 0);
+  const totalHours = rows.reduce((sum, row) => sum + Number(row.usedHours ?? 0), 0);
+
+  return (
+    <Stack spacing={2} mt={2}>
+      <Stack direction="row" spacing={1.5} alignItems="center">
+        <TextField
+          size="small"
+          type="number"
+          label="Year"
+          value={year}
+          onChange={(e) => setYear(Number(e.target.value))}
+          sx={{ width: 140 }}
+        />
+        <Chip label={`${totalDays.toFixed(2)} days`} />
+        <Chip label={`${totalHours.toFixed(2)} hours`} />
+      </Stack>
+      <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "auto" }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Time type</TableCell>
+              <TableCell>Category</TableCell>
+              <TableCell align="right">Used days</TableCell>
+              <TableCell align="right">Used hours</TableCell>
+              <TableCell align="right">Occurrences</TableCell>
+              <TableCell>First</TableCell>
+              <TableCell>Last</TableCell>
+              <TableCell>Threshold</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((row) => <TimeUsageRow key={row.timeTypeCode} row={row} />)}
+            {!isLoading && rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={8}>
+                  <Typography variant="body2" color="text.secondary">No leave or absence time types recorded for this year.</Typography>
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
+      </Paper>
+    </Stack>
+  );
+}
+
+function TimeUsageRow({ row }: { row: EmployeeTimeTypeUsageRow }) {
+  const threshold = row.thresholdDays > 0
+    ? `After ${row.thresholdDays}d (${row.thresholdScope ?? "CONSECUTIVE"})`
+    : "None";
+  return (
+    <TableRow hover>
+      <TableCell>
+        <Typography variant="body2" fontWeight={700}>{row.timeTypeCode}</Typography>
+        <Typography variant="caption" color="text.secondary">{row.timeTypeName}</Typography>
+      </TableCell>
+      <TableCell>{row.category}</TableCell>
+      <TableCell align="right">{Number(row.usedDays ?? 0).toFixed(2)}</TableCell>
+      <TableCell align="right">{Number(row.usedHours ?? 0).toFixed(2)}</TableCell>
+      <TableCell align="right">{row.occurrences}</TableCell>
+      <TableCell>{row.firstDate ?? ""}</TableCell>
+      <TableCell>{row.lastDate ?? ""}</TableCell>
+      <TableCell>{threshold}</TableCell>
+    </TableRow>
   );
 }
 
@@ -1294,6 +1378,7 @@ export default function EmployeesPage() {
             <Tab label="Bank" />
             <Tab label="Contracts" />
             <Tab label="Assignment" />
+            <Tab label="Time Usage" />
             <Tab label="Legacy Data" />
           </Tabs>
 
@@ -1308,7 +1393,8 @@ export default function EmployeesPage() {
           {tab === 2 && isSaved && <BankTab employeeId={form.id!} />}
           {tab === 3 && isSaved && <ContractsTab employeeId={form.id!} employeeName={`${form.firstName ?? ""} ${form.lastName ?? ""}`.trim()} employeeNumber={form.employeeNumber} />}
           {tab === 4 && isSaved && <AssignmentTab employeeId={form.id!} />}
-          {tab === 5 && isSaved && <LegacyTab employeeId={form.id!} />}
+          {tab === 5 && isSaved && <TimeUsageTab employeeId={form.id!} />}
+          {tab === 6 && isSaved && <LegacyTab employeeId={form.id!} />}
 
           {save.isError && <Alert severity="error" sx={{ mt: 2 }}>Could not save. Check the fields and try again.</Alert>}
           {save.isSuccess && tab === 0 && <Alert severity="success" sx={{ mt: 2 }}>Saved.</Alert>}
