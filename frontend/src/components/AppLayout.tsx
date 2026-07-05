@@ -32,6 +32,7 @@ import BusinessIcon from "@mui/icons-material/Business";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ScheduleIcon from "@mui/icons-material/Schedule";
 import EventBusyIcon from "@mui/icons-material/EventBusy";
+import BeachAccessIcon from "@mui/icons-material/BeachAccess";
 import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import GroupsIcon from "@mui/icons-material/Groups";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
@@ -74,6 +75,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/roster", label: "Shift Roster", icon: <GroupsIcon />, authority: "employee.read" },
       { to: "/shifts", label: "Shifts", icon: <ScheduleIcon />, authority: "employee.read" },
       { to: "/time-setup", label: "Time Setup", icon: <EventBusyIcon />, authority: "employee.read" },
+      { to: "/leave", label: "Leave", icon: <BeachAccessIcon />, authority: "employee.read" },
     ],
   },
   {

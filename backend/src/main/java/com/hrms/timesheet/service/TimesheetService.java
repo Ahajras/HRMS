@@ -10,6 +10,10 @@ import com.hrms.employee.domain.Assignment;
 import com.hrms.employee.domain.Employee;
 import com.hrms.employee.repository.AssignmentRepository;
 import com.hrms.employee.repository.EmployeeRepository;
+import com.hrms.leave.domain.LeaveRequest;
+import com.hrms.leave.domain.LeaveType;
+import com.hrms.leave.repository.LeaveRequestRepository;
+import com.hrms.leave.repository.LeaveTypeRepository;
 import com.hrms.project.domain.CostCode;
 import com.hrms.project.domain.Project;
 import com.hrms.project.repository.CostCodeRepository;
@@ -97,6 +101,8 @@ public class TimesheetService {
     private final PayrollPeriodProjectRepository periodProjectRepo;
     private final com.hrms.project.repository.ProjectRepository projectRepo;
     private final CostCodeRepository costCodeRepo;
+    private final LeaveRequestRepository leaveRequestRepo;
+    private final LeaveTypeRepository leaveTypeRepo;
 
     public TimesheetService(TimesheetRepository timesheetRepo, TimesheetDayRepository dayRepo,
                             ShiftRepository shiftRepo, TimeTypeRepository timeTypeRepo,
@@ -108,7 +114,9 @@ public class TimesheetService {
                             OvertimeCategoryRepository overtimeCategoryRepo,
                             PayrollPeriodProjectRepository periodProjectRepo,
                             com.hrms.project.repository.ProjectRepository projectRepo,
-                            CostCodeRepository costCodeRepo) {
+                            CostCodeRepository costCodeRepo,
+                            LeaveRequestRepository leaveRequestRepo,
+                            LeaveTypeRepository leaveTypeRepo) {
         this.timesheetRepo = timesheetRepo;
         this.dayRepo = dayRepo;
         this.shiftRepo = shiftRepo;
@@ -127,6 +135,8 @@ public class TimesheetService {
         this.periodProjectRepo = periodProjectRepo;
         this.projectRepo = projectRepo;
         this.costCodeRepo = costCodeRepo;
+        this.leaveRequestRepo = leaveRequestRepo;
+        this.leaveTypeRepo = leaveTypeRepo;
     }
 
     // --- queries -----------------------------------------------------
@@ -591,6 +601,8 @@ public class TimesheetService {
             holidays.add(h.getHolidayDate());
         }
         UUID[] alloc = defaultAllocation(req.getEmployeeId());
+        Map<LocalDate, UUID> approvedLeaveTypes = approvedLeaveTypes(companyId, req.getEmployeeId(),
+                ym.atDay(1), ym.atEndOfMonth());
 
         BigDecimal standard = shift != null && shift.getStandardHours() != null
                 ? shift.getStandardHours() : BigDecimal.ZERO;
@@ -626,6 +638,12 @@ public class TimesheetService {
             TimeType tt = typesByCode.get(code);
             day.setTimeTypeId(tt != null ? tt.getId() : null);
             day.setOtHours(BigDecimal.ZERO);
+            if ("N".equals(code) && approvedLeaveTypes.containsKey(date)) {
+                day.setTimeTypeId(approvedLeaveTypes.get(date));
+                day.setWorkedHours(BigDecimal.ZERO);
+                day.setActualIn(null);
+                day.setActualOut(null);
+            }
             if (!isEmployedOn(employee, date)) {
                 TimeType nt = typesByCode.get("U");
                 day.setTimeTypeId(nt != null ? nt.getId() : null);
@@ -1197,6 +1215,25 @@ public class TimesheetService {
             }
         }
         return new UUID[]{null, null};
+    }
+
+    private Map<LocalDate, UUID> approvedLeaveTypes(UUID companyId, UUID employeeId, LocalDate start, LocalDate end) {
+        Map<LocalDate, UUID> out = new HashMap<>();
+        for (LeaveRequest request : leaveRequestRepo
+                .findByCompanyIdAndEmployeeIdAndStatusAndEndDateGreaterThanEqualAndStartDateLessThanEqual(
+                        companyId, employeeId, "APPROVED", start, end)) {
+            LeaveType type = leaveTypeRepo.findById(request.getLeaveTypeId()).orElse(null);
+            if (type == null || type.getTimeTypeId() == null) {
+                continue;
+            }
+            LocalDate d = request.getStartDate().isBefore(start) ? start : request.getStartDate();
+            LocalDate last = request.getEndDate().isAfter(end) ? end : request.getEndDate();
+            while (!d.isAfter(last)) {
+                out.put(d, type.getTimeTypeId());
+                d = d.plusDays(1);
+            }
+        }
+        return out;
     }
 
     /**

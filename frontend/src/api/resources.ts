@@ -39,11 +39,36 @@ import type {
   TimesheetDay,
   TimesheetSummary,
   CompanyProfile,
+  LeaveAdjustment,
+  LeaveBalance,
+  LeaveRequest,
+  LeaveType,
 } from "./types";
 
 export const companyProfileApi = {
   get: () => api.get<CompanyProfile>("/company-profile").then((r) => r.data),
   save: (payload: CompanyProfile) => api.put<CompanyProfile>("/company-profile", payload).then((r) => r.data),
+};
+
+export const leaveApi = {
+  types: () => api.get<LeaveType[]>("/leave/types").then((r) => r.data),
+  saveType: (payload: LeaveType) => payload.id
+    ? api.put<LeaveType>(`/leave/types/${payload.id}`, payload).then((r) => r.data)
+    : api.post<LeaveType>("/leave/types", payload).then((r) => r.data),
+  requests: (employeeId?: string) =>
+    api.get<LeaveRequest[]>("/leave/requests", { params: employeeId ? { employeeId } : {} }).then((r) => r.data),
+  saveRequest: (payload: LeaveRequest) => payload.id
+    ? api.put<LeaveRequest>(`/leave/requests/${payload.id}`, payload).then((r) => r.data)
+    : api.post<LeaveRequest>("/leave/requests", payload).then((r) => r.data),
+  setRequestStatus: (id: string, status: string) =>
+    api.post<LeaveRequest>(`/leave/requests/${id}/status`, null, { params: { status } }).then((r) => r.data),
+  adjustments: (employeeId: string) =>
+    api.get<LeaveAdjustment[]>("/leave/adjustments", { params: { employeeId } }).then((r) => r.data),
+  saveAdjustment: (payload: LeaveAdjustment) => payload.id
+    ? api.put<LeaveAdjustment>(`/leave/adjustments/${payload.id}`, payload).then((r) => r.data)
+    : api.post<LeaveAdjustment>("/leave/adjustments", payload).then((r) => r.data),
+  balances: (employeeId: string, asOfDate?: string) =>
+    api.get<LeaveBalance[]>("/leave/balances", { params: { employeeId, ...(asOfDate ? { asOfDate } : {}) } }).then((r) => r.data),
 };
 
 // --- Assignments ---

@@ -210,6 +210,71 @@ export interface EmployeeTimeTypeUsageRow {
   thresholdScope?: string;
 }
 
+export interface LeaveType {
+  id?: string;
+  code: string;
+  name: string;
+  timeTypeId: string;
+  timeTypeCode?: string;
+  deductsBalance: boolean;
+  paid: boolean;
+  requiresTicketDefault: boolean;
+  status?: string;
+}
+
+export interface LeaveRequest {
+  id?: string;
+  employeeId: string;
+  employeeNumber?: string;
+  employeeName?: string;
+  leaveTypeId: string;
+  leaveTypeCode?: string;
+  leaveTypeName?: string;
+  startDate: string;
+  endDate: string;
+  returnDate?: string;
+  totalDays?: number;
+  reason?: string;
+  status?: string;
+  requiresTicket: boolean;
+  ticketFrom?: string;
+  ticketTo?: string;
+  travelDate?: string;
+  returnTravelDate?: string;
+  destination?: string;
+  travelRemarks?: string;
+  contactPhone?: string;
+  contactEmail?: string;
+  addressDuringLeave?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+}
+
+export interface LeaveAdjustment {
+  id?: string;
+  employeeId: string;
+  leaveTypeId: string;
+  leaveTypeCode?: string;
+  adjustmentType: string;
+  days: number;
+  effectiveDate: string;
+  reason?: string;
+}
+
+export interface LeaveBalance {
+  employeeId: string;
+  leaveTypeId: string;
+  leaveTypeCode: string;
+  leaveTypeName: string;
+  asOfDate: string;
+  annualRate: number;
+  entitledToDate: number;
+  adjustments: number;
+  usedApproved: number;
+  pending: number;
+  balance: number;
+}
+
 export interface LookupValue {
   id?: string;
   companyId?: string;

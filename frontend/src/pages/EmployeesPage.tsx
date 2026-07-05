@@ -45,6 +45,7 @@ import {
   employeeBankAccountApi,
   employeeDocumentApi,
   employeeShiftApi,
+  leaveApi,
   legacyRawApi,
   lookupApi,
   overtimeCategoryApi,
@@ -61,6 +62,7 @@ import type {
   EmployeeBankAccount,
   EmployeeDocument,
   EmployeeTimeTypeUsageRow,
+  LeaveAdjustment,
 } from "../api/types";
 
 const EMPTY: Employee = {
@@ -518,6 +520,85 @@ function TimeUsageRow({ row }: { row: EmployeeTimeTypeUsageRow }) {
       <TableCell>{row.lastDate ?? ""}</TableCell>
       <TableCell>{threshold}</TableCell>
     </TableRow>
+  );
+}
+
+function LeaveBalanceTab({ employeeId }: { employeeId: string }) {
+  const qc = useQueryClient();
+  const asOfDate = new Date().toISOString().slice(0, 10);
+  const { data: balances = [] } = useQuery({ queryKey: ["leaveBalances", employeeId, asOfDate], queryFn: () => leaveApi.balances(employeeId, asOfDate) });
+  const { data: leaveTypes = [] } = useQuery({ queryKey: ["leaveTypes"], queryFn: leaveApi.types });
+  const { data: adjustments = [] } = useQuery({ queryKey: ["leaveAdjustments", employeeId], queryFn: () => leaveApi.adjustments(employeeId) });
+  const [form, setForm] = useState<LeaveAdjustment>({
+    employeeId,
+    leaveTypeId: "",
+    adjustmentType: "OPENING_USED",
+    days: 0,
+    effectiveDate: asOfDate,
+  });
+  const save = useMutation({
+    mutationFn: (payload: LeaveAdjustment) => leaveApi.saveAdjustment(payload),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["leaveAdjustments", employeeId] });
+      qc.invalidateQueries({ queryKey: ["leaveBalances", employeeId, asOfDate] });
+      setForm({ employeeId, leaveTypeId: "", adjustmentType: "OPENING_USED", days: 0, effectiveDate: asOfDate });
+    },
+  });
+  return (
+    <Stack spacing={2} mt={2}>
+      <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "auto" }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Leave type</TableCell>
+              <TableCell align="right">Annual rate</TableCell>
+              <TableCell align="right">Entitled</TableCell>
+              <TableCell align="right">Adjustments</TableCell>
+              <TableCell align="right">Approved used</TableCell>
+              <TableCell align="right">Pending</TableCell>
+              <TableCell align="right">Balance</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {balances.map((b) => (
+              <TableRow key={b.leaveTypeId}>
+                <TableCell>{b.leaveTypeCode} - {b.leaveTypeName}</TableCell>
+                <TableCell align="right">{Number(b.annualRate ?? 0).toFixed(2)}</TableCell>
+                <TableCell align="right">{Number(b.entitledToDate ?? 0).toFixed(2)}</TableCell>
+                <TableCell align="right">{Number(b.adjustments ?? 0).toFixed(2)}</TableCell>
+                <TableCell align="right">{Number(b.usedApproved ?? 0).toFixed(2)}</TableCell>
+                <TableCell align="right">{Number(b.pending ?? 0).toFixed(2)}</TableCell>
+                <TableCell align="right"><b>{Number(b.balance ?? 0).toFixed(2)}</b></TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
+        <Typography variant="subtitle2" gutterBottom>Balance adjustment</Typography>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
+          <TextField select size="small" label="Leave type" value={form.leaveTypeId} onChange={(e) => setForm({ ...form, leaveTypeId: e.target.value })} sx={{ minWidth: 220 }}>
+            {leaveTypes.filter((t) => t.deductsBalance).map((t) => <MenuItem key={t.id} value={t.id}>{t.code} - {t.name}</MenuItem>)}
+          </TextField>
+          <TextField select size="small" label="Type" value={form.adjustmentType} onChange={(e) => setForm({ ...form, adjustmentType: e.target.value })} sx={{ minWidth: 180 }}>
+            <MenuItem value="OPENING_USED">Opening used</MenuItem>
+            <MenuItem value="MANUAL_DEBIT">Manual debit</MenuItem>
+            <MenuItem value="MANUAL_CREDIT">Manual credit</MenuItem>
+          </TextField>
+          <TextField size="small" type="number" label="Days" value={form.days} onChange={(e) => setForm({ ...form, days: Number(e.target.value) })} />
+          <TextField size="small" type="date" label="Effective" InputLabelProps={{ shrink: true }} value={form.effectiveDate} onChange={(e) => setForm({ ...form, effectiveDate: e.target.value })} />
+          <TextField size="small" label="Reason" value={form.reason ?? ""} onChange={(e) => setForm({ ...form, reason: e.target.value })} sx={{ flex: 1 }} />
+          <Button variant="contained" disabled={!form.leaveTypeId || save.isPending} onClick={() => save.mutate(form)}>Add</Button>
+        </Stack>
+      </Paper>
+
+      {adjustments.map((a) => (
+        <Typography key={a.id} variant="body2">
+          <b>{a.leaveTypeCode}</b> · {a.adjustmentType} · {Number(a.days).toFixed(2)}d · {a.effectiveDate}{a.reason ? ` · ${a.reason}` : ""}
+        </Typography>
+      ))}
+    </Stack>
   );
 }
 
@@ -1378,6 +1459,7 @@ export default function EmployeesPage() {
             <Tab label="Bank" />
             <Tab label="Contracts" />
             <Tab label="Assignment" />
+            <Tab label="Leave Balance" />
             <Tab label="Time Usage" />
             <Tab label="Legacy Data" />
           </Tabs>
@@ -1393,8 +1475,9 @@ export default function EmployeesPage() {
           {tab === 2 && isSaved && <BankTab employeeId={form.id!} />}
           {tab === 3 && isSaved && <ContractsTab employeeId={form.id!} employeeName={`${form.firstName ?? ""} ${form.lastName ?? ""}`.trim()} employeeNumber={form.employeeNumber} />}
           {tab === 4 && isSaved && <AssignmentTab employeeId={form.id!} />}
-          {tab === 5 && isSaved && <TimeUsageTab employeeId={form.id!} />}
-          {tab === 6 && isSaved && <LegacyTab employeeId={form.id!} />}
+          {tab === 5 && isSaved && <LeaveBalanceTab employeeId={form.id!} />}
+          {tab === 6 && isSaved && <TimeUsageTab employeeId={form.id!} />}
+          {tab === 7 && isSaved && <LegacyTab employeeId={form.id!} />}
 
           {save.isError && <Alert severity="error" sx={{ mt: 2 }}>Could not save. Check the fields and try again.</Alert>}
           {save.isSuccess && tab === 0 && <Alert severity="success" sx={{ mt: 2 }}>Saved.</Alert>}
