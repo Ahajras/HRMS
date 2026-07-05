@@ -187,4 +187,42 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
                                      @Param("employeeIds") List<UUID> employeeIds,
                                      @Param("timekeeperEmployeeId") UUID timekeeperEmployeeId,
                                      @Param("projectId") UUID projectId);
+
+    @Modifying
+    @Query("""
+            update Employee e
+            set e.timekeeperEmployeeId = :timekeeperEmployeeId
+            where e.companyId = :companyId
+              and e.id in :employeeIds
+              and upper(coalesce(e.status, '')) = 'ACTIVE'
+              and (:projectId is null or exists (
+                    select 1 from Assignment a
+                    where a.employeeId = e.id
+                      and a.projectId = :projectId
+                      and upper(coalesce(a.status, '')) = 'ACTIVE'
+                      and (a.effectiveTo is null or a.effectiveTo >= current_date)
+              ))
+            """)
+    int moveTimekeeperForEmployees(@Param("companyId") UUID companyId,
+                                   @Param("employeeIds") List<UUID> employeeIds,
+                                   @Param("timekeeperEmployeeId") UUID timekeeperEmployeeId,
+                                   @Param("projectId") UUID projectId);
+
+    @Modifying
+    @Query("""
+            update Employee e
+            set e.timekeeperEmployeeId = null
+            where e.companyId = :companyId
+              and e.id in :employeeIds
+              and (:projectId is null or exists (
+                    select 1 from Assignment a
+                    where a.employeeId = e.id
+                      and a.projectId = :projectId
+                      and upper(coalesce(a.status, '')) = 'ACTIVE'
+                      and (a.effectiveTo is null or a.effectiveTo >= current_date)
+              ))
+            """)
+    int clearTimekeeperForEmployees(@Param("companyId") UUID companyId,
+                                    @Param("employeeIds") List<UUID> employeeIds,
+                                    @Param("projectId") UUID projectId);
 }

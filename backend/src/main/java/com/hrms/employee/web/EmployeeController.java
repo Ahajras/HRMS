@@ -92,6 +92,19 @@ public class EmployeeController {
         return Map.of("updated", service.assignTimekeeperForEmployees(employeeIds, timekeeperEmployeeId, projectId));
     }
 
+    @PutMapping("/timekeeper/move-employees")
+    public Map<String, Integer> moveTimekeeperForEmployees(@RequestParam UUID timekeeperEmployeeId,
+                                                           @RequestParam(required = false) UUID projectId,
+                                                           @RequestBody List<UUID> employeeIds) {
+        return Map.of("updated", service.moveTimekeeperForEmployees(employeeIds, timekeeperEmployeeId, projectId));
+    }
+
+    @PutMapping("/timekeeper/clear-employees")
+    public Map<String, Integer> clearTimekeeperForEmployees(@RequestParam(required = false) UUID projectId,
+                                                            @RequestBody List<UUID> employeeIds) {
+        return Map.of("updated", service.clearTimekeeperForEmployees(employeeIds, projectId));
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable UUID id) {
         service.delete(id);

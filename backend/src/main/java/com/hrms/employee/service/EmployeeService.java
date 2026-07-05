@@ -118,6 +118,27 @@ public class EmployeeService {
         return repository.assignTimekeeperForEmployees(companyId, employeeIds, timekeeperEmployeeId, projectId);
     }
 
+    public int moveTimekeeperForEmployees(List<UUID> employeeIds, UUID timekeeperEmployeeId, UUID projectId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        if (employeeIds == null || employeeIds.isEmpty()) {
+            return 0;
+        }
+        Employee timekeeper = repository.findById(timekeeperEmployeeId)
+                .orElseThrow(() -> new ResourceNotFoundException("Timekeeper employee not found: " + timekeeperEmployeeId));
+        if (!companyId.equals(timekeeper.getCompanyId())) {
+            throw new ResourceNotFoundException("Timekeeper employee not found: " + timekeeperEmployeeId);
+        }
+        return repository.moveTimekeeperForEmployees(companyId, employeeIds, timekeeperEmployeeId, projectId);
+    }
+
+    public int clearTimekeeperForEmployees(List<UUID> employeeIds, UUID projectId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        if (employeeIds == null || employeeIds.isEmpty()) {
+            return 0;
+        }
+        return repository.clearTimekeeperForEmployees(companyId, employeeIds, projectId);
+    }
+
     private Employee getEntity(UUID id) {
         return repository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + id));

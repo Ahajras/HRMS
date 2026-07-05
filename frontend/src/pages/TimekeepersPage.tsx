@@ -43,7 +43,10 @@ export default function TimekeepersPage() {
   const [projectId, setProjectId] = useState("");
   const [bulkProjectId, setBulkProjectId] = useState("");
   const [bulkTimekeeperId, setBulkTimekeeperId] = useState("");
+  const [assignView, setAssignView] = useState<"unassigned" | "assigned">("unassigned");
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState<string[]>([]);
+  const [selectedAssignedIds, setSelectedAssignedIds] = useState<string[]>([]);
+  const [moveTimekeeperId, setMoveTimekeeperId] = useState("");
   const [consoleTk, setConsoleTk] = useState("");
   const [workDate, setWorkDate] = useState(today());
   const [inTimes, setInTimes] = useState<Record<string, string>>({});
@@ -57,7 +60,9 @@ export default function TimekeepersPage() {
     enabled: canManage && !!bulkProjectId,
   });
   const empList = employees?.content ?? [];
+  const projectTimekeepers = rows.filter((r) => !bulkProjectId || r.projectId === bulkProjectId);
   const candidateEmployees = (projectEmployees?.content ?? []).filter((emp) => !emp.timekeeperEmployeeId);
+  const assignedEmployees = (projectEmployees?.content ?? []).filter((emp) => !!emp.timekeeperEmployeeId);
 
   const consoleRows = useQuery({
     queryKey: ["timekeeperConsole", workDate, consoleTk],
@@ -88,6 +93,24 @@ export default function TimekeepersPage() {
       qc.invalidateQueries({ queryKey: ["timekeeperProjectCandidates"] });
     },
   });
+  const moveAssign = useMutation({
+    mutationFn: (employeeIds: string[]) => employeeApi.moveTimekeeperByEmployees(employeeIds, moveTimekeeperId, bulkProjectId),
+    onSuccess: () => {
+      setSelectedAssignedIds([]);
+      qc.invalidateQueries({ queryKey: ["employeesAll"] });
+      qc.invalidateQueries({ queryKey: ["timekeeperProjectCandidates"] });
+      qc.invalidateQueries({ queryKey: ["timekeeperConsole"] });
+    },
+  });
+  const clearAssign = useMutation({
+    mutationFn: (employeeIds: string[]) => employeeApi.clearTimekeeperByEmployees(employeeIds, bulkProjectId),
+    onSuccess: () => {
+      setSelectedAssignedIds([]);
+      qc.invalidateQueries({ queryKey: ["employeesAll"] });
+      qc.invalidateQueries({ queryKey: ["timekeeperProjectCandidates"] });
+      qc.invalidateQueries({ queryKey: ["timekeeperConsole"] });
+    },
+  });
 
   useEffect(() => {
     if (!bulkProjectId) {
@@ -95,13 +118,16 @@ export default function TimekeepersPage() {
       if (nfe?.id) setBulkProjectId(nfe.id);
     }
     if (!bulkTimekeeperId) {
-      const tk = empList.find((e) => e.employeeNumber === "77677");
-      if (tk?.id) setBulkTimekeeperId(tk.id);
+      const tk = projectTimekeepers.find((t) => t.employeeNumber === "77677") ?? projectTimekeepers[0];
+      if (tk?.employeeId) setBulkTimekeeperId(tk.employeeId);
     }
-  }, [bulkProjectId, bulkTimekeeperId, projects, empList]);
+  }, [bulkProjectId, bulkTimekeeperId, projects, projectTimekeepers]);
 
   useEffect(() => {
     setSelectedEmployeeIds([]);
+    setSelectedAssignedIds([]);
+    setMoveTimekeeperId("");
+    setBulkTimekeeperId("");
   }, [bulkProjectId]);
 
   const allCandidateIds = candidateEmployees.map((emp) => emp.id!).filter(Boolean);
@@ -109,6 +135,12 @@ export default function TimekeepersPage() {
   const toggleAllCandidates = () => setSelectedEmployeeIds(allSelected ? [] : allCandidateIds);
   const toggleCandidate = (id: string) => {
     setSelectedEmployeeIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
+  };
+  const allAssignedIds = assignedEmployees.map((emp) => emp.id!).filter(Boolean);
+  const allAssignedSelected = allAssignedIds.length > 0 && allAssignedIds.every((id) => selectedAssignedIds.includes(id));
+  const toggleAllAssigned = () => setSelectedAssignedIds(allAssignedSelected ? [] : allAssignedIds);
+  const toggleAssigned = (id: string) => {
+    setSelectedAssignedIds((prev) => prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]);
   };
 
   const submitMark = (employeeId: string, action: TimekeeperMarkRequest["action"]) => {
@@ -159,7 +191,7 @@ export default function TimekeepersPage() {
               </Grid>
               <Grid item xs={12} sm={5}>
                 <TextField select fullWidth size="small" label="Assign timekeeper" value={bulkTimekeeperId} onChange={(e) => setBulkTimekeeperId(e.target.value)}>
-                  {empList.map((emp) => <MenuItem key={emp.id} value={emp.id}>{emp.employeeNumber} - {emp.firstName} {emp.lastName}</MenuItem>)}
+                  {projectTimekeepers.map((tk) => <MenuItem key={tk.id} value={tk.employeeId}>{tk.employeeNumber} - {tk.employeeName}</MenuItem>)}
                 </TextField>
               </Grid>
               <Grid item xs={12} sm={2}>
@@ -168,7 +200,20 @@ export default function TimekeepersPage() {
                 </Button>
               </Grid>
             </Grid>
-            {bulkProjectId && (
+            {bulkProjectId && projectTimekeepers.length === 0 && (
+              <Typography color="warning.main" variant="body2" mt={1}>
+                No timekeepers are assigned to this project. Add project access first.
+              </Typography>
+            )}
+            <Stack direction="row" spacing={1} mt={1.5}>
+              <Button size="small" variant={assignView === "unassigned" ? "contained" : "outlined"} onClick={() => setAssignView("unassigned")}>
+                Unassigned ({candidateEmployees.length})
+              </Button>
+              <Button size="small" variant={assignView === "assigned" ? "contained" : "outlined"} onClick={() => setAssignView("assigned")}>
+                Assigned ({assignedEmployees.length})
+              </Button>
+            </Stack>
+            {bulkProjectId && assignView === "unassigned" && (
               <Box mt={1.5}>
                 <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
                   <Typography variant="body2" color="text.secondary">
@@ -209,8 +254,61 @@ export default function TimekeepersPage() {
                 </Table>
               </Box>
             )}
+            {bulkProjectId && assignView === "assigned" && (
+              <Box mt={1.5}>
+                <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", md: "center" }} spacing={1} mb={1}>
+                  <Typography variant="body2" color="text.secondary">
+                    Assigned employees: {assignedEmployees.length}
+                  </Typography>
+                  <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                    <TextField select size="small" label="Move to timekeeper" value={moveTimekeeperId} onChange={(e) => setMoveTimekeeperId(e.target.value)} sx={{ minWidth: 240 }}>
+                      {projectTimekeepers.map((tk) => <MenuItem key={tk.id} value={tk.employeeId}>{tk.employeeNumber} - {tk.employeeName}</MenuItem>)}
+                    </TextField>
+                    <Button size="small" variant="outlined" disabled={!moveTimekeeperId || selectedAssignedIds.length === 0 || moveAssign.isPending} onClick={() => moveAssign.mutate(selectedAssignedIds)}>
+                      Move selected ({selectedAssignedIds.length})
+                    </Button>
+                    <Button size="small" color="error" variant="outlined" disabled={selectedAssignedIds.length === 0 || clearAssign.isPending} onClick={() => clearAssign.mutate(selectedAssignedIds)}>
+                      Remove selected
+                    </Button>
+                  </Stack>
+                </Stack>
+                <Table size="small">
+                  <TableHead>
+                    <TableRow>
+                      <TableCell padding="checkbox">
+                        <Checkbox size="small" checked={allAssignedSelected} indeterminate={selectedAssignedIds.length > 0 && !allAssignedSelected} onChange={toggleAllAssigned} />
+                      </TableCell>
+                      <TableCell>Employee</TableCell>
+                      <TableCell>Current timekeeper</TableCell>
+                      <TableCell>Job title</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {assignedEmployees.map((emp) => (
+                      <TableRow key={emp.id} hover>
+                        <TableCell padding="checkbox">
+                          <Checkbox size="small" checked={!!emp.id && selectedAssignedIds.includes(emp.id)} onChange={() => emp.id && toggleAssigned(emp.id)} />
+                        </TableCell>
+                        <TableCell>{emp.employeeNumber} - {emp.firstName} {emp.lastName}</TableCell>
+                        <TableCell>{emp.timekeeperName ?? "-"}</TableCell>
+                        <TableCell>{emp.jobTitle ?? "-"}</TableCell>
+                      </TableRow>
+                    ))}
+                    {assignedEmployees.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={4}><Typography variant="body2" color="text.secondary" p={1}>No assigned employees for this project.</Typography></TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </Box>
+            )}
             {bulkAssign.isSuccess && <Typography color="success.main" variant="body2" mt={1}>Updated {bulkAssign.data?.updated ?? 0} active employee(s).</Typography>}
             {bulkAssign.isError && <Typography color="error" variant="body2" mt={1}>{(bulkAssign.error as any)?.response?.data?.message ?? "Failed."}</Typography>}
+            {moveAssign.isSuccess && <Typography color="success.main" variant="body2" mt={1}>Moved {moveAssign.data?.updated ?? 0} employee(s).</Typography>}
+            {moveAssign.isError && <Typography color="error" variant="body2" mt={1}>{(moveAssign.error as any)?.response?.data?.message ?? "Move failed."}</Typography>}
+            {clearAssign.isSuccess && <Typography color="success.main" variant="body2" mt={1}>Removed {clearAssign.data?.updated ?? 0} employee(s).</Typography>}
+            {clearAssign.isError && <Typography color="error" variant="body2" mt={1}>{(clearAssign.error as any)?.response?.data?.message ?? "Remove failed."}</Typography>}
           </Paper>
 
           <Paper variant="outlined" sx={{ borderRadius: 2, mb: 2 }}>

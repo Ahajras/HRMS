@@ -244,6 +244,10 @@ export const employeeApi = {
     api.put<{ updated: number }>("/employees/timekeeper/by-project", null, { params: { projectId, timekeeperEmployeeId } }).then((r) => r.data),
   assignTimekeeperByEmployees: (employeeIds: string[], timekeeperEmployeeId: string, projectId?: string) =>
     api.put<{ updated: number }>("/employees/timekeeper/by-employees", employeeIds, { params: { timekeeperEmployeeId, projectId } }).then((r) => r.data),
+  moveTimekeeperByEmployees: (employeeIds: string[], timekeeperEmployeeId: string, projectId?: string) =>
+    api.put<{ updated: number }>("/employees/timekeeper/move-employees", employeeIds, { params: { timekeeperEmployeeId, projectId } }).then((r) => r.data),
+  clearTimekeeperByEmployees: (employeeIds: string[], projectId?: string) =>
+    api.put<{ updated: number }>("/employees/timekeeper/clear-employees", employeeIds, { params: { projectId } }).then((r) => r.data),
   remove: (id: string) => api.delete(`/employees/${id}`).then(() => undefined),
 };
 
