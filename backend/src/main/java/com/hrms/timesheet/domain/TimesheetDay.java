@@ -31,6 +31,9 @@ public class TimesheetDay extends AuditableEntity {
     @Column(name = "time_type_id")
     private UUID timeTypeId;
 
+    @Column(name = "leave_request_id")
+    private UUID leaveRequestId;
+
     @Column(name = "planned_hours", nullable = false, precision = 5, scale = 2)
     private BigDecimal plannedHours = BigDecimal.ZERO;
 
@@ -78,6 +81,9 @@ public class TimesheetDay extends AuditableEntity {
 
     public UUID getTimeTypeId() { return timeTypeId; }
     public void setTimeTypeId(UUID timeTypeId) { this.timeTypeId = timeTypeId; }
+
+    public UUID getLeaveRequestId() { return leaveRequestId; }
+    public void setLeaveRequestId(UUID leaveRequestId) { this.leaveRequestId = leaveRequestId; }
 
     public BigDecimal getPlannedHours() { return plannedHours; }
     public void setPlannedHours(BigDecimal plannedHours) { this.plannedHours = plannedHours; }

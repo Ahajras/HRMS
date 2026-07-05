@@ -21,6 +21,7 @@ import com.hrms.rule.repository.RulePackageRepository;
 import com.hrms.rule.repository.RuleRepository;
 import com.hrms.timesheet.domain.TimeType;
 import com.hrms.timesheet.repository.TimeTypeRepository;
+import com.hrms.timesheet.service.TimesheetService;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -47,11 +48,13 @@ public class LeaveService {
     private final CompanyRulePackageRepository companyRulePackageRepo;
     private final RulePackageRepository rulePackageRepo;
     private final RuleRepository ruleRepo;
+    private final TimesheetService timesheetService;
 
     public LeaveService(LeaveTypeRepository typeRepo, LeaveRequestRepository requestRepo,
                         LeaveAdjustmentRepository adjustmentRepo, EmployeeRepository employeeRepo,
                         TimeTypeRepository timeTypeRepo, CompanyRulePackageRepository companyRulePackageRepo,
-                        RulePackageRepository rulePackageRepo, RuleRepository ruleRepo) {
+                        RulePackageRepository rulePackageRepo, RuleRepository ruleRepo,
+                        TimesheetService timesheetService) {
         this.typeRepo = typeRepo;
         this.requestRepo = requestRepo;
         this.adjustmentRepo = adjustmentRepo;
@@ -60,6 +63,7 @@ public class LeaveService {
         this.companyRulePackageRepo = companyRulePackageRepo;
         this.rulePackageRepo = rulePackageRepo;
         this.ruleRepo = ruleRepo;
+        this.timesheetService = timesheetService;
     }
 
     @Transactional(readOnly = true)
@@ -125,7 +129,9 @@ public class LeaveService {
             row.setHrApprovedAt(Instant.now());
             row.setHrApprovedBy(currentUsername());
         }
-        return toDto(requestRepo.save(row));
+        LeaveRequest saved = requestRepo.save(row);
+        timesheetService.syncLeaveRequest(saved, type);
+        return toDto(saved);
     }
 
     public LeaveRequestDto setRequestStatus(UUID id, String status) {
@@ -135,7 +141,9 @@ public class LeaveService {
             row.setHrApprovedAt(Instant.now());
             row.setHrApprovedBy(currentUsername());
         }
-        return toDto(requestRepo.save(row));
+        LeaveRequest saved = requestRepo.save(row);
+        timesheetService.syncLeaveRequest(saved, getType(saved.getLeaveTypeId()));
+        return toDto(saved);
     }
 
     @Transactional(readOnly = true)

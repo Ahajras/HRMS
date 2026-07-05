@@ -601,7 +601,7 @@ public class TimesheetService {
             holidays.add(h.getHolidayDate());
         }
         UUID[] alloc = defaultAllocation(req.getEmployeeId());
-        Map<LocalDate, UUID> approvedLeaveTypes = approvedLeaveTypes(companyId, req.getEmployeeId(),
+        Map<LocalDate, LeaveApplication> approvedLeaves = approvedLeaves(companyId, req.getEmployeeId(),
                 ym.atDay(1), ym.atEndOfMonth());
 
         BigDecimal standard = shift != null && shift.getStandardHours() != null
@@ -638,8 +638,10 @@ public class TimesheetService {
             TimeType tt = typesByCode.get(code);
             day.setTimeTypeId(tt != null ? tt.getId() : null);
             day.setOtHours(BigDecimal.ZERO);
-            if ("N".equals(code) && approvedLeaveTypes.containsKey(date)) {
-                day.setTimeTypeId(approvedLeaveTypes.get(date));
+            LeaveApplication leave = approvedLeaves.get(date);
+            if ("N".equals(code) && leave != null) {
+                day.setTimeTypeId(leave.timeTypeId());
+                day.setLeaveRequestId(leave.requestId());
                 day.setWorkedHours(BigDecimal.ZERO);
                 day.setActualIn(null);
                 day.setActualOut(null);
@@ -652,6 +654,7 @@ public class TimesheetService {
                 day.setOtHours(BigDecimal.ZERO);
                 day.setActualIn(null);
                 day.setActualOut(null);
+                day.setLeaveRequestId(null);
                 day.setProjectId(null);
                 day.setCostCodeId(null);
             }
@@ -828,6 +831,9 @@ public class TimesheetService {
                 saveDayCosts(day.getId(), List.of());
                 continue;
             }
+            if (dto.getTimeTypeId() != null && !dto.getTimeTypeId().equals(day.getTimeTypeId())) {
+                day.setLeaveRequestId(null);
+            }
             day.setShiftId(dto.getShiftId());
             day.setTimeTypeId(dto.getTimeTypeId());
             day.setActualIn(dto.getActualIn());
@@ -864,6 +870,7 @@ public class TimesheetService {
         day.setIneligibleOtHours(BigDecimal.ZERO);
         day.setProjectId(null);
         day.setCostCodeId(null);
+        day.setLeaveRequestId(null);
         day.setRemarks(null);
     }
 
@@ -1217,8 +1224,107 @@ public class TimesheetService {
         return new UUID[]{null, null};
     }
 
-    private Map<LocalDate, UUID> approvedLeaveTypes(UUID companyId, UUID employeeId, LocalDate start, LocalDate end) {
-        Map<LocalDate, UUID> out = new HashMap<>();
+    public void syncLeaveRequest(LeaveRequest request, LeaveType type) {
+        if (request == null || type == null || type.getTimeTypeId() == null
+                || request.getStartDate() == null || request.getEndDate() == null) {
+            return;
+        }
+        String status = request.getStatus() != null ? request.getStatus().toUpperCase() : "DRAFT";
+        if (!"APPROVED".equals(status) && !"REJECTED".equals(status) && !"CANCELLED".equals(status)) {
+            return;
+        }
+        UUID normalTypeId = timeTypeRepo.findByCompanyIdOrderBySortOrderAscNameAsc(request.getCompanyId()).stream()
+                .filter(t -> "N".equals(t.getCode()))
+                .findFirst()
+                .map(TimeType::getId)
+                .orElse(null);
+        boolean approved = "APPROVED".equals(status);
+        YearMonth cursor = YearMonth.from(request.getStartDate());
+        YearMonth end = YearMonth.from(request.getEndDate());
+        while (!cursor.isAfter(end)) {
+            Timesheet ts = timesheetRepo.findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(
+                    request.getCompanyId(), request.getEmployeeId(), cursor.getYear(), cursor.getMonthValue())
+                    .orElse(null);
+            if (ts != null) {
+                syncLeaveRequestMonth(ts, request, type, normalTypeId, approved);
+            }
+            cursor = cursor.plusMonths(1);
+        }
+    }
+
+    private void syncLeaveRequestMonth(Timesheet ts, LeaveRequest request, LeaveType type,
+                                       UUID normalTypeId, boolean approved) {
+        List<TimesheetDay> days = dayRepo.findByTimesheetIdOrderByWorkDate(ts.getId());
+        boolean hasAffectedDays = days.stream().anyMatch(day -> leaveSyncAffectsDay(day, request, type, normalTypeId, approved));
+        if (!hasAffectedDays) {
+            return;
+        }
+        if (!DRAFT.equals(ts.getStatus())) {
+            throw new BusinessRuleException("leave.timesheet.not.draft",
+                    "Leave changes can sync only to DRAFT timesheets. Reopen the employee timesheet first.");
+        }
+
+        Map<UUID, Shift> shiftCache = new HashMap<>();
+        boolean changed = false;
+        for (TimesheetDay day : days) {
+            if (!within(day.getWorkDate(), request.getStartDate(), request.getEndDate())) {
+                continue;
+            }
+            if (approved) {
+                if (canApplyLeaveToDay(day, normalTypeId, type.getTimeTypeId())) {
+                    day.setTimeTypeId(type.getTimeTypeId());
+                    day.setLeaveRequestId(request.getId());
+                    day.setWorkedHours(BigDecimal.ZERO);
+                    day.setOtHours(BigDecimal.ZERO);
+                    day.setActualIn(null);
+                    day.setActualOut(null);
+                    dayRepo.save(day);
+                    saveDayCosts(day.getId(), List.of());
+                    changed = true;
+                }
+            } else if (shouldClearLeaveFromDay(day, request, type)) {
+                day.setTimeTypeId(normalTypeId);
+                day.setLeaveRequestId(null);
+                day.setWorkedHours(day.getPlannedHours() != null ? day.getPlannedHours() : BigDecimal.ZERO);
+                day.setOtHours(BigDecimal.ZERO);
+                Shift shift = resolveDayShift(day, ts, shiftCache);
+                day.setActualIn(shift != null ? shift.getStartTime() : null);
+                day.setActualOut(shift != null ? shift.getEndTime() : null);
+                dayRepo.save(day);
+                changed = true;
+            }
+        }
+        if (changed) {
+            recomputeTotals(ts);
+            timesheetRepo.save(ts);
+        }
+    }
+
+    private boolean leaveSyncAffectsDay(TimesheetDay day, LeaveRequest request, LeaveType type,
+                                        UUID normalTypeId, boolean approved) {
+        return within(day.getWorkDate(), request.getStartDate(), request.getEndDate())
+                && (approved ? canApplyLeaveToDay(day, normalTypeId, type.getTimeTypeId())
+                : shouldClearLeaveFromDay(day, request, type));
+    }
+
+    private boolean canApplyLeaveToDay(TimesheetDay day, UUID normalTypeId, UUID leaveTimeTypeId) {
+        BigDecimal planned = day.getPlannedHours() != null ? day.getPlannedHours() : BigDecimal.ZERO;
+        return planned.compareTo(BigDecimal.ZERO) > 0
+                && (normalTypeId == null || normalTypeId.equals(day.getTimeTypeId())
+                || leaveTimeTypeId.equals(day.getTimeTypeId()));
+    }
+
+    private boolean shouldClearLeaveFromDay(TimesheetDay day, LeaveRequest request, LeaveType type) {
+        return request.getId().equals(day.getLeaveRequestId())
+                || (day.getLeaveRequestId() == null && type.getTimeTypeId().equals(day.getTimeTypeId()));
+    }
+
+    private static boolean within(LocalDate date, LocalDate start, LocalDate end) {
+        return date != null && !date.isBefore(start) && !date.isAfter(end);
+    }
+
+    private Map<LocalDate, LeaveApplication> approvedLeaves(UUID companyId, UUID employeeId, LocalDate start, LocalDate end) {
+        Map<LocalDate, LeaveApplication> out = new HashMap<>();
         for (LeaveRequest request : leaveRequestRepo
                 .findByCompanyIdAndEmployeeIdAndStatusAndEndDateGreaterThanEqualAndStartDateLessThanEqual(
                         companyId, employeeId, "APPROVED", start, end)) {
@@ -1229,12 +1335,14 @@ public class TimesheetService {
             LocalDate d = request.getStartDate().isBefore(start) ? start : request.getStartDate();
             LocalDate last = request.getEndDate().isAfter(end) ? end : request.getEndDate();
             while (!d.isAfter(last)) {
-                out.put(d, type.getTimeTypeId());
+                out.put(d, new LeaveApplication(request.getId(), type.getTimeTypeId()));
                 d = d.plusDays(1);
             }
         }
         return out;
     }
+
+    private record LeaveApplication(UUID requestId, UUID timeTypeId) {}
 
     /**
      * Roll a timesheet's daily records up into a per-category summary (worked /
@@ -1453,6 +1561,7 @@ public class TimesheetService {
         dto.setWorkDate(d.getWorkDate());
         dto.setShiftId(d.getShiftId());
         dto.setTimeTypeId(d.getTimeTypeId());
+        dto.setLeaveRequestId(d.getLeaveRequestId());
         dto.setTimeTypeCode(d.getTimeTypeId() != null ? typeCodes.get(d.getTimeTypeId()) : null);
         dto.setPlannedHours(d.getPlannedHours());
         dto.setActualIn(d.getActualIn());

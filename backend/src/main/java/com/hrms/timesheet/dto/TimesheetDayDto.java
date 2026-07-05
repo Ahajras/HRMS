@@ -14,6 +14,7 @@ public class TimesheetDayDto {
     private LocalDate workDate;
     private UUID shiftId;
     private UUID timeTypeId;
+    private UUID leaveRequestId;
     private String timeTypeCode;
     private BigDecimal plannedHours;
     private LocalTime actualIn;
@@ -44,6 +45,9 @@ public class TimesheetDayDto {
 
     public UUID getTimeTypeId() { return timeTypeId; }
     public void setTimeTypeId(UUID timeTypeId) { this.timeTypeId = timeTypeId; }
+
+    public UUID getLeaveRequestId() { return leaveRequestId; }
+    public void setLeaveRequestId(UUID leaveRequestId) { this.leaveRequestId = leaveRequestId; }
 
     public String getTimeTypeCode() { return timeTypeCode; }
     public void setTimeTypeCode(String timeTypeCode) { this.timeTypeCode = timeTypeCode; }
