@@ -1,9 +1,11 @@
 package com.hrms.timesheet.web;
 
 import com.hrms.timesheet.dto.GenerateTimesheetRequest;
+import com.hrms.timesheet.dto.BulkTimesheetJobDto;
 import com.hrms.timesheet.dto.TimesheetDayDto;
 import com.hrms.timesheet.dto.TimesheetDto;
 import com.hrms.timesheet.dto.TimesheetSummaryDto;
+import com.hrms.timesheet.service.BulkTimesheetJobService;
 import com.hrms.timesheet.service.TimesheetService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -29,9 +31,11 @@ import java.util.UUID;
 public class TimesheetController {
 
     private final TimesheetService service;
+    private final BulkTimesheetJobService bulkJobService;
 
-    public TimesheetController(TimesheetService service) {
+    public TimesheetController(TimesheetService service, BulkTimesheetJobService bulkJobService) {
         this.service = service;
+        this.bulkJobService = bulkJobService;
     }
 
     @GetMapping
@@ -66,6 +70,18 @@ public class TimesheetController {
     public Map<String, Integer> generateBulk(@RequestParam UUID periodId,
                                              @RequestParam(required = false) UUID projectId) {
         return service.generateBulk(periodId, projectId);
+    }
+
+    @PostMapping("/generate-bulk-jobs")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public BulkTimesheetJobDto startGenerateBulk(@RequestParam UUID periodId,
+                                                 @RequestParam(required = false) UUID projectId) {
+        return bulkJobService.start(periodId, projectId);
+    }
+
+    @GetMapping("/generate-bulk-jobs/{id}")
+    public BulkTimesheetJobDto getGenerateBulkJob(@PathVariable UUID id) {
+        return bulkJobService.get(id);
     }
 
     @PostMapping("/generate-by-crew")

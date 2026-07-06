@@ -40,6 +40,7 @@ import type {
   Timesheet,
   TimesheetDay,
   TimesheetSummary,
+  BulkTimesheetJob,
   CompanyProfile,
   LeaveAdjustment,
   LeaveBalance,
@@ -399,6 +400,10 @@ export const timesheetApi = {
     api.post<Timesheet>("/timesheets/generate", d).then((r) => r.data),
   generateBulk: (periodId: string, projectId?: string) =>
     api.post<{ created: number; skipped: number }>("/timesheets/generate-bulk", null, { params: { periodId, projectId: projectId || undefined } }).then((r) => r.data),
+  startGenerateBulk: (periodId: string, projectId?: string) =>
+    api.post<BulkTimesheetJob>("/timesheets/generate-bulk-jobs", null, { params: { periodId, projectId: projectId || undefined } }).then((r) => r.data),
+  getGenerateBulkJob: (id: string) =>
+    api.get<BulkTimesheetJob>(`/timesheets/generate-bulk-jobs/${id}`).then((r) => r.data),
   generateByCrew: (crewId: string, periodId: string) =>
     api.post<{ created: number; skipped: number; messages?: string[] }>("/timesheets/generate-by-crew", null, { params: { crewId, periodId } }).then((r) => r.data),
   submitAll: (year: number, month: number, projectId?: string) =>

@@ -212,6 +212,16 @@ export interface EmployeeTimeTypeUsageRow {
   thresholdScope?: string;
 }
 
+export interface BulkTimesheetJob {
+  id: string;
+  status: "RUNNING" | "COMPLETED" | "FAILED";
+  created: number;
+  skipped: number;
+  message?: string;
+  startedAt?: string;
+  finishedAt?: string;
+}
+
 export interface LeaveType {
   id?: string;
   code: string;

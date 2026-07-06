@@ -221,14 +221,34 @@ export default function TimesheetPage() {
 
   const [q, setQ] = useState("");
   const [bulkMsg, setBulkMsg] = useState<string | null>(null);
+  const [bulkError, setBulkError] = useState<string | null>(null);
+  const [bulkJobId, setBulkJobId] = useState<string | null>(null);
 
   const generateAll = useMutation({
-    mutationFn: () => timesheetApi.generateBulk(periodId, projectId || undefined),
+    mutationFn: () => timesheetApi.startGenerateBulk(periodId, projectId || undefined),
     onSuccess: (r) => {
-      qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
-      setBulkMsg(`Generated ${r.created}, skipped ${r.skipped} (already existed).`);
+      setBulkError(null);
+      setBulkJobId(r.id);
+      setBulkMsg("Timesheet generation is running in the background...");
     },
   });
+  const { data: bulkJob } = useQuery({
+    queryKey: ["timesheetBulkJob", bulkJobId],
+    queryFn: () => timesheetApi.getGenerateBulkJob(bulkJobId!),
+    enabled: !!bulkJobId,
+    refetchInterval: (query) => query.state.data?.status === "RUNNING" ? 2000 : false,
+  });
+  useEffect(() => {
+    if (!bulkJob || bulkJob.status === "RUNNING") return;
+    if (bulkJob.status === "COMPLETED") {
+      qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
+      setBulkMsg(`Generated ${bulkJob.created}, skipped ${bulkJob.skipped} (already existed).`);
+      setBulkError(null);
+    } else {
+      setBulkError(bulkJob.message || "Timesheet generation failed.");
+    }
+    setBulkJobId(null);
+  }, [bulkJob, periodId, qc]);
   const generateCrew = useMutation({
     mutationFn: () => timesheetApi.generateByCrew(genCrew, periodId),
     onSuccess: (r) => {
@@ -260,6 +280,7 @@ export default function TimesheetPage() {
   });
 
   const periodEditable = period?.status !== "CLOSED";
+  const isGeneratingBulk = generateAll.isPending || bulkJob?.status === "RUNNING";
   const filtered = list.filter((t) => {
     const s = q.trim().toLowerCase();
     if (!s) return true;
@@ -299,14 +320,14 @@ export default function TimesheetPage() {
           {period && (
             <Grid item xs={12}>
               <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
-                <Button size="small" variant="outlined" disabled={!periodEditable || generateAll.isPending}
+                <Button size="small" variant="outlined" disabled={!periodEditable || isGeneratingBulk}
                   onClick={() => {
                     if (!projectId && !window.confirm("No project selected — this will generate timesheets for EVERY project company-wide. Continue?")) {
                       return;
                     }
                     generateAll.mutate();
                   }}>
-                  {projectId ? `Generate all (roster) — this project only` : `Generate all (roster) — company-wide`}
+                  {isGeneratingBulk ? "Generating..." : projectId ? `Generate all (roster) — this project only` : `Generate all (roster) — company-wide`}
                 </Button>
                 <TextField select size="small" label="Crew" value={genCrew} onChange={(e) => setGenCrew(e.target.value)} sx={{ minWidth: 180 }}>
                   <MenuItem value="">(pick a crew)</MenuItem>
@@ -332,6 +353,12 @@ export default function TimesheetPage() {
                 </Button>
               </Stack>
               {bulkMsg && <Alert severity="success" sx={{ mt: 1 }} onClose={() => setBulkMsg(null)}>{bulkMsg}</Alert>}
+              {bulkError && <Alert severity="error" sx={{ mt: 1 }} onClose={() => setBulkError(null)}>{bulkError}</Alert>}
+              {generateAll.isError && (
+                <Alert severity="error" sx={{ mt: 1 }}>
+                  {(generateAll.error as any)?.response?.data?.message ?? "Could not start timesheet generation."}
+                </Alert>
+              )}
               {lockProject.isError && (
                 <Alert severity="error" sx={{ mt: 1 }}>
                   {(lockProject.error as any)?.response?.data?.message ?? "Could not lock this project."}
