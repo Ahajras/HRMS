@@ -3,6 +3,7 @@ package com.hrms.timesheet.service;
 import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
+import com.hrms.common.web.PageResponse;
 import com.hrms.crew.domain.CrewMember;
 import com.hrms.crew.repository.CrewMemberRepository;
 import com.hrms.crew.service.TimekeeperService;
@@ -50,6 +51,9 @@ import com.hrms.timesheet.repository.TimesheetDayRepository;
 import com.hrms.timesheet.repository.TimesheetRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -154,19 +158,26 @@ public class TimesheetService {
     // --- queries -----------------------------------------------------
 
     @Transactional(readOnly = true)
-    public List<TimesheetDto> listByPeriod(int year, int month, UUID projectId) {
+    public PageResponse<TimesheetDto> listByPeriod(int year, int month, UUID projectId, String q, Pageable pageable) {
         UUID companyId = TenantContext.requireCompanyId();
         Set<UUID> allowed = restrictedProjects();
-        return timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month)
-                .stream()
-                .filter(t -> matchesProjectScope(t, projectId, allowed))
-                .map(t -> toHeaderDto(t)).toList();
+        if (projectId != null) {
+            if (allowed != null && !allowed.contains(projectId)) {
+                return emptyPage(pageable);
+            }
+            return PageResponse.from(timesheetRepo.searchByProject(companyId, year, month, projectId, q, pageable)
+                    .map(this::toHeaderDto));
+        }
+        if (allowed == null || allowed.isEmpty()) {
+            return emptyPage(pageable);
+        }
+        return PageResponse.from(timesheetRepo.searchByProjects(companyId, year, month, allowed, q, pageable)
+                .map(this::toHeaderDto));
     }
 
-    private boolean matchesProjectScope(Timesheet t, UUID projectId, Set<UUID> allowed) {
-        UUID employeeProjectId = employeeProject(t.getEmployeeId());
-        return (allowed == null || allowed.contains(employeeProjectId))
-                && (projectId == null || projectId.equals(employeeProjectId));
+    private PageResponse<TimesheetDto> emptyPage(Pageable pageable) {
+        Page<TimesheetDto> page = new PageImpl<>(List.of(), pageable, 0);
+        return PageResponse.from(page);
     }
 
     // --- timekeeper project scoping ----------------------------------

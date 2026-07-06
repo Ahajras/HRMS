@@ -390,8 +390,10 @@ export const timekeeperApi = {
 
 // --- Timesheet: monthly timesheets ---
 export const timesheetApi = {
-  listByPeriod: (year: number, month: number, projectId?: string) =>
-    api.get<Timesheet[]>("/timesheets", { params: { year, month, ...(projectId ? { projectId } : {}) } }).then((r) => r.data),
+  listByPeriod: (year: number, month: number, projectId?: string, page = 0, size = 50, q?: string) =>
+    api.get<PageResponse<Timesheet>>("/timesheets", {
+      params: { year, month, page, size, ...(projectId ? { projectId } : {}), ...(q ? { q } : {}) },
+    }).then((r) => r.data),
   get: (id: string) => api.get<Timesheet>(`/timesheets/${id}`).then((r) => r.data),
   summary: (id: string) => api.get<TimesheetSummary>(`/timesheets/${id}/summary`).then((r) => r.data),
   eligibleEmployees: (periodId: string) =>

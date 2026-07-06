@@ -1,5 +1,6 @@
 package com.hrms.timesheet.web;
 
+import com.hrms.common.web.PageResponse;
 import com.hrms.timesheet.dto.GenerateTimesheetRequest;
 import com.hrms.timesheet.dto.BulkTimesheetJobDto;
 import com.hrms.timesheet.dto.TimesheetDayDto;
@@ -8,6 +9,8 @@ import com.hrms.timesheet.dto.TimesheetSummaryDto;
 import com.hrms.timesheet.service.BulkTimesheetJobService;
 import com.hrms.timesheet.service.TimesheetService;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -39,9 +42,12 @@ public class TimesheetController {
     }
 
     @GetMapping
-    public List<TimesheetDto> listByPeriod(@RequestParam int year, @RequestParam int month,
-                                           @RequestParam(required = false) UUID projectId) {
-        return service.listByPeriod(year, month, projectId);
+    public PageResponse<TimesheetDto> listByPeriod(@RequestParam int year,
+                                                   @RequestParam int month,
+                                                   @RequestParam(required = false) UUID projectId,
+                                                   @RequestParam(required = false) String q,
+                                                   @PageableDefault(size = 50) Pageable pageable) {
+        return service.listByPeriod(year, month, projectId, q, pageable);
     }
 
     @GetMapping("/{id}")

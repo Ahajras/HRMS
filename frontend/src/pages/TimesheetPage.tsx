@@ -168,6 +168,9 @@ export default function TimesheetPage() {
   const [periodId, setPeriodId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [q, setQ] = useState("");
+  const pageSize = 50;
 
   // Generate form
   const [genEmployee, setGenEmployee] = useState("");
@@ -190,11 +193,12 @@ export default function TimesheetPage() {
   const employeeOptions = employees.filter((e) => !projectId || e.projectId === projectId);
   const selectedEmployee = employeeOptions.find((e) => e.id === genEmployee);
   const availableShifts = shifts.filter((s) => !selectedEmployee?.projectId || !s.projectId || s.projectId === selectedEmployee.projectId);
-  const { data: list = [] } = useQuery({
-    queryKey: ["timesheets", periodId, projectId],
-    queryFn: () => timesheetApi.listByPeriod(period!.periodYear, period!.periodMonth, projectId || undefined),
+  const { data: list } = useQuery({
+    queryKey: ["timesheets", periodId, projectId, page, pageSize, q],
+    queryFn: () => timesheetApi.listByPeriod(period!.periodYear, period!.periodMonth, projectId || undefined, page, pageSize, q),
     enabled: !!period && !!projectId,
   });
+  const rows = list?.content ?? [];
   const { data: detail } = useQuery({
     queryKey: ["timesheet", selectedId],
     queryFn: () => timesheetApi.get(selectedId!),
@@ -226,7 +230,6 @@ export default function TimesheetPage() {
     },
   });
 
-  const [q, setQ] = useState("");
   const [bulkMsg, setBulkMsg] = useState<string | null>(null);
   const [bulkError, setBulkError] = useState<string | null>(null);
   const [bulkJobId, setBulkJobId] = useState<string | null>(null);
@@ -292,11 +295,7 @@ export default function TimesheetPage() {
 
   const periodEditable = period?.status !== "CLOSED";
   const isGeneratingBulk = generateAll.isPending || bulkJob?.status === "RUNNING";
-  const filtered = list.filter((t) => {
-    const s = q.trim().toLowerCase();
-    if (!s) return true;
-    return (t.employeeName ?? "").toLowerCase().includes(s) || (t.employeeNumber ?? "").toLowerCase().includes(s);
-  });
+  const filtered = rows;
 
   return (
     <Box>
@@ -305,7 +304,7 @@ export default function TimesheetPage() {
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
         <Grid container spacing={1.5} alignItems="center">
           <Grid item xs={12} sm={5}>
-            <TextField select fullWidth size="small" label="Period" value={periodId} onChange={(e) => { setPeriodId(e.target.value); setSelectedId(null); }}>
+            <TextField select fullWidth size="small" label="Period" value={periodId} onChange={(e) => { setPeriodId(e.target.value); setSelectedId(null); setPage(0); }}>
               {periods.length === 0 && <MenuItem value="" disabled>No periods — create them in Payroll Calendar</MenuItem>}
               {periods.map((p) => (
                 <MenuItem key={p.id} value={p.id}>{p.name} ({p.status})</MenuItem>
@@ -313,7 +312,7 @@ export default function TimesheetPage() {
             </TextField>
           </Grid>
           <Grid item xs={12} sm={3}>
-            <TextField select fullWidth size="small" label="Project" value={projectId} onChange={(e) => { setProjectId(e.target.value); setSelectedId(null); setGenEmployee(""); setGenShift(""); }}>
+            <TextField select fullWidth size="small" label="Project" value={projectId} onChange={(e) => { setProjectId(e.target.value); setSelectedId(null); setGenEmployee(""); setGenShift(""); setPage(0); }}>
               <MenuItem value="">All projects</MenuItem>
               {projects.map((p) => (
                 <MenuItem key={p.id} value={p.id}>{p.code} — {p.name}</MenuItem>
@@ -347,10 +346,10 @@ export default function TimesheetPage() {
                 <Button size="small" variant="outlined" disabled={!periodEditable || !genCrew || generateCrew.isPending} onClick={() => generateCrew.mutate()}>
                   Generate for crew
                 </Button>
-                <Button size="small" variant="outlined" disabled={list.every((t) => t.status !== "DRAFT") || submitAll.isPending} onClick={() => submitAll.mutate()}>
+                <Button size="small" variant="outlined" disabled={rows.every((t) => t.status !== "DRAFT") || submitAll.isPending} onClick={() => submitAll.mutate()}>
                   Submit all drafts
                 </Button>
-                <Button size="small" variant="outlined" color="success" disabled={list.every((t) => t.status !== "SUBMITTED") || approveAll.isPending} onClick={() => approveAll.mutate()}>
+                <Button size="small" variant="outlined" color="success" disabled={rows.every((t) => t.status !== "SUBMITTED") || approveAll.isPending} onClick={() => approveAll.mutate()}>
                   Approve all submitted
                 </Button>
                 <Button
@@ -432,7 +431,22 @@ export default function TimesheetPage() {
               Pick a project to view timesheets. This avoids loading very large company-wide lists.
             </Alert>
           )}
-          <TextField size="small" fullWidth placeholder="Search employee (name or number)" value={q} onChange={(e) => setQ(e.target.value)} />
+          <TextField size="small" fullWidth placeholder="Search employee (name or number)" value={q} onChange={(e) => { setQ(e.target.value); setPage(0); }} />
+          {projectId && (
+            <Stack direction="row" spacing={1} alignItems="center" justifyContent="space-between" mt={1}>
+              <Typography variant="body2" color="text.secondary">
+                {list ? `${list.totalElements} timesheet(s)${q.trim() ? " found" : ""} — page ${list.totalPages === 0 ? 0 : list.page + 1} of ${list.totalPages}` : "Loading..."}
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Button size="small" variant="outlined" disabled={!list || list.first} onClick={() => setPage((p) => Math.max(0, p - 1))}>
+                  Previous
+                </Button>
+                <Button size="small" variant="outlined" disabled={!list || list.last} onClick={() => setPage((p) => p + 1)}>
+                  Next
+                </Button>
+              </Stack>
+            </Stack>
+          )}
         </Box>
         <Table size="small">
           <TableHead>
