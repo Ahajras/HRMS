@@ -424,22 +424,12 @@ public class TimesheetService {
     private void setProjectTimesheetsLocked(UUID companyId, UUID periodId, UUID projectId, String payGroup, BulkStatusProgressListener progress) {
         PayrollPeriod period = periodRepo.findById(periodId)
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
-        Map<UUID, UUID> projectByEmployee = employeeProjectMap(companyId);
-        List<Timesheet> targets = timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
-                        companyId, period.getPeriodYear(), period.getPeriodMonth())
-                .stream()
-                .filter(t -> projectId.equals(projectByEmployee.get(t.getEmployeeId()))
-                        && payGroupMatches(t.getEmployeeId(), payGroup)
-                        && APPROVED.equals(t.getStatus()))
-                .toList();
-        int done = 0;
-        progress.onProgress(0, targets.size());
-        for (Timesheet t : targets) {
-            t.setStatus(LOCKED);
-            timesheetRepo.save(t);
-            done++;
-            progress.onProgress(done, targets.size());
-        }
+        int total = timesheetRepo.countApprovedForProjectLock(companyId, period.getPeriodYear(),
+                period.getPeriodMonth(), projectId, payGroup);
+        progress.onProgress(0, total);
+        int done = timesheetRepo.lockApprovedForProject(companyId, period.getPeriodYear(),
+                period.getPeriodMonth(), projectId, payGroup, Instant.now());
+        progress.onProgress(done, total);
     }
 
     private void reopenProjectTimesheets(UUID companyId, UUID periodId, UUID projectId, String payGroup) {
@@ -627,14 +617,21 @@ public class TimesheetService {
     // --- generation --------------------------------------------------
 
     public TimesheetDto generate(GenerateTimesheetRequest req) {
+        return toFullDto(generateEntity(req, null, null, null, null, null));
+    }
+
+    private Timesheet generateEntity(GenerateTimesheetRequest req, Employee employeeOverride,
+                                     PayrollPeriod periodOverride, UUID employeeProjectOverride,
+                                     Map<String, TimeType> sharedTypesByCode,
+                                     Set<LocalDate> sharedHolidays) {
         UUID companyId = TenantContext.requireCompanyId();
-        Employee employee = employeeRepo.findById(req.getEmployeeId())
+        Employee employee = employeeOverride != null ? employeeOverride : employeeRepo.findById(req.getEmployeeId())
                 .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + req.getEmployeeId()));
         assertTimesheetEligible(employee);
         assertProjectAllowed(req.getEmployeeId());
 
         // A timesheet must live inside an OPEN payroll period.
-        PayrollPeriod period = periodRepo.findById(req.getPeriodId())
+        PayrollPeriod period = periodOverride != null ? periodOverride : periodRepo.findById(req.getPeriodId())
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + req.getPeriodId()));
         if ("CLOSED".equals(period.getStatus())) {
             throw new BusinessRuleException("period.not.open",
@@ -644,7 +641,7 @@ public class TimesheetService {
             throw new BusinessRuleException("employee.not.active.period",
                     "Employee was not active during this payroll period.");
         }
-        UUID employeeProjectId = employeeProject(req.getEmployeeId());
+        UUID employeeProjectId = employeeProjectOverride != null ? employeeProjectOverride : employeeProject(req.getEmployeeId());
         String pst = projectStatus(req.getPeriodId(), employeeProjectId, payGroup(req.getEmployeeId()));
         if ("LOCKED".equals(pst)) {
             throw new BusinessRuleException("period.project.locked",
@@ -694,15 +691,19 @@ public class TimesheetService {
         ts = timesheetRepo.save(ts);
 
         // Lookups for classification.
-        Map<String, TimeType> typesByCode = new HashMap<>();
-        for (TimeType tt : timeTypeRepo.findByCompanyIdOrderBySortOrderAscNameAsc(companyId)) {
-            typesByCode.put(tt.getCode(), tt);
+        Map<String, TimeType> typesByCode = sharedTypesByCode != null ? sharedTypesByCode : new HashMap<>();
+        if (sharedTypesByCode == null) {
+            for (TimeType tt : timeTypeRepo.findByCompanyIdOrderBySortOrderAscNameAsc(companyId)) {
+                typesByCode.put(tt.getCode(), tt);
+            }
         }
         YearMonth ym = YearMonth.of(year, month);
-        Set<LocalDate> holidays = new HashSet<>();
-        for (PublicHoliday h : holidayRepo.findByCompanyIdAndHolidayDateBetween(
-                companyId, ym.atDay(1), ym.atEndOfMonth())) {
-            holidays.add(h.getHolidayDate());
+        Set<LocalDate> holidays = sharedHolidays != null ? sharedHolidays : new HashSet<>();
+        if (sharedHolidays == null) {
+            for (PublicHoliday h : holidayRepo.findByCompanyIdAndHolidayDateBetween(
+                    companyId, ym.atDay(1), ym.atEndOfMonth())) {
+                holidays.add(h.getHolidayDate());
+            }
         }
         UUID[] alloc = defaultAllocation(req.getEmployeeId());
         Map<LocalDate, LeaveApplication> approvedLeaves = approvedLeaves(companyId, req.getEmployeeId(),
@@ -711,6 +712,16 @@ public class TimesheetService {
         BigDecimal standard = shift != null && shift.getStandardHours() != null
                 ? shift.getStandardHours() : BigDecimal.ZERO;
         String weeklyOff = shift != null ? shift.getWeeklyOff() : null;
+
+        Map<UUID, Shift> shiftCache = new HashMap<>();
+        Map<UUID, TimeType> typeCache = new HashMap<>();
+        Map<UUID, Map<String, ShiftDay>> weekCache = new HashMap<>();
+        boolean monthly = isMonthlyPaid(ts);
+        boolean otEligible = isOtEligible(ts);
+        BigDecimal totalWorked = BigDecimal.ZERO;
+        BigDecimal totalOt = BigDecimal.ZERO;
+        BigDecimal totalAbsence = BigDecimal.ZERO;
+        List<TimesheetDay> days = new ArrayList<>();
 
         for (int d = 1; d <= ym.lengthOfMonth(); d++) {
             LocalDate date = ym.atDay(d);
@@ -762,11 +773,24 @@ public class TimesheetService {
                 day.setProjectId(null);
                 day.setCostCodeId(null);
             }
-            dayRepo.save(day);
+            recomputeDay(day, ts, shiftCache, typeCache, weekCache, monthly, otEligible);
+            totalWorked = totalWorked.add(nz(day.getWorkedHours()));
+            totalOt = totalOt.add(nz(day.getOtHours()));
+            if (day.getTimeTypeId() != null) {
+                TimeType dayType = typeCache.computeIfAbsent(day.getTimeTypeId(),
+                        id -> timeTypeRepo.findById(id).orElse(null));
+                if (dayType != null && "ABSENCE".equals(dayType.getCategory())) {
+                    totalAbsence = totalAbsence.add(BigDecimal.ONE);
+                }
+            }
+            days.add(day);
         }
 
-        recomputeTotals(ts);
-        return toFullDto(timesheetRepo.save(ts));
+        dayRepo.saveAll(days);
+        ts.setTotalWorkedHours(totalWorked);
+        ts.setTotalOtHours(totalOt);
+        ts.setTotalAbsenceDays(totalAbsence);
+        return timesheetRepo.save(ts);
     }
 
     /** Generate timesheets for every employee rostered in the period (skips existing). */
@@ -793,9 +817,18 @@ public class TimesheetService {
             allowed = Set.of(projectId);
         }
         Map<UUID, UUID> projectByEmployee = employeeProjectMap(companyId);
+        List<EmployeeShift> rosterRows = employeeShiftRepo.findByCompanyIdOrderByEffectiveFromDesc(companyId);
+        Set<UUID> rosterEmployeeIds = new HashSet<>();
+        for (EmployeeShift es : rosterRows) {
+            rosterEmployeeIds.add(es.getEmployeeId());
+        }
+        Map<UUID, Employee> employeesById = new HashMap<>();
+        for (Employee emp : employeeRepo.findAllById(rosterEmployeeIds)) {
+            employeesById.put(emp.getId(), emp);
+        }
         Set<UUID> emps = new java.util.LinkedHashSet<>();
-        for (EmployeeShift es : employeeShiftRepo.findByCompanyIdOrderByEffectiveFromDesc(companyId)) {
-            Employee emp = employeeRepo.findById(es.getEmployeeId()).orElse(null);
+        for (EmployeeShift es : rosterRows) {
+            Employee emp = employeesById.get(es.getEmployeeId());
             UUID empProjectId = projectByEmployee.get(es.getEmployeeId());
             if (emp != null
                     && empProjectId != null
@@ -810,6 +843,16 @@ public class TimesheetService {
         }
         int created = 0;
         int skipped = 0;
+        Map<String, TimeType> typesByCode = new HashMap<>();
+        for (TimeType tt : timeTypeRepo.findByCompanyIdOrderBySortOrderAscNameAsc(companyId)) {
+            typesByCode.put(tt.getCode(), tt);
+        }
+        YearMonth ym = YearMonth.of(period.getPeriodYear(), period.getPeriodMonth());
+        Set<LocalDate> holidays = new HashSet<>();
+        for (PublicHoliday h : holidayRepo.findByCompanyIdAndHolidayDateBetween(
+                companyId, ym.atDay(1), ym.atEndOfMonth())) {
+            holidays.add(h.getHolidayDate());
+        }
         for (UUID empId : emps) {
             Boolean didCreate = transactionTemplate.execute(status -> {
                 boolean exists = timesheetRepo.findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(
@@ -820,7 +863,7 @@ public class TimesheetService {
                 GenerateTimesheetRequest req = new GenerateTimesheetRequest();
                 req.setEmployeeId(empId);
                 req.setPeriodId(periodId);
-                generate(req);
+                generateEntity(req, employeesById.get(empId), period, projectByEmployee.get(empId), typesByCode, holidays);
                 return true;
             });
             if (Boolean.TRUE.equals(didCreate)) {
@@ -907,23 +950,18 @@ public class TimesheetService {
     public Map<String, Integer> submitAll(int year, int month, UUID projectId, BulkStatusProgressListener progress) {
         UUID companyId = TenantContext.requireCompanyId();
         Set<UUID> allowed = restrictedProjects();
-        Map<UUID, UUID> projectByEmployee = employeeProjectMap(companyId);
-        List<Timesheet> all = timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month);
-        List<Timesheet> targets = all.stream()
-                .filter(t -> DRAFT.equals(t.getStatus())
-                        && matchesProjectScope(projectByEmployee.get(t.getEmployeeId()), projectId, allowed))
-                .toList();
-        int submitted = 0;
-        progress.onProgress(0, targets.size());
-        for (Timesheet t : targets) {
-            assertEditable(t);
-            recomputeTotals(t);
-            t.setStatus(SUBMITTED);
-            t.setSubmittedAt(Instant.now());
-            timesheetRepo.save(t);
-            submitted++;
-            progress.onProgress(submitted, targets.size());
+        if (projectId != null && allowed != null && !allowed.contains(projectId)) {
+            progress.onProgress(0, 0);
+            return Map.of("submitted", 0);
         }
+        int total = allowed != null && projectId == null
+                ? timesheetRepo.countStatusByProjects(companyId, year, month, DRAFT, allowed)
+                : timesheetRepo.countStatusByProject(companyId, year, month, DRAFT, projectId);
+        progress.onProgress(0, total);
+        int submitted = allowed != null && projectId == null
+                ? timesheetRepo.submitDraftsByProjects(companyId, year, month, allowed, Instant.now())
+                : timesheetRepo.submitDraftsByProject(companyId, year, month, projectId, Instant.now());
+        progress.onProgress(submitted, total);
         return Map.of("submitted", submitted);
     }
 
@@ -935,23 +973,20 @@ public class TimesheetService {
     public Map<String, Integer> approveAll(int year, int month, UUID projectId, BulkStatusProgressListener progress) {
         UUID companyId = TenantContext.requireCompanyId();
         Set<UUID> allowed = restrictedProjects();
-        Map<UUID, UUID> projectByEmployee = employeeProjectMap(companyId);
-        List<Timesheet> all = timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month);
-        List<Timesheet> targets = all.stream()
-                .filter(t -> SUBMITTED.equals(t.getStatus())
-                        && matchesProjectScope(projectByEmployee.get(t.getEmployeeId()), projectId, allowed))
-                .toList();
-        int approved = 0;
-        progress.onProgress(0, targets.size());
-        for (Timesheet t : targets) {
-            assertEditable(t);
-            t.setStatus(APPROVED);
-            t.setApprovedAt(Instant.now());
-            t.setApprovedBy(currentUsername());
-            timesheetRepo.save(t);
-            approved++;
-            progress.onProgress(approved, targets.size());
+        if (projectId != null && allowed != null && !allowed.contains(projectId)) {
+            progress.onProgress(0, 0);
+            return Map.of("approved", 0);
         }
+        int total = allowed != null && projectId == null
+                ? timesheetRepo.countStatusByProjects(companyId, year, month, SUBMITTED, allowed)
+                : timesheetRepo.countStatusByProject(companyId, year, month, SUBMITTED, projectId);
+        progress.onProgress(0, total);
+        Instant approvedAt = Instant.now();
+        String approvedBy = currentUsername();
+        int approved = allowed != null && projectId == null
+                ? timesheetRepo.approveSubmittedByProjects(companyId, year, month, allowed, approvedAt, approvedBy)
+                : timesheetRepo.approveSubmittedByProject(companyId, year, month, projectId, approvedAt, approvedBy);
+        progress.onProgress(approved, total);
         return Map.of("approved", approved);
     }
 

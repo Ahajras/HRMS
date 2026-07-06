@@ -4,9 +4,11 @@ import com.hrms.timesheet.domain.Timesheet;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
@@ -111,6 +113,224 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
                                      @Param("projectIds") Collection<UUID> projectIds,
                                      @Param("q") String q,
                                      Pageable pageable);
+
+    @Query(value = """
+            select count(t.id)
+            from timesheet t
+            join assignment a on a.employee_id = t.employee_id
+              and upper(coalesce(a.status, '')) = 'ACTIVE'
+              and a.primary_assignment = true
+              and a.effective_to is null
+            where t.company_id = :companyId
+              and t.period_year = :year
+              and t.period_month = :month
+              and t.status = :status
+              and (:projectId is null or a.project_id = :projectId)
+            """, nativeQuery = true)
+    int countStatusByProject(@Param("companyId") UUID companyId,
+                             @Param("year") int year,
+                             @Param("month") int month,
+                             @Param("status") String status,
+                             @Param("projectId") UUID projectId);
+
+    @Query(value = """
+            select count(t.id)
+            from timesheet t
+            join assignment a on a.employee_id = t.employee_id
+              and upper(coalesce(a.status, '')) = 'ACTIVE'
+              and a.primary_assignment = true
+              and a.effective_to is null
+            where t.company_id = :companyId
+              and t.period_year = :year
+              and t.period_month = :month
+              and t.status = :status
+              and a.project_id in (:projectIds)
+            """, nativeQuery = true)
+    int countStatusByProjects(@Param("companyId") UUID companyId,
+                              @Param("year") int year,
+                              @Param("month") int month,
+                              @Param("status") String status,
+                              @Param("projectIds") Collection<UUID> projectIds);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            with scoped as (
+              select t.id
+              from timesheet t
+              join assignment a on a.employee_id = t.employee_id
+                and upper(coalesce(a.status, '')) = 'ACTIVE'
+                and a.primary_assignment = true
+                and a.effective_to is null
+              where t.company_id = :companyId
+                and t.period_year = :year
+                and t.period_month = :month
+                and t.status = 'DRAFT'
+                and (:projectId is null or a.project_id = :projectId)
+            ),
+            totals as (
+              select td.timesheet_id,
+                     coalesce(sum(td.worked_hours), 0) as worked,
+                     coalesce(sum(td.ot_hours), 0) as ot,
+                     coalesce(sum(case when tt.category = 'ABSENCE' then 1 else 0 end), 0) as absence
+              from timesheet_day td
+              join scoped s on s.id = td.timesheet_id
+              left join time_type tt on tt.id = td.time_type_id
+              group by td.timesheet_id
+            )
+            update timesheet t
+            set status = 'SUBMITTED',
+                submitted_at = :submittedAt,
+                total_worked_hours = coalesce(totals.worked, 0),
+                total_ot_hours = coalesce(totals.ot, 0),
+                total_absence_days = coalesce(totals.absence, 0),
+                updated_at = :submittedAt
+            from scoped s
+            left join totals on totals.timesheet_id = s.id
+            where t.id = s.id
+            """, nativeQuery = true)
+    int submitDraftsByProject(@Param("companyId") UUID companyId,
+                              @Param("year") int year,
+                              @Param("month") int month,
+                              @Param("projectId") UUID projectId,
+                              @Param("submittedAt") Instant submittedAt);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            with scoped as (
+              select t.id
+              from timesheet t
+              join assignment a on a.employee_id = t.employee_id
+                and upper(coalesce(a.status, '')) = 'ACTIVE'
+                and a.primary_assignment = true
+                and a.effective_to is null
+              where t.company_id = :companyId
+                and t.period_year = :year
+                and t.period_month = :month
+                and t.status = 'DRAFT'
+                and a.project_id in (:projectIds)
+            ),
+            totals as (
+              select td.timesheet_id,
+                     coalesce(sum(td.worked_hours), 0) as worked,
+                     coalesce(sum(td.ot_hours), 0) as ot,
+                     coalesce(sum(case when tt.category = 'ABSENCE' then 1 else 0 end), 0) as absence
+              from timesheet_day td
+              join scoped s on s.id = td.timesheet_id
+              left join time_type tt on tt.id = td.time_type_id
+              group by td.timesheet_id
+            )
+            update timesheet t
+            set status = 'SUBMITTED',
+                submitted_at = :submittedAt,
+                total_worked_hours = coalesce(totals.worked, 0),
+                total_ot_hours = coalesce(totals.ot, 0),
+                total_absence_days = coalesce(totals.absence, 0),
+                updated_at = :submittedAt
+            from scoped s
+            left join totals on totals.timesheet_id = s.id
+            where t.id = s.id
+            """, nativeQuery = true)
+    int submitDraftsByProjects(@Param("companyId") UUID companyId,
+                               @Param("year") int year,
+                               @Param("month") int month,
+                               @Param("projectIds") Collection<UUID> projectIds,
+                               @Param("submittedAt") Instant submittedAt);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            update timesheet t
+            set status = 'APPROVED',
+                approved_at = :approvedAt,
+                approved_by = :approvedBy,
+                updated_at = :approvedAt
+            from assignment a
+            where a.employee_id = t.employee_id
+              and upper(coalesce(a.status, '')) = 'ACTIVE'
+              and a.primary_assignment = true
+              and a.effective_to is null
+              and t.company_id = :companyId
+              and t.period_year = :year
+              and t.period_month = :month
+              and t.status = 'SUBMITTED'
+              and (:projectId is null or a.project_id = :projectId)
+            """, nativeQuery = true)
+    int approveSubmittedByProject(@Param("companyId") UUID companyId,
+                                  @Param("year") int year,
+                                  @Param("month") int month,
+                                  @Param("projectId") UUID projectId,
+                                  @Param("approvedAt") Instant approvedAt,
+                                  @Param("approvedBy") String approvedBy);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            update timesheet t
+            set status = 'APPROVED',
+                approved_at = :approvedAt,
+                approved_by = :approvedBy,
+                updated_at = :approvedAt
+            from assignment a
+            where a.employee_id = t.employee_id
+              and upper(coalesce(a.status, '')) = 'ACTIVE'
+              and a.primary_assignment = true
+              and a.effective_to is null
+              and t.company_id = :companyId
+              and t.period_year = :year
+              and t.period_month = :month
+              and t.status = 'SUBMITTED'
+              and a.project_id in (:projectIds)
+            """, nativeQuery = true)
+    int approveSubmittedByProjects(@Param("companyId") UUID companyId,
+                                   @Param("year") int year,
+                                   @Param("month") int month,
+                                   @Param("projectIds") Collection<UUID> projectIds,
+                                   @Param("approvedAt") Instant approvedAt,
+                                   @Param("approvedBy") String approvedBy);
+
+    @Query(value = """
+            select count(t.id)
+            from timesheet t
+            join employee e on e.id = t.employee_id
+            join assignment a on a.employee_id = t.employee_id
+              and upper(coalesce(a.status, '')) = 'ACTIVE'
+              and a.primary_assignment = true
+              and a.effective_to is null
+            where t.company_id = :companyId
+              and t.period_year = :year
+              and t.period_month = :month
+              and t.status = 'APPROVED'
+              and a.project_id = :projectId
+              and (:payGroup = 'ALL' or e.pay_status = :payGroup)
+            """, nativeQuery = true)
+    int countApprovedForProjectLock(@Param("companyId") UUID companyId,
+                                    @Param("year") int year,
+                                    @Param("month") int month,
+                                    @Param("projectId") UUID projectId,
+                                    @Param("payGroup") String payGroup);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query(value = """
+            update timesheet t
+            set status = 'LOCKED',
+                updated_at = :lockedAt
+            from employee e, assignment a
+            where e.id = t.employee_id
+              and a.employee_id = t.employee_id
+              and upper(coalesce(a.status, '')) = 'ACTIVE'
+              and a.primary_assignment = true
+              and a.effective_to is null
+              and t.company_id = :companyId
+              and t.period_year = :year
+              and t.period_month = :month
+              and t.status = 'APPROVED'
+              and a.project_id = :projectId
+              and (:payGroup = 'ALL' or e.pay_status = :payGroup)
+            """, nativeQuery = true)
+    int lockApprovedForProject(@Param("companyId") UUID companyId,
+                               @Param("year") int year,
+                               @Param("month") int month,
+                               @Param("projectId") UUID projectId,
+                               @Param("payGroup") String payGroup,
+                               @Param("lockedAt") Instant lockedAt);
 
     @Query(value = """
             with period_row as (
