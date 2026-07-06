@@ -21,7 +21,7 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
             UUID companyId, int periodYear, int periodMonth);
 
     @Query(value = """
-            select distinct t from Timesheet t
+            select t from Timesheet t
             join Employee e on e.id = t.employeeId
             join Assignment a on a.employeeId = e.id
             where t.companyId = :companyId
@@ -41,7 +41,7 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
             order by e.employeeNumber
             """,
             countQuery = """
-            select count(distinct t.id) from Timesheet t
+            select count(t.id) from Timesheet t
             join Employee e on e.id = t.employeeId
             join Assignment a on a.employeeId = e.id
             where t.companyId = :companyId
@@ -67,7 +67,7 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
                                     Pageable pageable);
 
     @Query(value = """
-            select distinct t from Timesheet t
+            select t from Timesheet t
             join Employee e on e.id = t.employeeId
             join Assignment a on a.employeeId = e.id
             where t.companyId = :companyId
@@ -87,7 +87,7 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
             order by e.employeeNumber
             """,
             countQuery = """
-            select count(distinct t.id) from Timesheet t
+            select count(t.id) from Timesheet t
             join Employee e on e.id = t.employeeId
             join Assignment a on a.employeeId = e.id
             where t.companyId = :companyId
