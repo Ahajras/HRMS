@@ -11,4 +11,14 @@ public interface AssignmentRepository extends JpaRepository<Assignment, UUID> {
     List<Assignment> findByEmployeeIdOrderByEffectiveFromDesc(UUID employeeId);
 
     List<Assignment> findByOrganizationUnitId(UUID organizationUnitId);
+
+    /** All active, project-bearing assignments company-wide, most recent first —
+     * used to build an in-memory employee-to-project map in one query instead of
+     * one query per employee (that N+1 pattern is what made bulk operations
+     * crawl once the tables grew large). */
+    @org.springframework.data.jpa.repository.Query(
+        "select a from Assignment a join Employee e on e.id = a.employeeId " +
+        "where e.companyId = :companyId and a.status = 'ACTIVE' and a.projectId is not null " +
+        "order by a.effectiveFrom desc")
+    List<Assignment> findActiveWithProjectByCompanyId(@org.springframework.data.repository.query.Param("companyId") UUID companyId);
 }

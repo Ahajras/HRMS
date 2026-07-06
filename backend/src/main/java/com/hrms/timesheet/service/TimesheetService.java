@@ -248,8 +248,29 @@ public class TimesheetService {
         return defaultAllocation(employeeId)[0];
     }
 
+    /**
+     * All employee -> project mappings for the company, in ONE query, instead of
+     * one query per employee. Bulk operations (submit-all, approve-all, lock,
+     * generate-all) used to call employeeProject(employeeId) once per row while
+     * filtering — fine with a handful of real timesheets, but a severe N+1 that
+     * made these operations crawl (or hang) once thousands of rows existed for
+     * a period. Build this map ONCE per bulk call and look employees up in it.
+     */
+    private Map<UUID, UUID> employeeProjectMap(UUID companyId) {
+        Map<UUID, UUID> map = new java.util.HashMap<>();
+        for (Assignment a : assignmentRepo.findActiveWithProjectByCompanyId(companyId)) {
+            map.putIfAbsent(a.getEmployeeId(), a.getProjectId()); // query is most-recent-first
+        }
+        return map;
+    }
+
     private boolean matchesProjectScope(Timesheet t, UUID projectId, Set<UUID> allowed) {
         UUID employeeProjectId = employeeProject(t.getEmployeeId());
+        return (allowed == null || allowed.contains(employeeProjectId))
+                && (projectId == null || projectId.equals(employeeProjectId));
+    }
+
+    private boolean matchesProjectScope(UUID employeeProjectId, UUID projectId, Set<UUID> allowed) {
         return (allowed == null || allowed.contains(employeeProjectId))
                 && (projectId == null || projectId.equals(employeeProjectId));
     }
@@ -403,10 +424,11 @@ public class TimesheetService {
     private void setProjectTimesheetsLocked(UUID companyId, UUID periodId, UUID projectId, String payGroup, BulkStatusProgressListener progress) {
         PayrollPeriod period = periodRepo.findById(periodId)
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
+        Map<UUID, UUID> projectByEmployee = employeeProjectMap(companyId);
         List<Timesheet> targets = timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
                         companyId, period.getPeriodYear(), period.getPeriodMonth())
                 .stream()
-                .filter(t -> projectId.equals(employeeProject(t.getEmployeeId()))
+                .filter(t -> projectId.equals(projectByEmployee.get(t.getEmployeeId()))
                         && payGroupMatches(t.getEmployeeId(), payGroup)
                         && APPROVED.equals(t.getStatus()))
                 .toList();
@@ -416,18 +438,17 @@ public class TimesheetService {
             t.setStatus(LOCKED);
             timesheetRepo.save(t);
             done++;
-            if (done % 25 == 0 || done == targets.size()) {
-                progress.onProgress(done, targets.size());
-            }
+            progress.onProgress(done, targets.size());
         }
     }
 
     private void reopenProjectTimesheets(UUID companyId, UUID periodId, UUID projectId, String payGroup) {
         PayrollPeriod period = periodRepo.findById(periodId)
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
+        Map<UUID, UUID> projectByEmployee = employeeProjectMap(companyId);
         for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
                 companyId, period.getPeriodYear(), period.getPeriodMonth())) {
-            if (projectId.equals(employeeProject(t.getEmployeeId()))
+            if (projectId.equals(projectByEmployee.get(t.getEmployeeId()))
                     && payGroupMatches(t.getEmployeeId(), payGroup)
                     && LOCKED.equals(t.getStatus())) {
                 t.setStatus(DRAFT);
@@ -464,11 +485,12 @@ public class TimesheetService {
     /** Reasons a project/pay group can't be locked: unapproved timesheets, or rostered employees with none. */
     private List<String> projectReadiness(UUID companyId, UUID periodId, UUID projectId, String payGroup) {
         PayrollPeriod period = periodRepo.findById(periodId).orElseThrow();
+        Map<UUID, UUID> projectByEmployee = employeeProjectMap(companyId);
         List<String> blockers = new java.util.ArrayList<>();
         // existing timesheets for this project/pay group that are not approved yet
         for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
                 companyId, period.getPeriodYear(), period.getPeriodMonth())) {
-            if (projectId.equals(employeeProject(t.getEmployeeId()))
+            if (projectId.equals(projectByEmployee.get(t.getEmployeeId()))
                     && payGroupMatches(t.getEmployeeId(), payGroup)
                     && !APPROVED.equals(t.getStatus()) && !LOCKED.equals(t.getStatus())) {
                 blockers.add(empLabel(t.getEmployeeId()) + " (still " + t.getStatus() + ")");
@@ -487,7 +509,7 @@ public class TimesheetService {
             if (employee != null
                     && activeForPeriod(es.getEffectiveFrom(), es.getEffectiveTo(), period)
                     && employmentOverlapsPeriod(employee, period)
-                    && projectId.equals(employeeProject(es.getEmployeeId()))
+                    && projectId.equals(projectByEmployee.get(es.getEmployeeId()))
                     && payGroupMatches(es.getEmployeeId(), payGroup)
                     && !done.contains(es.getEmployeeId())) {
                 blockers.add(empLabel(es.getEmployeeId()) + " (no timesheet)");
@@ -770,13 +792,16 @@ public class TimesheetService {
             }
             allowed = Set.of(projectId);
         }
+        Map<UUID, UUID> projectByEmployee = employeeProjectMap(companyId);
         Set<UUID> emps = new java.util.LinkedHashSet<>();
         for (EmployeeShift es : employeeShiftRepo.findByCompanyIdOrderByEffectiveFromDesc(companyId)) {
             Employee emp = employeeRepo.findById(es.getEmployeeId()).orElse(null);
-            if (activeForPeriod(es.getEffectiveFrom(), es.getEffectiveTo(), period)
-                    && isTimesheetEligible(emp)
+            UUID empProjectId = projectByEmployee.get(es.getEmployeeId());
+            if (emp != null
+                    && empProjectId != null
+                    && activeForPeriod(es.getEffectiveFrom(), es.getEffectiveTo(), period)
                     && employmentOverlapsPeriod(emp, period)
-                    && (allowed == null || allowed.contains(employeeProject(es.getEmployeeId())))) {
+                    && (allowed == null || allowed.contains(empProjectId))) {
                 emps.add(es.getEmployeeId());
             }
         }
@@ -882,18 +907,18 @@ public class TimesheetService {
     public Map<String, Integer> submitAll(int year, int month, UUID projectId, BulkStatusProgressListener progress) {
         UUID companyId = TenantContext.requireCompanyId();
         Set<UUID> allowed = restrictedProjects();
+        Map<UUID, UUID> projectByEmployee = employeeProjectMap(companyId);
         List<Timesheet> all = timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month);
         List<Timesheet> targets = all.stream()
-                .filter(t -> DRAFT.equals(t.getStatus()) && matchesProjectScope(t, projectId, allowed))
+                .filter(t -> DRAFT.equals(t.getStatus())
+                        && matchesProjectScope(projectByEmployee.get(t.getEmployeeId()), projectId, allowed))
                 .toList();
         int submitted = 0;
         progress.onProgress(0, targets.size());
         for (Timesheet t : targets) {
             submit(t.getId());
             submitted++;
-            if (submitted % 25 == 0 || submitted == targets.size()) {
-                progress.onProgress(submitted, targets.size());
-            }
+            progress.onProgress(submitted, targets.size());
         }
         return Map.of("submitted", submitted);
     }
@@ -906,18 +931,18 @@ public class TimesheetService {
     public Map<String, Integer> approveAll(int year, int month, UUID projectId, BulkStatusProgressListener progress) {
         UUID companyId = TenantContext.requireCompanyId();
         Set<UUID> allowed = restrictedProjects();
+        Map<UUID, UUID> projectByEmployee = employeeProjectMap(companyId);
         List<Timesheet> all = timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month);
         List<Timesheet> targets = all.stream()
-                .filter(t -> SUBMITTED.equals(t.getStatus()) && matchesProjectScope(t, projectId, allowed))
+                .filter(t -> SUBMITTED.equals(t.getStatus())
+                        && matchesProjectScope(projectByEmployee.get(t.getEmployeeId()), projectId, allowed))
                 .toList();
         int approved = 0;
         progress.onProgress(0, targets.size());
         for (Timesheet t : targets) {
             approve(t.getId());
             approved++;
-            if (approved % 25 == 0 || approved == targets.size()) {
-                progress.onProgress(approved, targets.size());
-            }
+            progress.onProgress(approved, targets.size());
         }
         return Map.of("approved", approved);
     }
