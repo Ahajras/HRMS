@@ -289,7 +289,7 @@ public class PayrollRunService {
             PayableBreakdown breakdown = payableBreakdown(tsDays, rule, shiftHours, ctx.timeTypes());
             PayrollPolicyContext policy = payrollPolicyContext(ctx, ts, emp, rule, shiftHours, tsDays);
             PayrollResult result = buildResult(run, ts, emp, rule, breakdown);
-            result.setId(UUID.randomUUID());
+            result = resultRepo.save(result);
             BigDecimal earnings = BigDecimal.ZERO;
             BigDecimal deductions = BigDecimal.ZERO;
             for (ContractPayItem item : activePayItems(ctx.payItemsByEmployee().getOrDefault(emp.getId(), List.of()), period.getEndDate())) {
@@ -298,7 +298,6 @@ public class PayrollRunService {
                     continue;
                 }
                 for (PayrollResultLine line : buildLines(run.getCompanyId(), result.getId(), item, component, result, rule, breakdown, policy, shiftHours, periodDays, ctx.categoryPolicies())) {
-                    line.setId(UUID.randomUUID());
                     lines.add(line);
                     if ("DEDUCTION".equalsIgnoreCase(line.getComponentType())) {
                         deductions = deductions.add(line.getAmount());
@@ -308,13 +307,11 @@ public class PayrollRunService {
                 }
             }
             for (PayrollResultLine otLine : buildOvertimeLines(run.getCompanyId(), result.getId(), result, rule, breakdown)) {
-                otLine.setId(UUID.randomUUID());
                 lines.add(otLine);
                 earnings = earnings.add(otLine.getAmount());
             }
             PayrollResultLine unpaidDeduction = buildMonthlyUnpaidDeductionLine(run.getCompanyId(), result.getId(), earnings, rule, breakdown, policy);
             if (unpaidDeduction != null) {
-                unpaidDeduction.setId(UUID.randomUUID());
                 lines.add(unpaidDeduction);
                 deductions = deductions.add(unpaidDeduction.getAmount());
             }
