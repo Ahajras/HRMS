@@ -261,6 +261,17 @@ export interface LeaveType {
   status?: string;
 }
 
+export interface LeaveProjectSummary {
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  total: number;
+  pending: number;
+  approved: number;
+  rejected: number;
+  approvedDays: number;
+}
+
 export interface LeaveRequest {
   id?: string;
   employeeId: string;

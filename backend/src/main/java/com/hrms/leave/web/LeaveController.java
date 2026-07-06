@@ -1,10 +1,14 @@
 package com.hrms.leave.web;
 
+import com.hrms.common.web.PageResponse;
 import com.hrms.leave.dto.LeaveAdjustmentDto;
 import com.hrms.leave.dto.LeaveBalanceDto;
+import com.hrms.leave.dto.LeaveProjectSummaryDto;
 import com.hrms.leave.dto.LeaveRequestDto;
 import com.hrms.leave.dto.LeaveTypeDto;
 import com.hrms.leave.service.LeaveService;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -47,8 +51,22 @@ public class LeaveController {
     }
 
     @GetMapping("/requests")
-    public List<LeaveRequestDto> requests(@RequestParam(required = false) UUID employeeId) {
-        return service.listRequests(employeeId);
+    public PageResponse<LeaveRequestDto> requests(@RequestParam(required = false) UUID employeeId,
+                                                  @RequestParam(required = false) UUID projectId,
+                                                  @RequestParam(required = false) String status,
+                                                  @RequestParam(required = false) UUID leaveTypeId,
+                                                  @RequestParam(required = false) String q,
+                                                  @PageableDefault(size = 50) Pageable pageable) {
+        return service.searchRequests(employeeId, projectId, status, leaveTypeId, q, pageable);
+    }
+
+    @GetMapping("/requests/project-summary")
+    public List<LeaveProjectSummaryDto> projectSummary(@RequestParam(required = false) UUID projectId,
+                                                       @RequestParam(required = false) String status,
+                                                       @RequestParam(required = false) UUID leaveTypeId,
+                                                       @RequestParam(required = false) LocalDate fromDate,
+                                                       @RequestParam(required = false) LocalDate toDate) {
+        return service.projectSummary(projectId, status, leaveTypeId, fromDate, toDate);
     }
 
     @PostMapping("/requests")

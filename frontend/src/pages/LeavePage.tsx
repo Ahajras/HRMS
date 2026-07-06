@@ -1,5 +1,7 @@
 import { useState } from "react";
 import {
+  Alert,
+  Autocomplete,
   Box,
   Button,
   Checkbox,
@@ -17,8 +19,8 @@ import {
   Typography,
 } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { employeeApi, leaveApi, timeTypeApi } from "../api/resources";
-import type { LeaveRequest, LeaveType } from "../api/types";
+import { employeeApi, leaveApi, projectApi, timeTypeApi } from "../api/resources";
+import type { Employee, LeaveRequest, LeaveType } from "../api/types";
 
 const today = new Date().toISOString().slice(0, 10);
 const emptyRequest: LeaveRequest = {
@@ -33,21 +35,74 @@ const emptyRequest: LeaveRequest = {
 
 export default function LeavePage() {
   const qc = useQueryClient();
-  const { data: leaveTypes = [] } = useQuery({ queryKey: ["leaveTypes"], queryFn: leaveApi.types });
-  const { data: employees } = useQuery({ queryKey: ["employeesAll"], queryFn: () => employeeApi.list(0, 500) });
-  const { data: requests = [] } = useQuery({ queryKey: ["leaveRequests"], queryFn: () => leaveApi.requests() });
+  const [projectId, setProjectId] = useState("");
+  const [employeeSearch, setEmployeeSearch] = useState("");
+  const [requestSearch, setRequestSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [leaveTypeFilter, setLeaveTypeFilter] = useState("");
+  const [page, setPage] = useState(0);
+  const pageSize = 50;
   const [request, setRequest] = useState<LeaveRequest>(emptyRequest);
+  const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
+  const { data: leaveTypes = [] } = useQuery({ queryKey: ["leaveTypes"], queryFn: leaveApi.types });
+  const { data: employeePage } = useQuery({
+    queryKey: ["leaveEmployeeSearch", projectId, employeeSearch],
+    queryFn: () => employeeApi.list(0, 20, employeeSearch || undefined, undefined, projectId || undefined, { activeOnly: true }),
+    enabled: !!projectId && employeeSearch.trim().length >= 2,
+  });
+  const employeeOptions = employeePage?.content ?? [];
+  const selectedEmployee: Employee | null = request.employeeId
+    ? employeeOptions.find((e) => e.id === request.employeeId)
+      ?? (request.employeeNumber ? {
+        id: request.employeeId,
+        employeeNumber: request.employeeNumber,
+        firstName: request.employeeName ?? "",
+        lastName: "",
+        hireDate: "",
+      } : null)
+    : null;
+  const { data: requests } = useQuery({
+    queryKey: ["leaveRequests", projectId, statusFilter, leaveTypeFilter, requestSearch, page],
+    queryFn: () => leaveApi.requests({
+      projectId: projectId || undefined,
+      status: statusFilter || undefined,
+      leaveTypeId: leaveTypeFilter || undefined,
+      q: requestSearch || undefined,
+      page,
+      size: pageSize,
+    }),
+  });
+  const requestRows = requests?.content ?? [];
+  const { data: summaryRows = [] } = useQuery({
+    queryKey: ["leaveProjectSummary", projectId, statusFilter, leaveTypeFilter],
+    queryFn: () => leaveApi.projectSummary({
+      projectId: projectId || undefined,
+      status: statusFilter || undefined,
+      leaveTypeId: leaveTypeFilter || undefined,
+    }),
+  });
+  const summaryTotals = summaryRows.reduce((acc, row) => ({
+    total: acc.total + row.total,
+    pending: acc.pending + row.pending,
+    approved: acc.approved + row.approved,
+    rejected: acc.rejected + row.rejected,
+    approvedDays: acc.approvedDays + Number(row.approvedDays ?? 0),
+  }), { total: 0, pending: 0, approved: 0, rejected: 0, approvedDays: 0 });
 
   const saveRequest = useMutation({
     mutationFn: (payload: LeaveRequest) => leaveApi.saveRequest(payload),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["leaveRequests"] });
+      qc.invalidateQueries({ queryKey: ["leaveProjectSummary"] });
       setRequest(emptyRequest);
     },
   });
   const status = useMutation({
     mutationFn: ({ id, next }: { id: string; next: string }) => leaveApi.setRequestStatus(id, next),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["leaveRequests"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["leaveRequests"] });
+      qc.invalidateQueries({ queryKey: ["leaveProjectSummary"] });
+    },
   });
 
   return (
@@ -55,14 +110,43 @@ export default function LeavePage() {
       <Typography variant="h5" mb={2}>Leave</Typography>
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
         <Typography variant="subtitle2" gutterBottom>{request.id ? "Edit leave request" : "New leave request"}</Typography>
+        {!projectId && (
+          <Alert severity="info" sx={{ mb: 1 }}>
+            Pick a project first, then search employees inside that project.
+          </Alert>
+        )}
         <Grid container spacing={1.5}>
-          <Grid item xs={12} md={4}>
-            <TextField select fullWidth size="small" label="Employee" value={request.employeeId}
-              onChange={(e) => setRequest({ ...request, employeeId: e.target.value })}>
-              {(employees?.content ?? []).map((emp) => (
-                <MenuItem key={emp.id} value={emp.id}>{emp.employeeNumber} - {emp.firstName} {emp.lastName}</MenuItem>
-              ))}
+          <Grid item xs={12} md={3}>
+            <TextField select fullWidth size="small" label="Project" value={projectId}
+              onChange={(e) => {
+                setProjectId(e.target.value);
+                setEmployeeSearch("");
+                setRequest({ ...request, employeeId: "" });
+                setPage(0);
+              }}>
+              <MenuItem value="">All projects</MenuItem>
+              {projects.map((p) => <MenuItem key={p.id} value={p.id}>{p.code} - {p.name}</MenuItem>)}
             </TextField>
+          </Grid>
+          <Grid item xs={12} md={4}>
+            <Autocomplete
+              size="small"
+              disabled={!projectId}
+              options={employeeOptions}
+              filterOptions={(x) => x}
+              value={selectedEmployee}
+              inputValue={employeeSearch}
+              onInputChange={(_, value) => setEmployeeSearch(value)}
+              onChange={(_, emp) => setRequest({
+                ...request,
+                employeeId: emp?.id ?? "",
+                employeeNumber: emp?.employeeNumber,
+                employeeName: emp ? `${emp.firstName} ${emp.lastName}`.trim() : undefined,
+              })}
+              getOptionLabel={(emp) => `${emp.employeeNumber} - ${emp.firstName} ${emp.lastName}`.trim()}
+              isOptionEqualToValue={(a, b) => a.id === b.id}
+              renderInput={(params) => <TextField {...params} label="Employee search" placeholder="Type employee no/name" />}
+            />
           </Grid>
           <Grid item xs={12} md={3}>
             <TextField select fullWidth size="small" label="Leave type" value={request.leaveTypeId}
@@ -131,6 +215,81 @@ export default function LeavePage() {
 
       <LeaveTypesPanel rows={leaveTypes} />
 
+      <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
+        <Stack direction="row" spacing={1} flexWrap="wrap" mb={1.5}>
+          {[
+            { label: "Total", value: summaryTotals.total },
+            { label: "Pending", value: summaryTotals.pending },
+            { label: "Approved", value: summaryTotals.approved },
+            { label: "Rejected", value: summaryTotals.rejected },
+            { label: "Approved days", value: summaryTotals.approvedDays.toFixed(2) },
+          ].map((item) => (
+            <Box key={item.label} sx={{ minWidth: 120, border: "1px solid", borderColor: "divider", borderRadius: 1, px: 1.25, py: 1 }}>
+              <Typography variant="caption" color="text.secondary">{item.label}</Typography>
+              <Typography variant="h6">{item.value}</Typography>
+            </Box>
+          ))}
+        </Stack>
+        {!projectId && summaryRows.length > 0 && (
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Project</TableCell>
+                <TableCell align="right">Total</TableCell>
+                <TableCell align="right">Pending</TableCell>
+                <TableCell align="right">Approved</TableCell>
+                <TableCell align="right">Rejected</TableCell>
+                <TableCell align="right">Approved days</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {summaryRows.map((row) => (
+                <TableRow key={row.projectId} hover sx={{ cursor: "pointer" }} onClick={() => { setProjectId(row.projectId); setPage(0); }}>
+                  <TableCell>{row.projectCode} - {row.projectName}</TableCell>
+                  <TableCell align="right">{row.total}</TableCell>
+                  <TableCell align="right">{row.pending}</TableCell>
+                  <TableCell align="right">{row.approved}</TableCell>
+                  <TableCell align="right">{row.rejected}</TableCell>
+                  <TableCell align="right">{Number(row.approvedDays ?? 0).toFixed(2)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        )}
+      </Paper>
+
+      <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, mb: 2 }}>
+        <Grid container spacing={1.5}>
+          <Grid item xs={12} md={3}>
+            <TextField size="small" fullWidth label="Search requests" value={requestSearch}
+              onChange={(e) => { setRequestSearch(e.target.value); setPage(0); }} />
+          </Grid>
+          <Grid item xs={12} md={3}>
+            <TextField select size="small" fullWidth label="Status" value={statusFilter}
+              onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}>
+              <MenuItem value="">All statuses</MenuItem>
+              {["DRAFT", "SUBMITTED", "APPROVED", "REJECTED"].map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} md={3}>
+            <TextField select size="small" fullWidth label="Leave type" value={leaveTypeFilter}
+              onChange={(e) => { setLeaveTypeFilter(e.target.value); setPage(0); }}>
+              <MenuItem value="">All leave types</MenuItem>
+              {leaveTypes.map((type) => <MenuItem key={type.id} value={type.id}>{type.code} - {type.name}</MenuItem>)}
+            </TextField>
+          </Grid>
+          <Grid item xs={12} md={3}>
+            <Stack direction="row" spacing={1} justifyContent="flex-end">
+              <Button size="small" variant="outlined" disabled={!requests || requests.first} onClick={() => setPage((p) => Math.max(0, p - 1))}>Previous</Button>
+              <Button size="small" variant="outlined" disabled={!requests || requests.last} onClick={() => setPage((p) => p + 1)}>Next</Button>
+            </Stack>
+            <Typography variant="caption" color="text.secondary" display="block" textAlign="right">
+              {requests ? `${requests.totalElements} request(s) - page ${requests.totalPages === 0 ? 0 : requests.page + 1} of ${requests.totalPages}` : "Loading..."}
+            </Typography>
+          </Grid>
+        </Grid>
+      </Paper>
+
       <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "auto" }}>
         <Table size="small">
           <TableHead>
@@ -145,7 +304,7 @@ export default function LeavePage() {
             </TableRow>
           </TableHead>
           <TableBody>
-            {requests.map((row) => (
+            {requestRows.map((row) => (
               <TableRow key={row.id} hover>
                 <TableCell>{row.employeeNumber} - {row.employeeName}</TableCell>
                 <TableCell>{row.leaveTypeCode}</TableCell>

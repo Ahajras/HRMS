@@ -46,6 +46,7 @@ import type {
   CompanyProfile,
   LeaveAdjustment,
   LeaveBalance,
+  LeaveProjectSummary,
   LeaveRequest,
   LeaveType,
 } from "./types";
@@ -60,8 +61,10 @@ export const leaveApi = {
   saveType: (payload: LeaveType) => payload.id
     ? api.put<LeaveType>(`/leave/types/${payload.id}`, payload).then((r) => r.data)
     : api.post<LeaveType>("/leave/types", payload).then((r) => r.data),
-  requests: (employeeId?: string) =>
-    api.get<LeaveRequest[]>("/leave/requests", { params: employeeId ? { employeeId } : {} }).then((r) => r.data),
+  requests: (params?: { employeeId?: string; projectId?: string; status?: string; leaveTypeId?: string; q?: string; page?: number; size?: number }) =>
+    api.get<PageResponse<LeaveRequest>>("/leave/requests", { params }).then((r) => r.data),
+  projectSummary: (params?: { projectId?: string; status?: string; leaveTypeId?: string; fromDate?: string; toDate?: string }) =>
+    api.get<LeaveProjectSummary[]>("/leave/requests/project-summary", { params }).then((r) => r.data),
   saveRequest: (payload: LeaveRequest) => payload.id
     ? api.put<LeaveRequest>(`/leave/requests/${payload.id}`, payload).then((r) => r.data)
     : api.post<LeaveRequest>("/leave/requests", payload).then((r) => r.data),

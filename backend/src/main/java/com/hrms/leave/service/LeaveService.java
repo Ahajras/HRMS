@@ -3,27 +3,37 @@ package com.hrms.leave.service;
 import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
+import com.hrms.common.web.PageResponse;
+import com.hrms.employee.domain.Assignment;
 import com.hrms.employee.domain.Employee;
+import com.hrms.employee.repository.AssignmentRepository;
 import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.leave.domain.LeaveAdjustment;
 import com.hrms.leave.domain.LeaveRequest;
 import com.hrms.leave.domain.LeaveType;
 import com.hrms.leave.dto.LeaveAdjustmentDto;
 import com.hrms.leave.dto.LeaveBalanceDto;
+import com.hrms.leave.dto.LeaveProjectSummaryDto;
 import com.hrms.leave.dto.LeaveRequestDto;
 import com.hrms.leave.dto.LeaveTypeDto;
 import com.hrms.leave.repository.LeaveAdjustmentRepository;
 import com.hrms.leave.repository.LeaveRequestRepository;
 import com.hrms.leave.repository.LeaveTypeRepository;
+import com.hrms.crew.service.TimekeeperService;
 import com.hrms.rule.domain.Rule;
 import com.hrms.rule.repository.CompanyRulePackageRepository;
 import com.hrms.rule.repository.RulePackageRepository;
 import com.hrms.rule.repository.RuleRepository;
+import com.hrms.security.AuthenticatedUser;
+import com.hrms.security.domain.AppUser;
+import com.hrms.security.repository.AppUserRepository;
 import com.hrms.timesheet.domain.TimeType;
 import com.hrms.timesheet.repository.TimeTypeRepository;
 import com.hrms.timesheet.service.TimesheetService;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,6 +42,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -44,26 +55,34 @@ public class LeaveService {
     private final LeaveRequestRepository requestRepo;
     private final LeaveAdjustmentRepository adjustmentRepo;
     private final EmployeeRepository employeeRepo;
+    private final AssignmentRepository assignmentRepo;
     private final TimeTypeRepository timeTypeRepo;
     private final CompanyRulePackageRepository companyRulePackageRepo;
     private final RulePackageRepository rulePackageRepo;
     private final RuleRepository ruleRepo;
     private final TimesheetService timesheetService;
+    private final TimekeeperService timekeeperService;
+    private final AppUserRepository appUserRepo;
 
     public LeaveService(LeaveTypeRepository typeRepo, LeaveRequestRepository requestRepo,
                         LeaveAdjustmentRepository adjustmentRepo, EmployeeRepository employeeRepo,
-                        TimeTypeRepository timeTypeRepo, CompanyRulePackageRepository companyRulePackageRepo,
+                        AssignmentRepository assignmentRepo, TimeTypeRepository timeTypeRepo,
+                        CompanyRulePackageRepository companyRulePackageRepo,
                         RulePackageRepository rulePackageRepo, RuleRepository ruleRepo,
-                        TimesheetService timesheetService) {
+                        TimesheetService timesheetService, TimekeeperService timekeeperService,
+                        AppUserRepository appUserRepo) {
         this.typeRepo = typeRepo;
         this.requestRepo = requestRepo;
         this.adjustmentRepo = adjustmentRepo;
         this.employeeRepo = employeeRepo;
+        this.assignmentRepo = assignmentRepo;
         this.timeTypeRepo = timeTypeRepo;
         this.companyRulePackageRepo = companyRulePackageRepo;
         this.rulePackageRepo = rulePackageRepo;
         this.ruleRepo = ruleRepo;
         this.timesheetService = timesheetService;
+        this.timekeeperService = timekeeperService;
+        this.appUserRepo = appUserRepo;
     }
 
     @Transactional(readOnly = true)
@@ -95,9 +114,53 @@ public class LeaveService {
                 .stream().map(this::toDto).toList();
     }
 
+    @Transactional(readOnly = true)
+    public PageResponse<LeaveRequestDto> searchRequests(UUID employeeId, UUID projectId, String status,
+                                                        UUID leaveTypeId, String q, Pageable pageable) {
+        UUID companyId = TenantContext.requireCompanyId();
+        Set<UUID> allowed = restrictedProjects();
+        Page<LeaveRequest> rows;
+        if (allowed != null) {
+            if (projectId != null) {
+                rows = allowed.contains(projectId)
+                        ? requestRepo.search(companyId, employeeId, projectId, status, leaveTypeId, q, pageable)
+                        : Page.empty(pageable);
+            } else {
+                rows = requestRepo.searchByProjects(companyId, employeeId, allowed, status, leaveTypeId, q, pageable);
+            }
+        } else {
+            rows = requestRepo.search(companyId, employeeId, projectId, status, leaveTypeId, q, pageable);
+        }
+        Page<LeaveRequestDto> page = rows
+                .map(this::toDto);
+        return PageResponse.from(page);
+    }
+
+    @Transactional(readOnly = true)
+    public List<LeaveProjectSummaryDto> projectSummary(UUID projectId, String status, UUID leaveTypeId,
+                                                       LocalDate fromDate, LocalDate toDate) {
+        UUID companyId = TenantContext.requireCompanyId();
+        Set<UUID> allowed = restrictedProjects();
+        if (allowed != null) {
+            if (projectId != null && !allowed.contains(projectId)) {
+                return List.of();
+            }
+            if (projectId == null) {
+                return allowed.stream()
+                        .flatMap(id -> requestRepo.projectSummary(companyId, id, status, leaveTypeId, fromDate, toDate).stream())
+                        .map(this::toProjectSummary)
+                        .toList();
+            }
+        }
+        return requestRepo.projectSummary(companyId, projectId, status, leaveTypeId, fromDate, toDate).stream()
+                .map(this::toProjectSummary)
+                .toList();
+    }
+
     public LeaveRequestDto saveRequest(LeaveRequestDto dto) {
         UUID companyId = TenantContext.requireCompanyId();
         requireEmployee(companyId, dto.getEmployeeId());
+        assertProjectAllowed(dto.getEmployeeId());
         LeaveType type = getType(dto.getLeaveTypeId());
         LeaveRequest row = dto.getId() != null ? getRequest(dto.getId()) : new LeaveRequest();
         if (dto.getEndDate().isBefore(dto.getStartDate())) {
@@ -136,6 +199,7 @@ public class LeaveService {
 
     public LeaveRequestDto setRequestStatus(UUID id, String status) {
         LeaveRequest row = getRequest(id);
+        assertProjectAllowed(row.getEmployeeId());
         row.setStatus(status != null ? status.toUpperCase() : "DRAFT");
         if ("APPROVED".equals(row.getStatus())) {
             row.setHrApprovedAt(Instant.now());
@@ -149,6 +213,7 @@ public class LeaveService {
     @Transactional(readOnly = true)
     public List<LeaveAdjustmentDto> listAdjustments(UUID employeeId) {
         UUID companyId = TenantContext.requireCompanyId();
+        assertProjectAllowed(employeeId);
         return adjustmentRepo.findByCompanyIdAndEmployeeIdOrderByEffectiveDateDesc(companyId, employeeId)
                 .stream().map(this::toDto).toList();
     }
@@ -156,6 +221,7 @@ public class LeaveService {
     public LeaveAdjustmentDto saveAdjustment(LeaveAdjustmentDto dto) {
         UUID companyId = TenantContext.requireCompanyId();
         requireEmployee(companyId, dto.getEmployeeId());
+        assertProjectAllowed(dto.getEmployeeId());
         getType(dto.getLeaveTypeId());
         LeaveAdjustment row = dto.getId() != null
                 ? adjustmentRepo.findById(dto.getId()).orElseThrow(() -> new ResourceNotFoundException("Leave adjustment not found: " + dto.getId()))
@@ -174,6 +240,7 @@ public class LeaveService {
     public List<LeaveBalanceDto> balances(UUID employeeId, LocalDate asOf) {
         UUID companyId = TenantContext.requireCompanyId();
         Employee employee = requireEmployee(companyId, employeeId);
+        assertProjectAllowed(employeeId);
         LocalDate date = asOf != null ? asOf : LocalDate.now();
         return typeRepo.findByCompanyIdOrderByCode(companyId).stream()
                 .filter(LeaveType::isDeductsBalance)
@@ -219,6 +286,57 @@ public class LeaveService {
                         companyId, employeeId, leaveTypeId, statuses, asOf).stream()
                 .map(r -> r.getTotalDays() != null ? r.getTotalDays() : BigDecimal.ZERO)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    private LeaveProjectSummaryDto toProjectSummary(Object[] row) {
+        return new LeaveProjectSummaryDto(
+                (UUID) row[0],
+                (String) row[1],
+                (String) row[2],
+                asLong(row, 3),
+                asLong(row, 4),
+                asLong(row, 5),
+                asLong(row, 6),
+                row[7] instanceof BigDecimal bd ? bd : BigDecimal.ZERO);
+    }
+
+    private Set<UUID> restrictedProjects() {
+        UUID empId = currentEmployeeId();
+        if (empId == null) {
+            return null;
+        }
+        List<UUID> projs = timekeeperService.allowedProjectIds(empId);
+        return projs.isEmpty() ? null : new HashSet<>(projs);
+    }
+
+    private UUID currentEmployeeId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        Object principal = auth != null ? auth.getPrincipal() : null;
+        if (principal instanceof AuthenticatedUser user && user.userId() != null) {
+            return appUserRepo.findById(user.userId()).map(AppUser::getEmployeeId).orElse(null);
+        }
+        return null;
+    }
+
+    private void assertProjectAllowed(UUID employeeId) {
+        Set<UUID> allowed = restrictedProjects();
+        if (allowed != null && !allowed.contains(employeeProject(employeeId))) {
+            throw new BusinessRuleException("leave.project.scope",
+                    "You are not assigned to this employee's project.");
+        }
+    }
+
+    private UUID employeeProject(UUID employeeId) {
+        return assignmentRepo.findByEmployeeIdOrderByEffectiveFromDesc(employeeId).stream()
+                .filter(a -> a.getProjectId() != null && "ACTIVE".equalsIgnoreCase(a.getStatus()))
+                .findFirst()
+                .map(Assignment::getProjectId)
+                .orElse(null);
+    }
+
+    private static long asLong(Object[] row, int idx) {
+        if (row == null || idx >= row.length || row[idx] == null) return 0L;
+        return ((Number) row[idx]).longValue();
     }
 
     private BigDecimal proratedEntitlement(UUID companyId, LocalDate hireDate, LocalDate asOf) {
