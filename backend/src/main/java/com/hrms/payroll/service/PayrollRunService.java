@@ -333,6 +333,7 @@ public class PayrollRunService {
             }
         }
         resultRepo.saveAll(results);
+        resultRepo.flush();
         lineRepo.saveAll(lines);
         run.setStatus(CALCULATED);
         run.setCalculatedAt(Instant.now());
