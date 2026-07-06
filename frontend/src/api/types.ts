@@ -217,6 +217,10 @@ export interface BulkTimesheetJob {
   status: "RUNNING" | "COMPLETED" | "FAILED";
   created: number;
   skipped: number;
+  processed: number;
+  total: number;
+  elapsedSeconds: number;
+  durationSeconds?: number;
   message?: string;
   startedAt?: string;
   finishedAt?: string;

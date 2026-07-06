@@ -8,6 +8,10 @@ public record BulkTimesheetJobDto(
         String status,
         int created,
         int skipped,
+        int processed,
+        int total,
+        long elapsedSeconds,
+        Long durationSeconds,
         String message,
         Instant startedAt,
         Instant finishedAt

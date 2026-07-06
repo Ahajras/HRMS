@@ -41,6 +41,13 @@ function fmtDay(iso: string): string {
   return isNaN(d.getTime()) ? iso : `${iso} · ${WEEKDAY[d.getDay()]}`;
 }
 
+function fmtDuration(seconds?: number): string {
+  const s = Math.max(0, Math.floor(seconds ?? 0));
+  const m = Math.floor(s / 60);
+  const rem = s % 60;
+  return m ? `${m}m ${rem}s` : `${rem}s`;
+}
+
 function printTimesheet(
   timesheet: Timesheet,
   summary: any,
@@ -241,12 +248,12 @@ export default function TimesheetPage() {
   useEffect(() => {
     if (!bulkJob) return;
     if (bulkJob.status === "RUNNING") {
-      setBulkMsg(bulkJob.message || `Generating... created ${bulkJob.created}, skipped ${bulkJob.skipped}.`);
+      setBulkMsg(bulkJob.message || `Generating... processed ${bulkJob.processed} / ${bulkJob.total} in ${fmtDuration(bulkJob.elapsedSeconds)}.`);
       return;
     }
     if (bulkJob.status === "COMPLETED") {
       qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
-      setBulkMsg(`Generated ${bulkJob.created}, skipped ${bulkJob.skipped} (already existed).`);
+      setBulkMsg(`Generated ${bulkJob.created}, skipped ${bulkJob.skipped} in ${fmtDuration(bulkJob.durationSeconds ?? bulkJob.elapsedSeconds)}.`);
       setBulkError(null);
     } else {
       setBulkError(bulkJob.message || "Timesheet generation failed.");

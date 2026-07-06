@@ -28,6 +28,17 @@ spring:
       # Legacy import accepts the DBF snapshot (optionally zipped) via upload.
       max-file-size: ${HRMS_UPLOAD_MAX_FILE_SIZE:50MB}
       max-request-size: ${HRMS_UPLOAD_MAX_REQUEST_SIZE:100MB}
+  mail:
+    host: ${SPRING_MAIL_HOST:}
+    port: ${SPRING_MAIL_PORT:587}
+    username: ${SPRING_MAIL_USERNAME:}
+    password: ${SPRING_MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${SPRING_MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${SPRING_MAIL_SMTP_STARTTLS_ENABLE:true}
 
 server:
   port: 8080
@@ -52,6 +63,8 @@ hrms:
       # Access-token lifetime in minutes.
       expiration-minutes: ${HRMS_JWT_EXPIRATION_MINUTES:480}
       issuer: hrms
+  notifications:
+    bulk-job-email-to: ${HRMS_BULK_JOB_EMAIL_TO:}
 
 management:
   endpoints:

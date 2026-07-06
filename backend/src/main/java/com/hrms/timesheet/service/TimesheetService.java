@@ -68,7 +68,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.BiConsumer;
 
 /**
  * Monthly timesheet engine (FTDD Vol.1 Ch.3) — the source of actual worked
@@ -87,6 +86,11 @@ public class TimesheetService {
     private static final String SUBMITTED = "SUBMITTED";
     private static final String APPROVED = "APPROVED";
     private static final String LOCKED = "LOCKED";
+
+    public interface BulkProgressListener {
+        void onStart(int total);
+        void onProgress(int created, int skipped, int total);
+    }
 
     private final TimesheetRepository timesheetRepo;
     private final TimesheetDayRepository dayRepo;
@@ -679,7 +683,7 @@ public class TimesheetService {
     }
 
     @Transactional(propagation = Propagation.NOT_SUPPORTED)
-    public Map<String, Integer> generateBulk(UUID periodId, UUID projectId, BiConsumer<Integer, Integer> progress) {
+    public Map<String, Integer> generateBulk(UUID periodId, UUID projectId, BulkProgressListener progress) {
         UUID companyId = TenantContext.requireCompanyId();
         PayrollPeriod period = periodRepo.findById(periodId)
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
@@ -706,6 +710,9 @@ public class TimesheetService {
                 emps.add(es.getEmployeeId());
             }
         }
+        if (progress != null) {
+            progress.onStart(emps.size());
+        }
         int created = 0;
         int skipped = 0;
         for (UUID empId : emps) {
@@ -727,7 +734,7 @@ public class TimesheetService {
                 skipped++;
             }
             if (progress != null) {
-                progress.accept(created, skipped);
+                progress.onProgress(created, skipped, emps.size());
             }
         }
         return Map.of("created", created, "skipped", skipped);
