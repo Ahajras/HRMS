@@ -175,9 +175,9 @@ export default function TimesheetPage() {
   const [overwrite, setOverwrite] = useState(false);
 
   const { data: employees = [] } = useQuery({
-    queryKey: ["timesheetEligibleEmployees", periodId],
+    queryKey: ["timesheetEligibleEmployees", periodId, projectId],
     queryFn: () => timesheetApi.eligibleEmployees(periodId),
-    enabled: !!periodId,
+    enabled: !!periodId && !!projectId,
   });
   const { data: shifts = [] } = useQuery({ queryKey: ["shifts"], queryFn: shiftApi.list });
   const { data: timeTypes = [] } = useQuery({ queryKey: ["timeTypes"], queryFn: timeTypeApi.list });
@@ -193,7 +193,7 @@ export default function TimesheetPage() {
   const { data: list = [] } = useQuery({
     queryKey: ["timesheets", periodId, projectId],
     queryFn: () => timesheetApi.listByPeriod(period!.periodYear, period!.periodMonth, projectId || undefined),
-    enabled: !!period,
+    enabled: !!period && !!projectId,
   });
   const { data: detail } = useQuery({
     queryKey: ["timesheet", selectedId],
@@ -382,6 +382,11 @@ export default function TimesheetPage() {
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
         <Typography variant="subtitle2" gutterBottom>Generate timesheet</Typography>
+        {!projectId && (
+          <Alert severity="info" sx={{ mb: 1 }}>
+            Pick a project to load employees for single-timesheet generation. Company-wide bulk generation does not need the employee list.
+          </Alert>
+        )}
         {!periodEditable && period && (
           <Typography variant="body2" color="warning.main" mb={1}>
             This period is CLOSED and cannot be edited.
@@ -422,6 +427,11 @@ export default function TimesheetPage() {
 
       <Paper variant="outlined" sx={{ borderRadius: 2, mb: 2 }}>
         <Box sx={{ p: 1.5 }}>
+          {!projectId && (
+            <Alert severity="info" sx={{ mb: 1 }}>
+              Pick a project to view timesheets. This avoids loading very large company-wide lists.
+            </Alert>
+          )}
           <TextField size="small" fullWidth placeholder="Search employee (name or number)" value={q} onChange={(e) => setQ(e.target.value)} />
         </Box>
         <Table size="small">
