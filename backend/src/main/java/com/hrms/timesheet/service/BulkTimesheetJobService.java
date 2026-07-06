@@ -51,7 +51,11 @@ public class BulkTimesheetJobService {
         TenantContext.setCompanyId(companyId);
         SecurityContextHolder.setContext(securityContext);
         try {
-            Map<String, Integer> result = timesheetService.generateBulk(periodId, projectId);
+            Map<String, Integer> result = timesheetService.generateBulk(periodId, projectId, (created, skipped) -> {
+                state.created = created;
+                state.skipped = skipped;
+                state.message = "Generating timesheets... created " + created + ", skipped " + skipped + ".";
+            });
             state.created = result.getOrDefault("created", 0);
             state.skipped = result.getOrDefault("skipped", 0);
             state.status = "COMPLETED";

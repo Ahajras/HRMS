@@ -51,7 +51,9 @@ import com.hrms.timesheet.repository.TimesheetRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -66,6 +68,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.BiConsumer;
 
 /**
  * Monthly timesheet engine (FTDD Vol.1 Ch.3) — the source of actual worked
@@ -105,6 +108,7 @@ public class TimesheetService {
     private final CostCodeRepository costCodeRepo;
     private final LeaveRequestRepository leaveRequestRepo;
     private final LeaveTypeRepository leaveTypeRepo;
+    private final TransactionTemplate transactionTemplate;
 
     public TimesheetService(TimesheetRepository timesheetRepo, TimesheetDayRepository dayRepo,
                             ShiftRepository shiftRepo, TimeTypeRepository timeTypeRepo,
@@ -118,7 +122,8 @@ public class TimesheetService {
                             com.hrms.project.repository.ProjectRepository projectRepo,
                             CostCodeRepository costCodeRepo,
                             LeaveRequestRepository leaveRequestRepo,
-                            LeaveTypeRepository leaveTypeRepo) {
+                            LeaveTypeRepository leaveTypeRepo,
+                            TransactionTemplate transactionTemplate) {
         this.timesheetRepo = timesheetRepo;
         this.dayRepo = dayRepo;
         this.shiftRepo = shiftRepo;
@@ -139,6 +144,7 @@ public class TimesheetService {
         this.costCodeRepo = costCodeRepo;
         this.leaveRequestRepo = leaveRequestRepo;
         this.leaveTypeRepo = leaveTypeRepo;
+        this.transactionTemplate = transactionTemplate;
     }
 
     // --- queries -----------------------------------------------------
@@ -669,6 +675,11 @@ public class TimesheetService {
 
     /** Generate timesheets for every employee rostered in the period (skips existing). */
     public Map<String, Integer> generateBulk(UUID periodId, UUID projectId) {
+        return generateBulk(periodId, projectId, null);
+    }
+
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
+    public Map<String, Integer> generateBulk(UUID periodId, UUID projectId, BiConsumer<Integer, Integer> progress) {
         UUID companyId = TenantContext.requireCompanyId();
         PayrollPeriod period = periodRepo.findById(periodId)
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
@@ -698,17 +709,26 @@ public class TimesheetService {
         int created = 0;
         int skipped = 0;
         for (UUID empId : emps) {
-            boolean exists = timesheetRepo.findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(
-                    companyId, empId, period.getPeriodYear(), period.getPeriodMonth()).isPresent();
-            if (exists) {
+            Boolean didCreate = transactionTemplate.execute(status -> {
+                boolean exists = timesheetRepo.findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(
+                        companyId, empId, period.getPeriodYear(), period.getPeriodMonth()).isPresent();
+                if (exists) {
+                    return false;
+                }
+                GenerateTimesheetRequest req = new GenerateTimesheetRequest();
+                req.setEmployeeId(empId);
+                req.setPeriodId(periodId);
+                generate(req);
+                return true;
+            });
+            if (Boolean.TRUE.equals(didCreate)) {
+                created++;
+            } else {
                 skipped++;
-                continue;
             }
-            GenerateTimesheetRequest req = new GenerateTimesheetRequest();
-            req.setEmployeeId(empId);
-            req.setPeriodId(periodId);
-            generate(req);
-            created++;
+            if (progress != null) {
+                progress.accept(created, skipped);
+            }
         }
         return Map.of("created", created, "skipped", skipped);
     }

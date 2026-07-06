@@ -239,7 +239,11 @@ export default function TimesheetPage() {
     refetchInterval: (query) => query.state.data?.status === "RUNNING" ? 2000 : false,
   });
   useEffect(() => {
-    if (!bulkJob || bulkJob.status === "RUNNING") return;
+    if (!bulkJob) return;
+    if (bulkJob.status === "RUNNING") {
+      setBulkMsg(bulkJob.message || `Generating... created ${bulkJob.created}, skipped ${bulkJob.skipped}.`);
+      return;
+    }
     if (bulkJob.status === "COMPLETED") {
       qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
       setBulkMsg(`Generated ${bulkJob.created}, skipped ${bulkJob.skipped} (already existed).`);
