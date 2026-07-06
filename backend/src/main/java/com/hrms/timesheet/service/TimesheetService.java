@@ -668,7 +668,7 @@ public class TimesheetService {
     }
 
     /** Generate timesheets for every employee rostered in the period (skips existing). */
-    public Map<String, Integer> generateBulk(UUID periodId) {
+    public Map<String, Integer> generateBulk(UUID periodId, UUID projectId) {
         UUID companyId = TenantContext.requireCompanyId();
         PayrollPeriod period = periodRepo.findById(periodId)
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
@@ -677,6 +677,14 @@ public class TimesheetService {
                     "The period is CLOSED. It cannot be edited.");
         }
         Set<UUID> allowed = restrictedProjects();
+        if (projectId != null) {
+            // Explicit project filter from the screen takes precedence, but still
+            // respects the user's own project restrictions if any are configured.
+            if (allowed != null && !allowed.contains(projectId)) {
+                throw new BusinessRuleException("project.not.allowed", "You do not have access to this project.");
+            }
+            allowed = Set.of(projectId);
+        }
         Set<UUID> emps = new java.util.LinkedHashSet<>();
         for (EmployeeShift es : employeeShiftRepo.findByCompanyIdOrderByEffectiveFromDesc(companyId)) {
             Employee emp = employeeRepo.findById(es.getEmployeeId()).orElse(null);

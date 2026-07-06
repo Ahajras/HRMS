@@ -63,8 +63,9 @@ public class TimesheetController {
 
     @PostMapping("/generate-bulk")
     @ResponseStatus(HttpStatus.CREATED)
-    public Map<String, Integer> generateBulk(@RequestParam UUID periodId) {
-        return service.generateBulk(periodId);
+    public Map<String, Integer> generateBulk(@RequestParam UUID periodId,
+                                             @RequestParam(required = false) UUID projectId) {
+        return service.generateBulk(periodId, projectId);
     }
 
     @PostMapping("/generate-by-crew")

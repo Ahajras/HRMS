@@ -223,7 +223,7 @@ export default function TimesheetPage() {
   const [bulkMsg, setBulkMsg] = useState<string | null>(null);
 
   const generateAll = useMutation({
-    mutationFn: () => timesheetApi.generateBulk(periodId),
+    mutationFn: () => timesheetApi.generateBulk(periodId, projectId || undefined),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
       setBulkMsg(`Generated ${r.created}, skipped ${r.skipped} (already existed).`);
@@ -299,8 +299,14 @@ export default function TimesheetPage() {
           {period && (
             <Grid item xs={12}>
               <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
-                <Button size="small" variant="outlined" disabled={!periodEditable || generateAll.isPending} onClick={() => generateAll.mutate()}>
-                  Generate all (roster)
+                <Button size="small" variant="outlined" disabled={!periodEditable || generateAll.isPending}
+                  onClick={() => {
+                    if (!projectId && !window.confirm("No project selected — this will generate timesheets for EVERY project company-wide. Continue?")) {
+                      return;
+                    }
+                    generateAll.mutate();
+                  }}>
+                  {projectId ? `Generate all (roster) — this project only` : `Generate all (roster) — company-wide`}
                 </Button>
                 <TextField select size="small" label="Crew" value={genCrew} onChange={(e) => setGenCrew(e.target.value)} sx={{ minWidth: 180 }}>
                   <MenuItem value="">(pick a crew)</MenuItem>
