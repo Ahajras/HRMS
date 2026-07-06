@@ -43,6 +43,7 @@ import type {
   TimesheetProjectSummary,
   TimesheetSummary,
   BulkTimesheetJob,
+  BulkStatusJob,
   CompanyProfile,
   LeaveAdjustment,
   LeaveBalance,
@@ -346,6 +347,10 @@ export const periodLockApi = {
     api.get<{ projectId: string; projectLabel: string; status: string; payGroup: string }[]>("/period-locks", { params: { periodId, ...(payGroup ? { payGroup } : {}) } }).then((r) => r.data),
   lock: (periodId: string, projectId: string, payGroup?: string) =>
     api.post<{ status: string; payGroup: string }>("/period-locks/lock", null, { params: { periodId, projectId, ...(payGroup ? { payGroup } : {}) } }).then((r) => r.data),
+  startLock: (periodId: string, projectId: string, payGroup?: string) =>
+    api.post<BulkStatusJob>("/period-locks/lock-jobs", null, { params: { periodId, projectId, ...(payGroup ? { payGroup } : {}) } }).then((r) => r.data),
+  getLockJob: (id: string) =>
+    api.get<BulkStatusJob>(`/period-locks/lock-jobs/${id}`).then((r) => r.data),
   close: (periodId: string, projectId: string, payGroup?: string) =>
     api.post<{ status: string; payGroup: string }>("/period-locks/close", null, { params: { periodId, projectId, ...(payGroup ? { payGroup } : {}) } }).then((r) => r.data),
   reopen: (periodId: string, projectId: string, payGroup?: string) =>
@@ -421,8 +426,16 @@ export const timesheetApi = {
     api.post<{ created: number; skipped: number; messages?: string[] }>("/timesheets/generate-by-crew", null, { params: { crewId, periodId } }).then((r) => r.data),
   submitAll: (year: number, month: number, projectId?: string) =>
     api.post<{ submitted: number }>("/timesheets/submit-all", null, { params: { year, month, ...(projectId ? { projectId } : {}) } }).then((r) => r.data),
+  startSubmitAll: (year: number, month: number, projectId?: string) =>
+    api.post<BulkStatusJob>("/timesheets/submit-all-jobs", null, { params: { year, month, ...(projectId ? { projectId } : {}) } }).then((r) => r.data),
+  getSubmitAllJob: (id: string) =>
+    api.get<BulkStatusJob>(`/timesheets/submit-all-jobs/${id}`).then((r) => r.data),
   approveAll: (year: number, month: number, projectId?: string) =>
     api.post<{ approved: number }>("/timesheets/approve-all", null, { params: { year, month, ...(projectId ? { projectId } : {}) } }).then((r) => r.data),
+  startApproveAll: (year: number, month: number, projectId?: string) =>
+    api.post<BulkStatusJob>("/timesheets/approve-all-jobs", null, { params: { year, month, ...(projectId ? { projectId } : {}) } }).then((r) => r.data),
+  getApproveAllJob: (id: string) =>
+    api.get<BulkStatusJob>(`/timesheets/approve-all-jobs/${id}`).then((r) => r.data),
   saveDays: (id: string, days: TimesheetDay[]) =>
     api.put<Timesheet>(`/timesheets/${id}/days`, days).then((r) => r.data),
   submit: (id: string) => api.post<Timesheet>(`/timesheets/${id}/submit`).then((r) => r.data),

@@ -236,6 +236,19 @@ export interface BulkTimesheetJob {
   finishedAt?: string;
 }
 
+export interface BulkStatusJob {
+  id: string;
+  status: "RUNNING" | "COMPLETED" | "FAILED";
+  done: number;
+  total: number;
+  elapsedSeconds: number;
+  durationSeconds?: number;
+  message?: string;
+  startedAt?: string;
+  finishedAt?: string;
+  result?: Record<string, unknown>;
+}
+
 export interface TimesheetProjectSummary {
   projectId: string;
   projectCode: string;

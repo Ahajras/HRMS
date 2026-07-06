@@ -294,32 +294,85 @@ export default function TimesheetPage() {
       setBulkMsg(`Crew: generated ${r.created}, skipped ${r.skipped}.${detail}`);
     },
   });
+  const [submitJobId, setSubmitJobId] = useState<string | null>(null);
   const submitAll = useMutation({
-    mutationFn: () => timesheetApi.submitAll(period!.periodYear, period!.periodMonth, projectId || undefined),
-    onSuccess: (r) => {
+    mutationFn: () => timesheetApi.startSubmitAll(period!.periodYear, period!.periodMonth, projectId || undefined),
+    onSuccess: (r) => { setBulkError(null); setSubmitJobId(r.id); setBulkMsg("Submitting timesheets in the background..."); },
+  });
+  const { data: submitJob } = useQuery({
+    queryKey: ["timesheetSubmitJob", submitJobId],
+    queryFn: () => timesheetApi.getSubmitAllJob(submitJobId!),
+    enabled: !!submitJobId,
+    refetchInterval: (query) => query.state.data?.status === "RUNNING" ? 2000 : false,
+  });
+  useEffect(() => {
+    if (!submitJob) return;
+    if (submitJob.status === "RUNNING") { setBulkMsg(submitJob.message || `Submitting... ${submitJob.done} / ${submitJob.total}.`); return; }
+    if (submitJob.status === "COMPLETED") {
       qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
       qc.invalidateQueries({ queryKey: ["timesheetProjectSummary"] });
-      setBulkMsg(`Submitted ${r.submitted} draft timesheet(s).`);
-    },
-  });
+      setBulkMsg(`Submitted ${submitJob.done} draft timesheet(s) in ${fmtDuration(submitJob.durationSeconds ?? submitJob.elapsedSeconds)}.`);
+      setBulkError(null);
+    } else {
+      setBulkError(submitJob.message || "Submit failed.");
+    }
+    setSubmitJobId(null);
+  }, [submitJob, periodId, qc]);
+
+  const [approveJobId, setApproveJobId] = useState<string | null>(null);
   const approveAll = useMutation({
-    mutationFn: () => timesheetApi.approveAll(period!.periodYear, period!.periodMonth, projectId || undefined),
-    onSuccess: (r) => {
+    mutationFn: () => timesheetApi.startApproveAll(period!.periodYear, period!.periodMonth, projectId || undefined),
+    onSuccess: (r) => { setBulkError(null); setApproveJobId(r.id); setBulkMsg("Approving timesheets in the background..."); },
+  });
+  const { data: approveJob } = useQuery({
+    queryKey: ["timesheetApproveJob", approveJobId],
+    queryFn: () => timesheetApi.getApproveAllJob(approveJobId!),
+    enabled: !!approveJobId,
+    refetchInterval: (query) => query.state.data?.status === "RUNNING" ? 2000 : false,
+  });
+  useEffect(() => {
+    if (!approveJob) return;
+    if (approveJob.status === "RUNNING") { setBulkMsg(approveJob.message || `Approving... ${approveJob.done} / ${approveJob.total}.`); return; }
+    if (approveJob.status === "COMPLETED") {
       qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
       qc.invalidateQueries({ queryKey: ["timesheetProjectSummary"] });
-      setBulkMsg(`Approved ${r.approved} submitted timesheet(s).`);
-    },
-  });
+      setBulkMsg(`Approved ${approveJob.done} submitted timesheet(s) in ${fmtDuration(approveJob.durationSeconds ?? approveJob.elapsedSeconds)}.`);
+      setBulkError(null);
+    } else {
+      setBulkError(approveJob.message || "Approve failed.");
+    }
+    setApproveJobId(null);
+  }, [approveJob, periodId, qc]);
+
+  const [lockJobId, setLockJobId] = useState<string | null>(null);
   const lockProject = useMutation({
-    mutationFn: () => periodLockApi.lock(periodId, projectId, "ALL"),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
-      setBulkMsg("Project locked for payroll.");
-    },
+    mutationFn: () => periodLockApi.startLock(periodId, projectId, "ALL"),
+    onSuccess: (r) => { setBulkError(null); setLockJobId(r.id); setBulkMsg("Locking timesheets in the background..."); },
   });
+  const { data: lockJob } = useQuery({
+    queryKey: ["timesheetLockJob", lockJobId],
+    queryFn: () => periodLockApi.getLockJob(lockJobId!),
+    enabled: !!lockJobId,
+    refetchInterval: (query) => query.state.data?.status === "RUNNING" ? 2000 : false,
+  });
+  useEffect(() => {
+    if (!lockJob) return;
+    if (lockJob.status === "RUNNING") { setBulkMsg(lockJob.message || `Locking... ${lockJob.done} / ${lockJob.total}.`); return; }
+    if (lockJob.status === "COMPLETED") {
+      qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
+      setBulkMsg(`Project locked for payroll in ${fmtDuration(lockJob.durationSeconds ?? lockJob.elapsedSeconds)}.`);
+      setBulkError(null);
+    } else {
+      setBulkError(lockJob.message || "Lock failed.");
+    }
+    setLockJobId(null);
+  }, [lockJob, periodId, qc]);
 
   const periodEditable = period?.status !== "CLOSED";
   const isGeneratingBulk = generateAll.isPending || bulkJob?.status === "RUNNING";
+  const isSubmittingBulk = submitAll.isPending || submitJob?.status === "RUNNING";
+  const isApprovingBulk = approveAll.isPending || approveJob?.status === "RUNNING";
+  const isLockingBulk = lockProject.isPending || lockJob?.status === "RUNNING";
   const filtered = rows;
 
   return (
@@ -371,17 +424,17 @@ export default function TimesheetPage() {
                 <Button size="small" variant="outlined" disabled={!periodEditable || !genCrew || generateCrew.isPending} onClick={() => generateCrew.mutate()}>
                   Generate for crew
                 </Button>
-                <Button size="small" variant="outlined" disabled={rows.every((t) => t.status !== "DRAFT") || submitAll.isPending} onClick={() => submitAll.mutate()}>
+                <Button size="small" variant="outlined" disabled={rows.every((t) => t.status !== "DRAFT") || isSubmittingBulk} onClick={() => submitAll.mutate()}>
                   Submit all drafts
                 </Button>
-                <Button size="small" variant="outlined" color="success" disabled={rows.every((t) => t.status !== "SUBMITTED") || approveAll.isPending} onClick={() => approveAll.mutate()}>
+                <Button size="small" variant="outlined" color="success" disabled={rows.every((t) => t.status !== "SUBMITTED") || isApprovingBulk} onClick={() => approveAll.mutate()}>
                   Approve all submitted
                 </Button>
                 <Button
                   size="small"
                   variant="outlined"
                   color="warning"
-                  disabled={!projectId || !periodEditable || lockProject.isPending}
+                  disabled={!projectId || !periodEditable || isLockingBulk}
                   onClick={() => lockProject.mutate()}
                 >
                   Lock all approved
@@ -392,11 +445,6 @@ export default function TimesheetPage() {
               {generateAll.isError && (
                 <Alert severity="error" sx={{ mt: 1 }}>
                   {(generateAll.error as any)?.response?.data?.message ?? "Could not start timesheet generation."}
-                </Alert>
-              )}
-              {lockProject.isError && (
-                <Alert severity="error" sx={{ mt: 1 }}>
-                  {(lockProject.error as any)?.response?.data?.message ?? "Could not lock this project."}
                 </Alert>
               )}
             </Grid>

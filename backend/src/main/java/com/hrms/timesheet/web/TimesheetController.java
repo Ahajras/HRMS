@@ -1,12 +1,15 @@
 package com.hrms.timesheet.web;
 
+import com.hrms.common.tenant.TenantContext;
 import com.hrms.common.web.PageResponse;
 import com.hrms.timesheet.dto.GenerateTimesheetRequest;
+import com.hrms.timesheet.dto.BulkStatusJobDto;
 import com.hrms.timesheet.dto.BulkTimesheetJobDto;
 import com.hrms.timesheet.dto.TimesheetDayDto;
 import com.hrms.timesheet.dto.TimesheetDto;
 import com.hrms.timesheet.dto.TimesheetProjectSummaryDto;
 import com.hrms.timesheet.dto.TimesheetSummaryDto;
+import com.hrms.timesheet.service.BulkStatusJobService;
 import com.hrms.timesheet.service.BulkTimesheetJobService;
 import com.hrms.timesheet.service.TimesheetService;
 import jakarta.validation.Valid;
@@ -25,6 +28,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,10 +40,13 @@ public class TimesheetController {
 
     private final TimesheetService service;
     private final BulkTimesheetJobService bulkJobService;
+    private final BulkStatusJobService bulkStatusJobService;
 
-    public TimesheetController(TimesheetService service, BulkTimesheetJobService bulkJobService) {
+    public TimesheetController(TimesheetService service, BulkTimesheetJobService bulkJobService,
+                               BulkStatusJobService bulkStatusJobService) {
         this.service = service;
         this.bulkJobService = bulkJobService;
+        this.bulkStatusJobService = bulkStatusJobService;
     }
 
     @GetMapping
@@ -110,10 +117,38 @@ public class TimesheetController {
         return service.submitAll(year, month, projectId);
     }
 
+    @PostMapping("/submit-all-jobs")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public BulkStatusJobDto startSubmitAll(@RequestParam int year, @RequestParam int month,
+                                           @RequestParam(required = false) UUID projectId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        return bulkStatusJobService.start("Submitting timesheets", companyId,
+                progress -> new HashMap<>(service.submitAll(year, month, projectId, progress)));
+    }
+
+    @GetMapping("/submit-all-jobs/{id}")
+    public BulkStatusJobDto getSubmitAllJob(@PathVariable UUID id) {
+        return bulkStatusJobService.get(id);
+    }
+
     @PostMapping("/approve-all")
     public Map<String, Integer> approveAll(@RequestParam int year, @RequestParam int month,
                                            @RequestParam(required = false) UUID projectId) {
         return service.approveAll(year, month, projectId);
+    }
+
+    @PostMapping("/approve-all-jobs")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public BulkStatusJobDto startApproveAll(@RequestParam int year, @RequestParam int month,
+                                            @RequestParam(required = false) UUID projectId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        return bulkStatusJobService.start("Approving timesheets", companyId,
+                progress -> new HashMap<>(service.approveAll(year, month, projectId, progress)));
+    }
+
+    @GetMapping("/approve-all-jobs/{id}")
+    public BulkStatusJobDto getApproveAllJob(@PathVariable UUID id) {
+        return bulkStatusJobService.get(id);
     }
 
     @PutMapping("/{id}/days")

@@ -97,6 +97,11 @@ public class TimesheetService {
         void onProgress(int created, int skipped, int total);
     }
 
+    /** Generic progress reporter reused by submit-all / approve-all / lock (no created/skipped split needed). */
+    public interface BulkStatusProgressListener {
+        void onProgress(int done, int total);
+    }
+
     private final TimesheetRepository timesheetRepo;
     private final TimesheetDayRepository dayRepo;
     private final ShiftRepository shiftRepo;
@@ -349,6 +354,10 @@ public class TimesheetService {
     }
     /** Lock a project for a period after validating its timesheets are ready. */
     public Map<String, Object> lockProject(UUID periodId, UUID projectId, String payGroup) {
+        return lockProject(periodId, projectId, payGroup, (done, total) -> { });
+    }
+
+    public Map<String, Object> lockProject(UUID periodId, UUID projectId, String payGroup, BulkStatusProgressListener progress) {
         UUID companyId = TenantContext.requireCompanyId();
         String group = normalizePayGroup(payGroup);
         periodRepo.findById(periodId)
@@ -359,7 +368,7 @@ public class TimesheetService {
                     "Cannot lock — timesheets not ready: " + String.join("  •  ", blockers));
         }
         setProjectStatus(companyId, periodId, projectId, group, "LOCKED");
-        setProjectTimesheetsLocked(companyId, periodId, projectId, group);
+        setProjectTimesheetsLocked(companyId, periodId, projectId, group, progress);
         return Map.of("status", "LOCKED", "payGroup", group);
     }
 
@@ -391,16 +400,24 @@ public class TimesheetService {
         return Map.of("status", "OPEN", "payGroup", group);
     }
 
-    private void setProjectTimesheetsLocked(UUID companyId, UUID periodId, UUID projectId, String payGroup) {
+    private void setProjectTimesheetsLocked(UUID companyId, UUID periodId, UUID projectId, String payGroup, BulkStatusProgressListener progress) {
         PayrollPeriod period = periodRepo.findById(periodId)
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
-        for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
-                companyId, period.getPeriodYear(), period.getPeriodMonth())) {
-            if (projectId.equals(employeeProject(t.getEmployeeId()))
-                    && payGroupMatches(t.getEmployeeId(), payGroup)
-                    && APPROVED.equals(t.getStatus())) {
-                t.setStatus(LOCKED);
-                timesheetRepo.save(t);
+        List<Timesheet> targets = timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
+                        companyId, period.getPeriodYear(), period.getPeriodMonth())
+                .stream()
+                .filter(t -> projectId.equals(employeeProject(t.getEmployeeId()))
+                        && payGroupMatches(t.getEmployeeId(), payGroup)
+                        && APPROVED.equals(t.getStatus()))
+                .toList();
+        int done = 0;
+        progress.onProgress(0, targets.size());
+        for (Timesheet t : targets) {
+            t.setStatus(LOCKED);
+            timesheetRepo.save(t);
+            done++;
+            if (done % 25 == 0 || done == targets.size()) {
+                progress.onProgress(done, targets.size());
             }
         }
     }
@@ -859,13 +876,23 @@ public class TimesheetService {
 
     /** Submit every DRAFT timesheet in the period. */
     public Map<String, Integer> submitAll(int year, int month, UUID projectId) {
+        return submitAll(year, month, projectId, (done, total) -> { });
+    }
+
+    public Map<String, Integer> submitAll(int year, int month, UUID projectId, BulkStatusProgressListener progress) {
         UUID companyId = TenantContext.requireCompanyId();
         Set<UUID> allowed = restrictedProjects();
+        List<Timesheet> all = timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month);
+        List<Timesheet> targets = all.stream()
+                .filter(t -> DRAFT.equals(t.getStatus()) && matchesProjectScope(t, projectId, allowed))
+                .toList();
         int submitted = 0;
-        for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month)) {
-            if (DRAFT.equals(t.getStatus()) && matchesProjectScope(t, projectId, allowed)) {
-                submit(t.getId());
-                submitted++;
+        progress.onProgress(0, targets.size());
+        for (Timesheet t : targets) {
+            submit(t.getId());
+            submitted++;
+            if (submitted % 25 == 0 || submitted == targets.size()) {
+                progress.onProgress(submitted, targets.size());
             }
         }
         return Map.of("submitted", submitted);
@@ -873,13 +900,23 @@ public class TimesheetService {
 
     /** Approve every SUBMITTED timesheet in the period. */
     public Map<String, Integer> approveAll(int year, int month, UUID projectId) {
+        return approveAll(year, month, projectId, (done, total) -> { });
+    }
+
+    public Map<String, Integer> approveAll(int year, int month, UUID projectId, BulkStatusProgressListener progress) {
         UUID companyId = TenantContext.requireCompanyId();
         Set<UUID> allowed = restrictedProjects();
+        List<Timesheet> all = timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month);
+        List<Timesheet> targets = all.stream()
+                .filter(t -> SUBMITTED.equals(t.getStatus()) && matchesProjectScope(t, projectId, allowed))
+                .toList();
         int approved = 0;
-        for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month)) {
-            if (SUBMITTED.equals(t.getStatus()) && matchesProjectScope(t, projectId, allowed)) {
-                approve(t.getId());
-                approved++;
+        progress.onProgress(0, targets.size());
+        for (Timesheet t : targets) {
+            approve(t.getId());
+            approved++;
+            if (approved % 25 == 0 || approved == targets.size()) {
+                progress.onProgress(approved, targets.size());
             }
         }
         return Map.of("approved", approved);
