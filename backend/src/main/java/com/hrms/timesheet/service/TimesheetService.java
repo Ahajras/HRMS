@@ -207,6 +207,12 @@ public class TimesheetService {
         return defaultAllocation(employeeId)[0];
     }
 
+    private boolean matchesProjectScope(Timesheet t, UUID projectId, Set<UUID> allowed) {
+        UUID employeeProjectId = employeeProject(t.getEmployeeId());
+        return (allowed == null || allowed.contains(employeeProjectId))
+                && (projectId == null || projectId.equals(employeeProjectId));
+    }
+
     private void assertTimesheetEligible(Employee employee) {
         UUID[] alloc = defaultAllocation(employee.getId());
         if (alloc[0] == null) {
