@@ -466,6 +466,8 @@ export const payrollRunApi = {
   create: (periodId: string, projectId?: string, payGroup?: string) =>
     api.post<PayrollRun>("/payroll-runs", null, { params: { periodId, ...(projectId ? { projectId } : {}), ...(payGroup ? { payGroup } : {}) } }).then((r) => r.data),
   calculate: (id: string) => api.post<PayrollRun>(`/payroll-runs/${id}/calculate`).then((r) => r.data),
+  startCalculate: (id: string) => api.post<BulkStatusJob>(`/payroll-runs/${id}/calculate/start`).then((r) => r.data),
+  getCalculateJob: (id: string) => api.get<BulkStatusJob>(`/payroll-runs/calculate-jobs/${id}`).then((r) => r.data),
   approve: (id: string) => api.post<PayrollRun>(`/payroll-runs/${id}/approve`).then((r) => r.data),
   lock: (id: string) => api.post<PayrollRun>(`/payroll-runs/${id}/lock`).then((r) => r.data),
   delete: (id: string) => api.delete(`/payroll-runs/${id}`),

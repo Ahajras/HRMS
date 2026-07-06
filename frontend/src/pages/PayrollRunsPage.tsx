@@ -33,6 +33,13 @@ const money = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { minimum
 
 const qty = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 
+const fmtDuration = (seconds?: number) => {
+  const total = Math.max(0, Math.floor(Number(seconds ?? 0)));
+  const minutes = Math.floor(total / 60);
+  const rest = total % 60;
+  return minutes > 0 ? `${minutes}m ${rest}s` : `${rest}s`;
+};
+
 const periodLabel = (r: PayrollRun) => {
   if (r.periodName) return r.periodName;
   if (r.periodYear && r.periodMonth) return `${r.periodYear}/${String(r.periodMonth).padStart(2, "0")}`;
@@ -45,6 +52,10 @@ export default function PayrollRunsPage() {
   const [projectId, setProjectId] = useState("");
   const [payGroup, setPayGroup] = useState("ALL");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [calcJobId, setCalcJobId] = useState<string | null>(null);
+  const [calcRunId, setCalcRunId] = useState<string | null>(null);
+  const [calcMsg, setCalcMsg] = useState<string | null>(null);
+  const [calcError, setCalcError] = useState<string | null>(null);
 
   const { data: periods = [] } = useQuery({ queryKey: ["periods"], queryFn: () => periodApi.list() });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
@@ -72,13 +83,45 @@ export default function PayrollRunsPage() {
     },
   });
   const action = useMutation({
-    mutationFn: ({ id, fn }: { id: string; fn: "calculate" | "approve" | "lock" }) => payrollRunApi[fn](id),
+    mutationFn: ({ id, fn }: { id: string; fn: "approve" | "lock" }) => payrollRunApi[fn](id),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["payrollRuns"] });
       qc.invalidateQueries({ queryKey: ["payrollRun", r.id] });
       setSelectedId(r.id ?? null);
     },
   });
+  const calculate = useMutation({
+    mutationFn: (id: string) => payrollRunApi.startCalculate(id),
+    onSuccess: (job, id) => {
+      setCalcError(null);
+      setCalcJobId(job.id);
+      setCalcRunId(id);
+      setCalcMsg("Payroll calculation is running in the background...");
+    },
+  });
+  const { data: calcJob } = useQuery({
+    queryKey: ["payrollCalculateJob", calcJobId],
+    queryFn: () => payrollRunApi.getCalculateJob(calcJobId!),
+    enabled: !!calcJobId,
+    refetchInterval: (query) => query.state.data?.status === "RUNNING" ? 2000 : false,
+  });
+  useEffect(() => {
+    if (!calcJob) return;
+    if (calcJob.status === "RUNNING") {
+      setCalcMsg(calcJob.message || `Calculating payroll... ${calcJob.done} / ${calcJob.total} in ${fmtDuration(calcJob.elapsedSeconds)}.`);
+      return;
+    }
+    if (calcJob.status === "COMPLETED") {
+      qc.invalidateQueries({ queryKey: ["payrollRuns"] });
+      if (calcRunId) qc.invalidateQueries({ queryKey: ["payrollRun", calcRunId] });
+      const net = Number(calcJob.result?.net ?? 0);
+      setCalcMsg(`Payroll calculated for ${calcJob.done} employee(s) in ${fmtDuration(calcJob.durationSeconds ?? calcJob.elapsedSeconds)}. Net ${money(net)}.`);
+      setCalcError(null);
+    } else {
+      setCalcError(calcJob.message || "Payroll calculation failed.");
+    }
+    setCalcJobId(null);
+  }, [calcJob, calcRunId, qc]);
   const remove = useMutation({
     mutationFn: (id: string) => payrollRunApi.delete(id),
     onSuccess: () => {
@@ -118,9 +161,11 @@ export default function PayrollRunsPage() {
             </Button>
           </Grid>
         </Grid>
-        {(create.isError || action.isError || remove.isError) && (
+        {calcMsg && <Alert severity="info" sx={{ mt: 1.5 }}>{calcMsg}</Alert>}
+        {calcError && <Alert severity="error" sx={{ mt: 1.5 }}>{calcError}</Alert>}
+        {(create.isError || action.isError || remove.isError || calculate.isError) && (
           <Alert severity="error" sx={{ mt: 1.5 }}>
-            {((create.error || action.error || remove.error) as any)?.response?.data?.message ?? "Payroll action failed."}
+            {((create.error || action.error || remove.error || calculate.error) as any)?.response?.data?.message ?? "Payroll action failed."}
           </Alert>
         )}
       </Paper>
@@ -159,7 +204,7 @@ export default function PayrollRunsPage() {
                 <TableCell align="right">
                   <Button size="small" onClick={() => setSelectedId(r.id ?? null)}>Open</Button>
                   {(r.status === "DRAFT" || r.status === "CALCULATED") && r.id && (
-                    <Button size="small" onClick={() => action.mutate({ id: r.id!, fn: "calculate" })}>
+                    <Button size="small" disabled={calculate.isPending || calcJob?.status === "RUNNING"} onClick={() => calculate.mutate(r.id!)}>
                       {r.status === "CALCULATED" ? "Recalculate" : "Calculate"}
                     </Button>
                   )}
@@ -253,7 +298,7 @@ function PayrollRunDetail({ run }: { run: PayrollRun }) {
             );
           })}
           {run.results.length === 0 && (
-            <TableRow><TableCell colSpan={10}><Typography variant="body2" color="text.secondary" p={1}>No results. Calculate the run first.</Typography></TableCell></TableRow>
+            <TableRow><TableCell colSpan={10}><Typography variant="body2" color="text.secondary" p={1}>Payroll summary is loaded. Detailed payslip rows are not loaded in bulk for large runs.</Typography></TableCell></TableRow>
           )}
         </TableBody>
       </Table>

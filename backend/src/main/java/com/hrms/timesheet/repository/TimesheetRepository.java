@@ -23,6 +23,30 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
             UUID companyId, int periodYear, int periodMonth);
 
     @Query(value = """
+            select t.*
+            from timesheet t
+            join employee e on e.id = t.employee_id
+            join assignment a on a.employee_id = t.employee_id
+              and upper(coalesce(a.status, '')) = 'ACTIVE'
+              and a.primary_assignment = true
+              and a.effective_to is null
+            where t.company_id = :companyId
+              and t.period_year = :year
+              and t.period_month = :month
+              and t.status in ('APPROVED', 'LOCKED')
+              and (:projectId is null or a.project_id = :projectId)
+              and (:payGroup = 'ALL'
+                   or (:payGroup = 'DAILY' and upper(coalesce(e.pay_status, '')) like '%DAILY%')
+                   or (:payGroup = 'MONTHLY' and upper(coalesce(e.pay_status, '')) like '%MONTH%'))
+            order by e.employee_number
+            """, nativeQuery = true)
+    List<Timesheet> findPayrollScope(@Param("companyId") UUID companyId,
+                                     @Param("year") int year,
+                                     @Param("month") int month,
+                                     @Param("projectId") UUID projectId,
+                                     @Param("payGroup") String payGroup);
+
+    @Query(value = """
             select t from Timesheet t
             join Employee e on e.id = t.employeeId
             join Assignment a on a.employeeId = e.id

@@ -4,6 +4,7 @@ import com.hrms.employee.domain.ContractPayItem;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.time.LocalDate;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -13,6 +14,8 @@ public interface ContractPayItemRepository extends JpaRepository<ContractPayItem
     List<ContractPayItem> findByContractIdOrderByEffectiveFromDesc(UUID contractId);
 
     List<ContractPayItem> findByEmployeeIdOrderByEffectiveFromDesc(UUID employeeId);
+
+    List<ContractPayItem> findByEmployeeIdInOrderByEmployeeIdAscEffectiveFromDesc(Collection<UUID> employeeIds);
 
     void deleteByContractId(UUID contractId);
 

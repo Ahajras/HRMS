@@ -38,6 +38,7 @@ import com.hrms.timesheet.repository.TimeTypeRepository;
 import com.hrms.timesheet.repository.TimeTypePayrollRuleRepository;
 import com.hrms.timesheet.repository.TimesheetDayRepository;
 import com.hrms.timesheet.repository.TimesheetRepository;
+import com.hrms.timesheet.service.TimesheetService;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -47,8 +48,12 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.MonthDay;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -113,6 +118,104 @@ public class PayrollRunService {
         this.ruleRepo = ruleRepo;
     }
 
+    private PayrollCalculationContext payrollCalculationContext(PayrollRun run, PayrollPeriod period, List<Timesheet> timesheets) {
+        Set<UUID> employeeIds = new HashSet<>();
+        Set<UUID> timesheetIds = new HashSet<>();
+        Set<UUID> shiftIds = new HashSet<>();
+        for (Timesheet ts : timesheets) {
+            employeeIds.add(ts.getEmployeeId());
+            timesheetIds.add(ts.getId());
+            if (ts.getShiftId() != null) {
+                shiftIds.add(ts.getShiftId());
+            }
+        }
+
+        Map<UUID, Employee> employees = new HashMap<>();
+        if (!employeeIds.isEmpty()) {
+            employeeRepo.findAllById(employeeIds).forEach(e -> {
+                if (run.getCompanyId().equals(e.getCompanyId())) {
+                    employees.put(e.getId(), e);
+                }
+            });
+        }
+
+        Map<UUID, UUID> employeeProjects = new HashMap<>();
+        if (!employeeIds.isEmpty()) {
+            for (Assignment a : assignmentRepo.findActiveWithProjectByCompanyIdAndEmployeeIdIn(run.getCompanyId(), employeeIds)) {
+                employeeProjects.putIfAbsent(a.getEmployeeId(), a.getProjectId());
+            }
+        }
+
+        Map<UUID, List<ContractPayItem>> payItemsByEmployee = new HashMap<>();
+        if (!employeeIds.isEmpty()) {
+            for (ContractPayItem item : payItemRepo.findByEmployeeIdInOrderByEmployeeIdAscEffectiveFromDesc(employeeIds)) {
+                payItemsByEmployee.computeIfAbsent(item.getEmployeeId(), ignored -> new ArrayList<>()).add(item);
+            }
+        }
+
+        Map<UUID, List<TimesheetDay>> daysByTimesheet = new HashMap<>();
+        Set<UUID> timeTypeIds = new HashSet<>();
+        if (!timesheetIds.isEmpty()) {
+            for (TimesheetDay day : dayRepo.findByTimesheetIdInOrderByTimesheetIdAscWorkDateAsc(timesheetIds)) {
+                daysByTimesheet.computeIfAbsent(day.getTimesheetId(), ignored -> new ArrayList<>()).add(day);
+                if (day.getTimeTypeId() != null) {
+                    timeTypeIds.add(day.getTimeTypeId());
+                }
+                if (day.getShiftId() != null) {
+                    shiftIds.add(day.getShiftId());
+                }
+            }
+        }
+
+        Map<UUID, Shift> shifts = new HashMap<>();
+        if (!shiftIds.isEmpty()) {
+            shiftRepo.findAllById(shiftIds).forEach(s -> shifts.put(s.getId(), s));
+        }
+
+        Map<UUID, TimeType> timeTypes = new HashMap<>();
+        if (!timeTypeIds.isEmpty()) {
+            timeTypeRepo.findAllById(timeTypeIds).forEach(t -> timeTypes.put(t.getId(), t));
+        }
+
+        Map<UUID, Map<UUID, TimeTypePayrollRule>> rulesByTimeType = new HashMap<>();
+        Set<UUID> ruleIds = new HashSet<>();
+        if (!timeTypeIds.isEmpty()) {
+            for (TimeTypePayrollRule ruleRow : timeTypePayrollRuleRepo.findByCompanyIdAndTimeTypeIdIn(run.getCompanyId(), timeTypeIds)) {
+                rulesByTimeType.computeIfAbsent(ruleRow.getTimeTypeId(), ignored -> new HashMap<>())
+                        .put(ruleRow.getPayrollComponentId(), ruleRow);
+            }
+        }
+
+        Map<PayrollRuleKey, PayrollRule> payrollRules = new HashMap<>();
+        for (PayrollRule rule : ruleRepo.findByCompanyIdOrderByPayGroup(run.getCompanyId())) {
+            if (!"ACTIVE".equalsIgnoreCase(rule.getStatus())) {
+                continue;
+            }
+            payrollRules.put(new PayrollRuleKey(rule.getProjectId(), normalizePayGroup(rule.getPayGroup())), rule);
+            if (rule.getId() != null) {
+                ruleIds.add(rule.getId());
+            }
+        }
+
+        Map<UUID, Map<String, CategoryPolicy>> categoryPolicies = new HashMap<>();
+        if (!ruleIds.isEmpty()) {
+            for (PayrollCategoryRule row : categoryRuleRepo.findByPayrollRuleIdInAndStatus(ruleIds, "ACTIVE")) {
+                categoryPolicies.computeIfAbsent(row.getPayrollRuleId(), ignored -> new HashMap<>())
+                        .put(normalizeCategory(row.getCategory()),
+                                new CategoryPolicy(normalizeCategory(row.getCategory()), normalizeCategoryBasis(row.getBasis()),
+                                        normalizeCategoryDivisorMode(row.getDivisorMode()), row.getMonthDivisor()));
+            }
+        }
+
+        Map<UUID, PayrollComponent> components = new HashMap<>();
+        componentRepo.findByCompanyIdOrderByPriority(run.getCompanyId()).forEach(c -> components.put(c.getId(), c));
+
+        Map<AnnualUsageKey, Integer> priorAnnualCounts = priorAnnualCounts(run.getCompanyId(), period, employees, timeTypeIds, rulesByTimeType);
+
+        return new PayrollCalculationContext(employees, employeeProjects, payItemsByEmployee, daysByTimesheet,
+                shifts, timeTypes, rulesByTimeType, payrollRules, categoryPolicies, components, priorAnnualCounts);
+    }
+
     @Transactional(readOnly = true)
     public List<PayrollRunDto> list(UUID periodId) {
         UUID companyId = TenantContext.requireCompanyId();
@@ -124,7 +227,7 @@ public class PayrollRunService {
 
     @Transactional(readOnly = true)
     public PayrollRunDto get(UUID id) {
-        return toDto(getEntity(id), true);
+        return toDto(getEntity(id), false);
     }
 
     public PayrollRunDto create(UUID periodId, UUID projectId, String payGroup) {
@@ -133,7 +236,7 @@ public class PayrollRunService {
         String normalizedPayGroup = normalizePayGroup(payGroup);
         List<PayrollRun> existing = runRepo.findExistingScope(companyId, periodId, projectId, normalizedPayGroup);
         if (!existing.isEmpty()) {
-            return toDto(existing.get(0), true);
+            return toDto(existing.get(0), false);
         }
         PayrollRun run = new PayrollRun();
         run.setCompanyId(companyId);
@@ -142,10 +245,15 @@ public class PayrollRunService {
         run.setPayGroup(normalizedPayGroup);
         run.setRunType("REGULAR");
         run.setStatus(DRAFT);
-        return toDto(runRepo.save(run), true);
+        return toDto(runRepo.save(run), false);
     }
 
     public PayrollRunDto calculate(UUID id) {
+        Map<String, Object> ignored = calculate(id, null);
+        return get(id);
+    }
+
+    public Map<String, Object> calculate(UUID id, TimesheetService.BulkStatusProgressListener progress) {
         PayrollRun run = getEntity(id);
         if (!DRAFT.equals(run.getStatus()) && !CALCULATED.equals(run.getStatus())) {
             throw new BusinessRuleException("payroll.run.state", "Only a DRAFT/CALCULATED payroll run can be recalculated.");
@@ -156,35 +264,42 @@ public class PayrollRunService {
         resultRepo.deleteByRunId(run.getId());
         resultRepo.flush();
 
-        Map<UUID, PayrollComponent> components = new HashMap<>();
-        componentRepo.findByCompanyIdOrderByPriority(run.getCompanyId()).forEach(c -> components.put(c.getId(), c));
+        String payGroup = normalizePayGroup(run.getPayGroup());
+        List<Timesheet> timesheets = timesheetRepo.findPayrollScope(
+                run.getCompanyId(), period.getPeriodYear(), period.getPeriodMonth(), run.getProjectId(), payGroup);
+        if (progress != null) {
+            progress.onProgress(0, timesheets.size());
+        }
 
-        for (Timesheet ts : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
-                run.getCompanyId(), period.getPeriodYear(), period.getPeriodMonth())) {
-            if (!"APPROVED".equals(ts.getStatus()) && !"LOCKED".equals(ts.getStatus())) {
+        PayrollCalculationContext ctx = payrollCalculationContext(run, period, timesheets);
+        List<PayrollResult> results = new ArrayList<>();
+        List<PayrollResultLine> lines = new ArrayList<>();
+        int processed = 0;
+
+        for (Timesheet ts : timesheets) {
+            Employee emp = ctx.employees().get(ts.getEmployeeId());
+            if (emp == null) {
                 continue;
             }
-            Employee emp = employeeRepo.findById(ts.getEmployeeId()).orElse(null);
-            if (emp == null || !matchesScope(emp, run)) {
-                continue;
-            }
-            UUID empProject = run.getProjectId() != null ? run.getProjectId() : employeeProject(emp.getId());
-            PayrollRule rule = payrollRule(run.getCompanyId(), empProject, emp.getPayStatus());
-            BigDecimal shiftHours = shiftHours(ts, rule);
+            UUID empProject = run.getProjectId() != null ? run.getProjectId() : ctx.employeeProjects().get(emp.getId());
+            PayrollRule rule = payrollRule(ctx.rules(), run.getCompanyId(), empProject, emp.getPayStatus());
+            BigDecimal shiftHours = shiftHours(ts, rule, ctx.shifts());
             int periodDays = period.getEndDate() != null ? period.getEndDate().getDayOfMonth() : 30;
-            PayableBreakdown breakdown = payableBreakdown(ts, rule, shiftHours);
-            PayrollPolicyContext policy = payrollPolicyContext(run.getCompanyId(), ts, rule, shiftHours);
+            List<TimesheetDay> tsDays = ctx.daysByTimesheet().getOrDefault(ts.getId(), List.of());
+            PayableBreakdown breakdown = payableBreakdown(tsDays, rule, shiftHours, ctx.timeTypes());
+            PayrollPolicyContext policy = payrollPolicyContext(ctx, ts, emp, rule, shiftHours, tsDays);
             PayrollResult result = buildResult(run, ts, emp, rule, breakdown);
-            result = resultRepo.save(result);
+            result.setId(UUID.randomUUID());
             BigDecimal earnings = BigDecimal.ZERO;
             BigDecimal deductions = BigDecimal.ZERO;
-            for (ContractPayItem item : activePayItems(emp.getId(), period.getEndDate())) {
-                PayrollComponent component = components.get(item.getPayComponentId());
+            for (ContractPayItem item : activePayItems(ctx.payItemsByEmployee().getOrDefault(emp.getId(), List.of()), period.getEndDate())) {
+                PayrollComponent component = ctx.components().get(item.getPayComponentId());
                 if (component == null) {
                     continue;
                 }
-                for (PayrollResultLine line : buildLines(run.getCompanyId(), result.getId(), item, component, result, rule, breakdown, policy, shiftHours, periodDays)) {
-                    lineRepo.save(line);
+                for (PayrollResultLine line : buildLines(run.getCompanyId(), result.getId(), item, component, result, rule, breakdown, policy, shiftHours, periodDays, ctx.categoryPolicies())) {
+                    line.setId(UUID.randomUUID());
+                    lines.add(line);
                     if ("DEDUCTION".equalsIgnoreCase(line.getComponentType())) {
                         deductions = deductions.add(line.getAmount());
                     } else {
@@ -193,12 +308,14 @@ public class PayrollRunService {
                 }
             }
             for (PayrollResultLine otLine : buildOvertimeLines(run.getCompanyId(), result.getId(), result, rule, breakdown)) {
-                lineRepo.save(otLine);
+                otLine.setId(UUID.randomUUID());
+                lines.add(otLine);
                 earnings = earnings.add(otLine.getAmount());
             }
             PayrollResultLine unpaidDeduction = buildMonthlyUnpaidDeductionLine(run.getCompanyId(), result.getId(), earnings, rule, breakdown, policy);
             if (unpaidDeduction != null) {
-                lineRepo.save(unpaidDeduction);
+                unpaidDeduction.setId(UUID.randomUUID());
+                lines.add(unpaidDeduction);
                 deductions = deductions.add(unpaidDeduction.getAmount());
             }
             result.setTotalEarnings(earnings);
@@ -209,11 +326,26 @@ public class PayrollRunService {
                 result.setStatus("FLAGGED");
                 result.setMessage("No active contract pay items found.");
             }
-            resultRepo.save(result);
+            results.add(result);
+            processed++;
+            if (progress != null && (processed % 250 == 0 || processed == timesheets.size())) {
+                progress.onProgress(processed, timesheets.size());
+            }
         }
+        resultRepo.saveAll(results);
+        lineRepo.saveAll(lines);
         run.setStatus(CALCULATED);
         run.setCalculatedAt(Instant.now());
-        return toDto(runRepo.save(run), true);
+        runRepo.save(run);
+        if (progress != null) {
+            progress.onProgress(processed, timesheets.size());
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("processed", processed);
+        result.put("lines", lines.size());
+        result.put("gross", results.stream().map(PayrollResult::getGross).reduce(BigDecimal.ZERO, BigDecimal::add));
+        result.put("net", results.stream().map(PayrollResult::getNet).reduce(BigDecimal.ZERO, BigDecimal::add));
+        return result;
     }
 
     public PayrollRunDto approve(UUID id) {
@@ -224,7 +356,7 @@ public class PayrollRunService {
         run.setStatus("APPROVED");
         run.setApprovedAt(Instant.now());
         run.setApprovedBy(currentUsername());
-        return toDto(runRepo.save(run), true);
+        return toDto(runRepo.save(run), false);
     }
 
     public PayrollRunDto lock(UUID id) {
@@ -234,7 +366,7 @@ public class PayrollRunService {
         }
         run.setStatus("LOCKED");
         run.setLockedAt(Instant.now());
-        return toDto(runRepo.save(run), true);
+        return toDto(runRepo.save(run), false);
     }
 
     public void delete(UUID id) {
@@ -261,8 +393,9 @@ public class PayrollRunService {
 
     private List<PayrollResultLine> buildLines(UUID companyId, UUID resultId, ContractPayItem item, PayrollComponent component,
                                                PayrollResult result, PayrollRule rule, PayableBreakdown breakdown,
-                                               PayrollPolicyContext policy, BigDecimal shiftHours, int periodDays) {
-        CategoryPolicy categoryPolicy = categoryPolicy(rule, component);
+                                               PayrollPolicyContext policy, BigDecimal shiftHours, int periodDays,
+                                               Map<UUID, Map<String, CategoryPolicy>> categoryPolicies) {
+        CategoryPolicy categoryPolicy = categoryPolicy(rule, component, categoryPolicies);
         if ("FIXED_AMOUNT".equals(categoryPolicy.basis()) && isPayItemEarning(component) && !isDailyRule(rule)) {
             BigDecimal amount = z(item.getAmount());
             if (isSalaryComponent(component) && result.getDailyRate().compareTo(BigDecimal.ZERO) == 0) {
@@ -445,28 +578,13 @@ public class PayrollRunService {
         return line;
     }
 
-    private PayrollPolicyContext payrollPolicyContext(UUID companyId, Timesheet ts, PayrollRule rule, BigDecimal shiftHours) {
-        List<TimesheetDay> days = dayRepo.findByTimesheetIdOrderByWorkDate(ts.getId());
-        Set<UUID> timeTypeIds = new HashSet<>();
-        for (TimesheetDay day : days) {
-            if (day.getTimeTypeId() != null) {
-                timeTypeIds.add(day.getTimeTypeId());
-            }
-        }
-        Map<UUID, TimeType> types = new HashMap<>();
-        for (UUID timeTypeId : timeTypeIds) {
-            timeTypeRepo.findById(timeTypeId).ifPresent(type -> types.put(timeTypeId, type));
-        }
-        Map<UUID, Map<UUID, TimeTypePayrollRule>> rulesByTimeType = new HashMap<>();
-        if (!timeTypeIds.isEmpty()) {
-            for (TimeTypePayrollRule ruleRow : timeTypePayrollRuleRepo.findByCompanyIdAndTimeTypeIdIn(companyId, timeTypeIds)) {
-                rulesByTimeType.computeIfAbsent(ruleRow.getTimeTypeId(), ignored -> new HashMap<>())
-                        .put(ruleRow.getPayrollComponentId(), ruleRow);
-            }
-        }
+    private PayrollPolicyContext payrollPolicyContext(PayrollCalculationContext ctx, Timesheet ts, Employee emp,
+                                                      PayrollRule rule, BigDecimal shiftHours, List<TimesheetDay> days) {
+        Map<UUID, TimeType> types = ctx.timeTypes();
+        Map<UUID, Map<UUID, TimeTypePayrollRule>> rulesByTimeType = ctx.rulesByTimeType();
         Map<UUID, Integer> consecutivePos = new HashMap<>();
         Map<UUID, Integer> annualPos = new HashMap<>();
-        computeThresholdPositions(days, types, consecutivePos, annualPos);
+        computeThresholdPositions(days, types, rulesByTimeType, ctx.priorAnnualCounts(), emp, consecutivePos, annualPos);
         return new PayrollPolicyContext(days, types, rulesByTimeType, rule, shiftHours, consecutivePos, annualPos);
     }
 
@@ -474,11 +592,13 @@ public class PayrollRunService {
      * For each day, record its position in the running count of its own time type:
      *  - consecutivePos: length of the current unbroken spell (REST/HOLIDAY days
      *    bridge the spell and are not counted; any other time type breaks it).
-     *  - annualPos: cumulative count of that time type within the period.
-     * These feed the "apply effect only after N days" thresholds. (Annual counting
-     * is within the current period for now; cross-period carry-in is a follow-up.)
+     *  - annualPos: cumulative count of that time type within the configured rule year.
+     * These feed the "apply effect only after N days" thresholds.
      */
     private void computeThresholdPositions(List<TimesheetDay> days, Map<UUID, TimeType> types,
+                                           Map<UUID, Map<UUID, TimeTypePayrollRule>> rulesByTimeType,
+                                           Map<AnnualUsageKey, Integer> priorAnnualCounts,
+                                           Employee employee,
                                            Map<UUID, Integer> consecutivePos, Map<UUID, Integer> annualPos) {
         Map<UUID, Integer> spell = new HashMap<>();
         Map<UUID, Integer> annual = new HashMap<>();
@@ -489,7 +609,8 @@ public class PayrollRunService {
             }
             TimeType type = types.get(tt);
             String cat = type != null ? type.getCategory() : "REGULAR";
-            annualPos.put(d.getId(), annual.merge(tt, 1, Integer::sum));
+            int prior = priorAnnualCountForDay(priorAnnualCounts, employee, d, rulesByTimeType.get(tt));
+            annualPos.put(d.getId(), prior + annual.merge(tt, 1, Integer::sum));
             boolean bridge = "REST".equalsIgnoreCase(cat) || "HOLIDAY".equalsIgnoreCase(cat);
             if (bridge) {
                 continue; // keep all spells alive, do not count
@@ -640,6 +761,16 @@ public class PayrollRunService {
                 .orElseGet(() -> defaultRule(companyId, group));
     }
 
+    private PayrollRule payrollRule(Map<PayrollRuleKey, PayrollRule> rules, UUID companyId, UUID projectId, String payStatus) {
+        String group = normalizePayGroup(payStatus);
+        PayrollRule projectRule = projectId != null ? rules.get(new PayrollRuleKey(projectId, group)) : null;
+        if (projectRule != null) {
+            return projectRule;
+        }
+        PayrollRule defaultRule = rules.get(new PayrollRuleKey(null, group));
+        return defaultRule != null ? defaultRule : defaultRule(companyId, group);
+    }
+
     private PayrollRule defaultRule(UUID companyId, String group) {
         PayrollRule rule = new PayrollRule();
         rule.setCompanyId(companyId);
@@ -653,6 +784,11 @@ public class PayrollRunService {
     }
 
     private PayableBreakdown payableBreakdown(Timesheet ts, PayrollRule rule, BigDecimal shiftHours) {
+        return payableBreakdown(dayRepo.findByTimesheetIdOrderByWorkDate(ts.getId()), rule, shiftHours, new HashMap<>());
+    }
+
+    private PayableBreakdown payableBreakdown(List<TimesheetDay> days, PayrollRule rule, BigDecimal shiftHours,
+                                              Map<UUID, TimeType> types) {
         BigDecimal standardHours = shiftHours;
         BigDecimal regularPaidDays = BigDecimal.ZERO;
         BigDecimal restPaidDays = BigDecimal.ZERO;
@@ -663,11 +799,10 @@ public class PayrollRunService {
         BigDecimal unpaidHours = BigDecimal.ZERO;
         BigDecimal normalOtHours = BigDecimal.ZERO;
         BigDecimal restOtHours = BigDecimal.ZERO;
-        Map<UUID, TimeType> types = new HashMap<>();
         boolean daily = isDailyRule(rule);
-        for (TimesheetDay day : dayRepo.findByTimesheetIdOrderByWorkDate(ts.getId())) {
+        for (TimesheetDay day : days) {
             TimeType type = day.getTimeTypeId() == null ? null
-                    : types.computeIfAbsent(day.getTimeTypeId(), id -> timeTypeRepo.findById(id).orElse(null));
+                    : types.get(day.getTimeTypeId());
             String category = type != null ? type.getCategory() : "REGULAR";
             boolean rest = "REST".equalsIgnoreCase(category) || "HOLIDAY".equalsIgnoreCase(category);
             if (rest) {
@@ -750,21 +885,26 @@ public class PayrollRunService {
         return "SALARY".equalsIgnoreCase(category) || name.toUpperCase().contains("BASE");
     }
 
-    private CategoryPolicy categoryPolicy(PayrollRule rule, PayrollComponent component) {
+    private CategoryPolicy categoryPolicy(PayrollRule rule, PayrollComponent component,
+                                          Map<UUID, Map<String, CategoryPolicy>> categoryPolicies) {
         String category = component != null && component.getCategory() != null && !component.getCategory().isBlank()
-                ? component.getCategory().trim().toUpperCase()
+                ? normalizeCategory(component.getCategory())
                 : "OTHER";
         if (rule != null && rule.getId() != null) {
-            Optional<PayrollCategoryRule> row =
-                    categoryRuleRepo.findByPayrollRuleIdAndCategoryAndStatus(rule.getId(), category, "ACTIVE");
-            if (row.isPresent()) {
-                PayrollCategoryRule r = row.get();
-                return new CategoryPolicy(category, normalizeCategoryBasis(r.getBasis()),
-                        normalizeCategoryDivisorMode(r.getDivisorMode()), r.getMonthDivisor());
+            Map<String, CategoryPolicy> byCategory = categoryPolicies.get(rule.getId());
+            if (byCategory != null) {
+                CategoryPolicy policy = byCategory.get(category);
+                if (policy != null) {
+                    return policy;
+                }
             }
         }
         String basis = "SALARY".equals(category) ? "FULL_MONTH" : "ACTUAL_PAYABLE";
         return new CategoryPolicy(category, basis, "INHERIT", null);
+    }
+
+    private CategoryPolicy categoryPolicy(PayrollRule rule, PayrollComponent component) {
+        return categoryPolicy(rule, component, Collections.emptyMap());
     }
 
     private BigDecimal effectiveDivisor(PayrollRule rule, CategoryPolicy policy, int periodDays) {
@@ -790,6 +930,10 @@ public class PayrollRunService {
             return normalized;
         }
         return "ACTUAL_PAYABLE";
+    }
+
+    private static String normalizeCategory(String category) {
+        return category == null || category.isBlank() ? "OTHER" : category.trim().toUpperCase();
     }
 
     private static String normalizeCategoryDivisorMode(String divisorMode) {
@@ -819,8 +963,15 @@ public class PayrollRunService {
     }
 
     private BigDecimal shiftHours(Timesheet ts, PayrollRule rule) {
+        return shiftHours(ts, rule, Collections.emptyMap());
+    }
+
+    private BigDecimal shiftHours(Timesheet ts, PayrollRule rule, Map<UUID, Shift> shifts) {
         if (ts != null && ts.getShiftId() != null) {
-            Shift shift = shiftRepo.findById(ts.getShiftId()).orElse(null);
+            Shift shift = shifts.get(ts.getShiftId());
+            if (shift == null && shifts.isEmpty()) {
+                shift = shiftRepo.findById(ts.getShiftId()).orElse(null);
+            }
             if (shift != null && shift.getStandardHours() != null
                     && z(shift.getStandardHours()).compareTo(BigDecimal.ZERO) > 0) {
                 return shift.getStandardHours();
@@ -868,6 +1019,25 @@ public class PayrollRunService {
     private record CategoryPolicy(String category, String basis, String divisorMode, BigDecimal monthDivisor) {
     }
 
+    private record PayrollRuleKey(UUID projectId, String payGroup) {
+    }
+
+    private record AnnualUsageKey(UUID employeeId, UUID timeTypeId, String yearBasis) {
+    }
+
+    private record PayrollCalculationContext(Map<UUID, Employee> employees,
+                                             Map<UUID, UUID> employeeProjects,
+                                             Map<UUID, List<ContractPayItem>> payItemsByEmployee,
+                                             Map<UUID, List<TimesheetDay>> daysByTimesheet,
+                                             Map<UUID, Shift> shifts,
+                                             Map<UUID, TimeType> timeTypes,
+                                             Map<UUID, Map<UUID, TimeTypePayrollRule>> rulesByTimeType,
+                                             Map<PayrollRuleKey, PayrollRule> rules,
+                                             Map<UUID, Map<String, CategoryPolicy>> categoryPolicies,
+                                             Map<UUID, PayrollComponent> components,
+                                             Map<AnnualUsageKey, Integer> priorAnnualCounts) {
+    }
+
     private record DayEffect(BigDecimal payQuantity, BigDecimal deductQuantity, String basis) {
         static DayEffect none() {
             return new DayEffect(BigDecimal.ZERO, BigDecimal.ZERO, "HOURS");
@@ -879,11 +1049,97 @@ public class PayrollRunService {
     }
 
     private List<ContractPayItem> activePayItems(UUID employeeId, LocalDate asOf) {
-        return payItemRepo.findByEmployeeIdOrderByEffectiveFromDesc(employeeId).stream()
+        return activePayItems(payItemRepo.findByEmployeeIdOrderByEffectiveFromDesc(employeeId), asOf);
+    }
+
+    private List<ContractPayItem> activePayItems(List<ContractPayItem> items, LocalDate asOf) {
+        return items.stream()
                 .filter(i -> "ACTIVE".equalsIgnoreCase(i.getStatus()))
                 .filter(i -> i.getEffectiveFrom() == null || !i.getEffectiveFrom().isAfter(asOf))
                 .filter(i -> i.getEffectiveTo() == null || !i.getEffectiveTo().isBefore(asOf))
                 .toList();
+    }
+
+    private Map<AnnualUsageKey, Integer> priorAnnualCounts(UUID companyId, PayrollPeriod period,
+                                                           Map<UUID, Employee> employees,
+                                                           Set<UUID> timeTypeIds,
+                                                           Map<UUID, Map<UUID, TimeTypePayrollRule>> rulesByTimeType) {
+        if (employees.isEmpty() || timeTypeIds.isEmpty() || period.getStartDate() == null) {
+            return Map.of();
+        }
+        Map<UUID, LocalDate> fromByEmployee = new HashMap<>();
+        LocalDate earliest = period.getStartDate();
+        for (Employee employee : employees.values()) {
+            LocalDate from = annualWindowStart(employee, period.getStartDate(), rulesByTimeType.values().stream()
+                    .flatMap(m -> m.values().stream())
+                    .filter(r -> "ANNUAL".equalsIgnoreCase(normalizeThresholdScope(r.getThresholdScope(), r.getThresholdDays())))
+                    .findFirst().orElse(null));
+            fromByEmployee.put(employee.getId(), from);
+            if (from.isBefore(earliest)) {
+                earliest = from;
+            }
+        }
+        List<TimesheetDay> history = dayRepo.findEmployeeTimeTypeDaysBefore(companyId, employees.keySet(), timeTypeIds, earliest, period.getStartDate());
+        Map<UUID, UUID> employeeByTimesheet = new HashMap<>();
+        Set<UUID> historyTimesheetIds = new HashSet<>();
+        for (TimesheetDay day : history) {
+            historyTimesheetIds.add(day.getTimesheetId());
+        }
+        if (!historyTimesheetIds.isEmpty()) {
+            timesheetRepo.findAllById(historyTimesheetIds).forEach(ts -> employeeByTimesheet.put(ts.getId(), ts.getEmployeeId()));
+        }
+        Map<AnnualUsageKey, Integer> counts = new HashMap<>();
+        for (TimesheetDay day : history) {
+            UUID employeeId = employeeByTimesheet.get(day.getTimesheetId());
+            if (employeeId == null || day.getTimeTypeId() == null) {
+                continue;
+            }
+            Employee employee = employees.get(employeeId);
+            Map<UUID, TimeTypePayrollRule> rules = rulesByTimeType.get(day.getTimeTypeId());
+            if (employee == null || rules == null || rules.isEmpty()) {
+                continue;
+            }
+            for (TimeTypePayrollRule rule : rules.values()) {
+                if (!"ANNUAL".equalsIgnoreCase(normalizeThresholdScope(rule.getThresholdScope(), rule.getThresholdDays()))) {
+                    continue;
+                }
+                LocalDate from = annualWindowStart(employee, period.getStartDate(), rule);
+                if (!day.getWorkDate().isBefore(from)) {
+                    counts.merge(new AnnualUsageKey(employeeId, day.getTimeTypeId(), annualBasisKey(rule)), 1, Integer::sum);
+                }
+            }
+        }
+        return counts;
+    }
+
+    private int priorAnnualCountForDay(Map<AnnualUsageKey, Integer> priorAnnualCounts, Employee employee, TimesheetDay day,
+                                       Map<UUID, TimeTypePayrollRule> rules) {
+        if (employee == null || day.getTimeTypeId() == null || rules == null || rules.isEmpty()) {
+            return 0;
+        }
+        int max = 0;
+        for (TimeTypePayrollRule rule : rules.values()) {
+            if ("ANNUAL".equalsIgnoreCase(normalizeThresholdScope(rule.getThresholdScope(), rule.getThresholdDays()))) {
+                max = Math.max(max, priorAnnualCounts.getOrDefault(
+                        new AnnualUsageKey(employee.getId(), day.getTimeTypeId(), annualBasisKey(rule)), 0));
+            }
+        }
+        return max;
+    }
+
+    private static LocalDate annualWindowStart(Employee employee, LocalDate periodStart, TimeTypePayrollRule rule) {
+        if (rule != null && "HIRE_DATE".equalsIgnoreCase(rule.getYearBasis()) && employee.getHireDate() != null) {
+            MonthDay hireDay = MonthDay.from(employee.getHireDate());
+            LocalDate candidate = hireDay.isValidYear(periodStart.getYear())
+                    ? hireDay.atYear(periodStart.getYear())
+                    : LocalDate.of(periodStart.getYear(), 2, 28);
+            return candidate.isAfter(periodStart) ? candidate.minusYears(1) : candidate;
+        }
+        return LocalDate.of(periodStart.getYear(), 1, 1);
+    }
+
+    private static String annualBasisKey(TimeTypePayrollRule rule) {
+        return rule != null && "HIRE_DATE".equalsIgnoreCase(rule.getYearBasis()) ? "HIRE_DATE" : "CALENDAR";
     }
 
     private boolean matchesScope(Employee emp, PayrollRun run) {
@@ -948,14 +1204,34 @@ public class PayrollRunService {
         dto.setCurrencyCode(run.getCurrencyCode());
         dto.setCalculatedAt(run.getCalculatedAt());
         dto.setNotes(run.getNotes());
-        List<PayrollResult> results = resultRepo.findByRunIdOrderByEmployeeId(run.getId());
         if (includeResults) {
+            List<PayrollResult> results = resultRepo.findByRunIdOrderByEmployeeId(run.getId());
             dto.setResults(results.stream().map(this::toDto).toList());
+            dto.setEmployeeCount(!results.isEmpty() ? results.size() : eligibleEmployeeCount(run));
+            dto.setTotalGross(results.stream().map(PayrollResult::getGross).reduce(BigDecimal.ZERO, BigDecimal::add));
+            dto.setTotalNet(results.stream().map(PayrollResult::getNet).reduce(BigDecimal.ZERO, BigDecimal::add));
+        } else {
+            Object[] summary = resultRepo.summarizeRun(run.getId());
+            long employeeCount = summary != null && summary.length > 0 ? asLong(summary[0]) : 0;
+            dto.setEmployeeCount(employeeCount > 0 ? (int) employeeCount : eligibleEmployeeCount(run));
+            dto.setTotalGross(summary != null && summary.length > 1 ? asBigDecimal(summary[1]) : BigDecimal.ZERO);
+            dto.setTotalNet(summary != null && summary.length > 2 ? asBigDecimal(summary[2]) : BigDecimal.ZERO);
         }
-        dto.setEmployeeCount(!results.isEmpty() ? results.size() : eligibleEmployeeCount(run));
-        dto.setTotalGross(results.stream().map(PayrollResult::getGross).reduce(BigDecimal.ZERO, BigDecimal::add));
-        dto.setTotalNet(results.stream().map(PayrollResult::getNet).reduce(BigDecimal.ZERO, BigDecimal::add));
         return dto;
+    }
+
+    private static long asLong(Object value) {
+        return value instanceof Number n ? n.longValue() : 0L;
+    }
+
+    private static BigDecimal asBigDecimal(Object value) {
+        if (value instanceof BigDecimal b) {
+            return b;
+        }
+        if (value instanceof Number n) {
+            return BigDecimal.valueOf(n.doubleValue());
+        }
+        return BigDecimal.ZERO;
     }
 
     private int eligibleEmployeeCount(PayrollRun run) {
@@ -963,18 +1239,8 @@ public class PayrollRunService {
         if (period == null) {
             return 0;
         }
-        int count = 0;
-        for (Timesheet ts : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
-                run.getCompanyId(), period.getPeriodYear(), period.getPeriodMonth())) {
-            if (!"APPROVED".equals(ts.getStatus()) && !"LOCKED".equals(ts.getStatus())) {
-                continue;
-            }
-            Employee emp = employeeRepo.findById(ts.getEmployeeId()).orElse(null);
-            if (emp != null && matchesScope(emp, run)) {
-                count++;
-            }
-        }
-        return count;
+        return timesheetRepo.findPayrollScope(run.getCompanyId(), period.getPeriodYear(), period.getPeriodMonth(),
+                run.getProjectId(), normalizePayGroup(run.getPayGroup())).size();
     }
 
     private PayrollResultDto toDto(PayrollResult result) {

@@ -2,6 +2,9 @@ package com.hrms.payroll.web;
 
 import com.hrms.payroll.dto.PayrollRunDto;
 import com.hrms.payroll.service.PayrollRunService;
+import com.hrms.common.tenant.TenantContext;
+import com.hrms.timesheet.dto.BulkStatusJobDto;
+import com.hrms.timesheet.service.BulkStatusJobService;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -20,9 +23,11 @@ import java.util.UUID;
 public class PayrollRunController {
 
     private final PayrollRunService service;
+    private final BulkStatusJobService bulkStatusJobService;
 
-    public PayrollRunController(PayrollRunService service) {
+    public PayrollRunController(PayrollRunService service, BulkStatusJobService bulkStatusJobService) {
         this.service = service;
+        this.bulkStatusJobService = bulkStatusJobService;
     }
 
     @GetMapping
@@ -46,6 +51,18 @@ public class PayrollRunController {
     @PostMapping("/{id}/calculate")
     public PayrollRunDto calculate(@PathVariable UUID id) {
         return service.calculate(id);
+    }
+
+    @PostMapping("/{id}/calculate/start")
+    public BulkStatusJobDto startCalculate(@PathVariable UUID id) {
+        UUID companyId = TenantContext.requireCompanyId();
+        return bulkStatusJobService.start("Calculating payroll", companyId,
+                progress -> service.calculate(id, progress));
+    }
+
+    @GetMapping("/calculate-jobs/{jobId}")
+    public BulkStatusJobDto getCalculateJob(@PathVariable UUID jobId) {
+        return bulkStatusJobService.get(jobId);
     }
 
     @PostMapping("/{id}/approve")
