@@ -1209,7 +1209,8 @@ public class PayrollRunService {
             dto.setTotalGross(results.stream().map(PayrollResult::getGross).reduce(BigDecimal.ZERO, BigDecimal::add));
             dto.setTotalNet(results.stream().map(PayrollResult::getNet).reduce(BigDecimal.ZERO, BigDecimal::add));
         } else {
-            Object[] summary = resultRepo.summarizeRun(run.getId());
+            List<Object[]> summaries = resultRepo.summarizeRun(run.getId());
+            Object[] summary = summaries.isEmpty() ? null : summaries.get(0);
             long employeeCount = summary != null && summary.length > 0 ? asLong(summary[0]) : 0;
             dto.setEmployeeCount(employeeCount > 0 ? (int) employeeCount : eligibleEmployeeCount(run));
             dto.setTotalGross(summary != null && summary.length > 1 ? asBigDecimal(summary[1]) : BigDecimal.ZERO);

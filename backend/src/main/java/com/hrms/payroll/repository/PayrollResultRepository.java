@@ -19,5 +19,5 @@ public interface PayrollResultRepository extends JpaRepository<PayrollResult, UU
             from PayrollResult r
             where r.runId = :runId
             """)
-    Object[] summarizeRun(@Param("runId") UUID runId);
+    List<Object[]> summarizeRun(@Param("runId") UUID runId);
 }
