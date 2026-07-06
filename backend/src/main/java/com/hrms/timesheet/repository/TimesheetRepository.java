@@ -152,6 +152,66 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
                               @Param("status") String status,
                               @Param("projectIds") Collection<UUID> projectIds);
 
+    @Query(value = """
+            select count(distinct t.id)
+            from timesheet t
+            join assignment a on a.employee_id = t.employee_id
+              and upper(coalesce(a.status, '')) = 'ACTIVE'
+              and a.primary_assignment = true
+              and a.effective_to is null
+            join timesheet_day td on td.timesheet_id = t.id
+            where t.company_id = :companyId
+              and t.period_year = :year
+              and t.period_month = :month
+              and t.status = :status
+              and (:projectId is null or a.project_id = :projectId)
+              and (coalesce(td.normal_hours, 0) + coalesce(td.ot_hours, 0)) > 0
+              and (td.project_id is null or td.cost_code_id is null)
+              and not exists (
+                select 1
+                from timesheet_day_cost tdc
+                where tdc.timesheet_day_id = td.id
+                  and tdc.project_id is not null
+                  and tdc.cost_code_id is not null
+                  and coalesce(tdc.hours, 0) > 0
+              )
+            """, nativeQuery = true)
+    int countMissingCostAllocationsByProject(@Param("companyId") UUID companyId,
+                                             @Param("year") int year,
+                                             @Param("month") int month,
+                                             @Param("status") String status,
+                                             @Param("projectId") UUID projectId);
+
+    @Query(value = """
+            select count(distinct t.id)
+            from timesheet t
+            join assignment a on a.employee_id = t.employee_id
+              and upper(coalesce(a.status, '')) = 'ACTIVE'
+              and a.primary_assignment = true
+              and a.effective_to is null
+            join timesheet_day td on td.timesheet_id = t.id
+            where t.company_id = :companyId
+              and t.period_year = :year
+              and t.period_month = :month
+              and t.status = :status
+              and a.project_id in (:projectIds)
+              and (coalesce(td.normal_hours, 0) + coalesce(td.ot_hours, 0)) > 0
+              and (td.project_id is null or td.cost_code_id is null)
+              and not exists (
+                select 1
+                from timesheet_day_cost tdc
+                where tdc.timesheet_day_id = td.id
+                  and tdc.project_id is not null
+                  and tdc.cost_code_id is not null
+                  and coalesce(tdc.hours, 0) > 0
+              )
+            """, nativeQuery = true)
+    int countMissingCostAllocationsByProjects(@Param("companyId") UUID companyId,
+                                              @Param("year") int year,
+                                              @Param("month") int month,
+                                              @Param("status") String status,
+                                              @Param("projectIds") Collection<UUID> projectIds);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = """
             with scoped as (

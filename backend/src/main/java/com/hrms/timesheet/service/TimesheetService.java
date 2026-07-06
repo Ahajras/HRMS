@@ -486,6 +486,11 @@ public class TimesheetService {
                 blockers.add(empLabel(t.getEmployeeId()) + " (still " + t.getStatus() + ")");
             }
         }
+        int missingCost = timesheetRepo.countMissingCostAllocationsByProject(
+                companyId, period.getPeriodYear(), period.getPeriodMonth(), APPROVED, projectId);
+        if (missingCost > 0) {
+            blockers.add(missingCost + " approved timesheet(s) have payable hours without a project/cost code");
+        }
         // rostered employees of the project/pay group with no timesheet at all
         Set<UUID> done = new HashSet<>();
         for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
@@ -706,6 +711,10 @@ public class TimesheetService {
             }
         }
         UUID[] alloc = defaultAllocation(req.getEmployeeId());
+        if (alloc[0] == null || alloc[1] == null) {
+            throw new BusinessRuleException("timesheet.costcode.required",
+                    "Assign the employee to a project and cost code before generating a timesheet.");
+        }
         Map<LocalDate, LeaveApplication> approvedLeaves = approvedLeaves(companyId, req.getEmployeeId(),
                 ym.atDay(1), ym.atEndOfMonth());
 
@@ -957,6 +966,13 @@ public class TimesheetService {
         int total = allowed != null && projectId == null
                 ? timesheetRepo.countStatusByProjects(companyId, year, month, DRAFT, allowed)
                 : timesheetRepo.countStatusByProject(companyId, year, month, DRAFT, projectId);
+        int missingCost = allowed != null && projectId == null
+                ? timesheetRepo.countMissingCostAllocationsByProjects(companyId, year, month, DRAFT, allowed)
+                : timesheetRepo.countMissingCostAllocationsByProject(companyId, year, month, DRAFT, projectId);
+        if (missingCost > 0) {
+            throw new BusinessRuleException("timesheet.costcode.required",
+                    missingCost + " draft timesheet(s) have payable hours without a project/cost code.");
+        }
         progress.onProgress(0, total);
         int submitted = allowed != null && projectId == null
                 ? timesheetRepo.submitDraftsByProjects(companyId, year, month, allowed, Instant.now())
@@ -980,6 +996,13 @@ public class TimesheetService {
         int total = allowed != null && projectId == null
                 ? timesheetRepo.countStatusByProjects(companyId, year, month, SUBMITTED, allowed)
                 : timesheetRepo.countStatusByProject(companyId, year, month, SUBMITTED, projectId);
+        int missingCost = allowed != null && projectId == null
+                ? timesheetRepo.countMissingCostAllocationsByProjects(companyId, year, month, SUBMITTED, allowed)
+                : timesheetRepo.countMissingCostAllocationsByProject(companyId, year, month, SUBMITTED, projectId);
+        if (missingCost > 0) {
+            throw new BusinessRuleException("timesheet.costcode.required",
+                    missingCost + " submitted timesheet(s) have payable hours without a project/cost code.");
+        }
         progress.onProgress(0, total);
         Instant approvedAt = Instant.now();
         String approvedBy = currentUsername();
@@ -1243,13 +1266,13 @@ public class TimesheetService {
 
     /** A worked day needs a default allocation unless detailed cost splits replace it. */
     private void validateDayAllocation(TimesheetDay day, List<TimesheetDayCostDto> costs) {
-        BigDecimal worked = day.getWorkedHours() != null ? day.getWorkedHours() : BigDecimal.ZERO;
-        if (worked.compareTo(BigDecimal.ZERO) <= 0 || hasActiveCostRows(costs)) {
+        BigDecimal allocatable = allocatableCostHours(day);
+        if (allocatable.compareTo(BigDecimal.ZERO) <= 0 || hasActiveCostRows(costs)) {
             return;
         }
         if (day.getProjectId() == null || day.getCostCodeId() == null) {
             throw new BusinessRuleException("timesheet.allocation.required",
-                    "Day " + day.getWorkDate() + ": worked hours require a project and cost code.");
+                    "Day " + day.getWorkDate() + ": payable hours require a project and cost code.");
         }
     }
 
@@ -1275,6 +1298,26 @@ public class TimesheetService {
                     "Day " + day.getWorkDate() + ": cost-code hours (" + sum
                             + ") must equal the costed hours (" + allocatable + ").");
         }
+    }
+
+    private void validateTimesheetAllocations(Timesheet ts) {
+        for (TimesheetDay day : dayRepo.findByTimesheetIdOrderByWorkDate(ts.getId())) {
+            BigDecimal allocatable = allocatableCostHours(day);
+            if (allocatable.compareTo(BigDecimal.ZERO) <= 0 || hasPersistedCostRows(day.getId())) {
+                continue;
+            }
+            if (day.getProjectId() == null || day.getCostCodeId() == null) {
+                throw new BusinessRuleException("timesheet.allocation.required",
+                        "Day " + day.getWorkDate() + ": payable hours require a project and cost code.");
+            }
+        }
+    }
+
+    private boolean hasPersistedCostRows(UUID timesheetDayId) {
+        return dayCostRepo.findByTimesheetDayId(timesheetDayId).stream()
+                .anyMatch(c -> c.getProjectId() != null
+                        && c.getCostCodeId() != null
+                        && nz(c.getHours()).compareTo(BigDecimal.ZERO) > 0);
     }
 
     private static BigDecimal allocatableCostHours(TimesheetDay day) {
@@ -1323,6 +1366,7 @@ public class TimesheetService {
         }
         assertEditable(ts);
         recomputeTotals(ts);
+        validateTimesheetAllocations(ts);
         ts.setStatus(SUBMITTED);
         ts.setSubmittedAt(Instant.now());
         return toFullDto(timesheetRepo.save(ts));
@@ -1334,6 +1378,7 @@ public class TimesheetService {
             throw new BusinessRuleException("timesheet.approve.state", "Only a SUBMITTED timesheet can be approved.");
         }
         assertEditable(ts);
+        validateTimesheetAllocations(ts);
         ts.setStatus(APPROVED);
         ts.setApprovedAt(Instant.now());
         ts.setApprovedBy(currentUsername());
