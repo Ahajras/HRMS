@@ -916,7 +916,11 @@ public class TimesheetService {
         int submitted = 0;
         progress.onProgress(0, targets.size());
         for (Timesheet t : targets) {
-            submit(t.getId());
+            assertEditable(t);
+            recomputeTotals(t);
+            t.setStatus(SUBMITTED);
+            t.setSubmittedAt(Instant.now());
+            timesheetRepo.save(t);
             submitted++;
             progress.onProgress(submitted, targets.size());
         }
@@ -940,7 +944,11 @@ public class TimesheetService {
         int approved = 0;
         progress.onProgress(0, targets.size());
         for (Timesheet t : targets) {
-            approve(t.getId());
+            assertEditable(t);
+            t.setStatus(APPROVED);
+            t.setApprovedAt(Instant.now());
+            t.setApprovedBy(currentUsername());
+            timesheetRepo.save(t);
             approved++;
             progress.onProgress(approved, targets.size());
         }
