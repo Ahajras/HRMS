@@ -2,6 +2,7 @@ package com.hrms.employee.web;
 
 import com.hrms.common.web.PageResponse;
 import com.hrms.employee.dto.EmployeeDto;
+import com.hrms.employee.dto.EmployeeProjectSummaryDto;
 import com.hrms.employee.dto.EmployeeSummaryDto;
 import com.hrms.employee.dto.EmployeeTimeTypeUsageDto;
 import com.hrms.employee.service.EmployeeService;
@@ -54,6 +55,11 @@ public class EmployeeController {
     public EmployeeSummaryDto summary(@RequestParam(required = false) String q,
                                       @RequestParam(required = false) UUID projectId) {
         return service.summary(q, projectId);
+    }
+
+    @GetMapping("/project-summary")
+    public List<EmployeeProjectSummaryDto> projectSummary() {
+        return service.projectSummary();
     }
 
     @GetMapping("/{id}")

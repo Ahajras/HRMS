@@ -194,6 +194,16 @@ export interface EmployeeSummary {
   withoutProject: number;
 }
 
+export interface EmployeeProjectSummary {
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  total: number;
+  active: number;
+  monthly: number;
+  daily: number;
+}
+
 export interface EmployeeTimeTypeUsage {
   year: number;
   rows: EmployeeTimeTypeUsageRow[];
@@ -224,6 +234,19 @@ export interface BulkTimesheetJob {
   message?: string;
   startedAt?: string;
   finishedAt?: string;
+}
+
+export interface TimesheetProjectSummary {
+  projectId: string;
+  projectCode: string;
+  projectName: string;
+  eligible: number;
+  generated: number;
+  missing: number;
+  draft: number;
+  submitted: number;
+  approved: number;
+  locked: number;
 }
 
 export interface LeaveType {

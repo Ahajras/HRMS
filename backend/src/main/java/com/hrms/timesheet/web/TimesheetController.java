@@ -5,6 +5,7 @@ import com.hrms.timesheet.dto.GenerateTimesheetRequest;
 import com.hrms.timesheet.dto.BulkTimesheetJobDto;
 import com.hrms.timesheet.dto.TimesheetDayDto;
 import com.hrms.timesheet.dto.TimesheetDto;
+import com.hrms.timesheet.dto.TimesheetProjectSummaryDto;
 import com.hrms.timesheet.dto.TimesheetSummaryDto;
 import com.hrms.timesheet.service.BulkTimesheetJobService;
 import com.hrms.timesheet.service.TimesheetService;
@@ -58,6 +59,13 @@ public class TimesheetController {
     @GetMapping("/{id}/summary")
     public TimesheetSummaryDto summary(@PathVariable UUID id) {
         return service.summarize(id);
+    }
+
+    @GetMapping("/project-summary")
+    public List<TimesheetProjectSummaryDto> projectSummary(@RequestParam int year,
+                                                           @RequestParam int month,
+                                                           @RequestParam(required = false) UUID projectId) {
+        return service.projectSummary(year, month, projectId);
     }
 
     @GetMapping("/eligible-employees")

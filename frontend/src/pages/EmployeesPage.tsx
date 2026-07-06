@@ -1258,6 +1258,10 @@ export default function EmployeesPage() {
     queryKey: ["employees-summary", debounced, projectId],
     queryFn: () => employeeApi.summary(debounced || undefined, projectId || undefined),
   });
+  const { data: projectSummary = [] } = useQuery({
+    queryKey: ["employees-project-summary"],
+    queryFn: employeeApi.projectSummary,
+  });
   const { data: projectEmployees } = useQuery({
     queryKey: ["employees-project-validation", projectId],
     queryFn: () => employeeApi.list(0, 500, undefined, undefined, projectId || undefined, { assignedOnly: true }),
@@ -1377,6 +1381,34 @@ export default function EmployeesPage() {
           </Grid>
         ))}
       </Grid>
+
+      <Paper variant="outlined" sx={{ mb: 2 }}>
+        <Box sx={{ p: 1.5 }}>
+          <Typography variant="subtitle2">Project employee summary</Typography>
+        </Box>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Project</TableCell>
+              <TableCell align="right">Total</TableCell>
+              <TableCell align="right">Active</TableCell>
+              <TableCell align="right">Monthly</TableCell>
+              <TableCell align="right">Daily</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {projectSummary.map((row) => (
+              <TableRow key={row.projectId} hover onClick={() => { setProjectId(row.projectId); setPagination((p) => ({ ...p, page: 0 })); }} sx={{ cursor: "pointer" }}>
+                <TableCell>{row.projectCode} — {row.projectName}</TableCell>
+                <TableCell align="right">{row.total}</TableCell>
+                <TableCell align="right">{row.active}</TableCell>
+                <TableCell align="right">{row.monthly}</TableCell>
+                <TableCell align="right">{row.daily}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Paper>
 
       {projectId && employeesMissingShift.length > 0 && (
         <Alert severity="warning" sx={{ mb: 2 }}>

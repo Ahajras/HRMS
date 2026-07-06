@@ -112,6 +112,78 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
                                      @Param("q") String q,
                                      Pageable pageable);
 
+    @Query(value = """
+            with period_row as (
+              select id, start_date, end_date
+              from payroll_period
+              where company_id = :companyId
+                and period_year = :year
+                and period_month = :month
+              limit 1
+            ),
+            eligible as (
+              select p.id as project_id, p.code as project_code, p.name as project_name, count(distinct e.id) as eligible
+              from project p
+              join assignment a on a.project_id = p.id
+                and upper(coalesce(a.status, '')) = 'ACTIVE'
+                and a.primary_assignment = true
+                and a.effective_to is null
+              join employee e on e.id = a.employee_id
+                and e.company_id = :companyId
+                and upper(coalesce(e.status, '')) = 'ACTIVE'
+              join period_row pr on true
+              where p.company_id = :companyId
+                and (:projectId is null or p.id = :projectId)
+                and exists (
+                  select 1
+                  from employee_shift es
+                  where es.employee_id = e.id
+                    and es.company_id = :companyId
+                    and upper(coalesce(es.status, '')) = 'ACTIVE'
+                    and (es.effective_from is null or es.effective_from <= pr.end_date)
+                    and (es.effective_to is null or es.effective_to >= pr.start_date)
+                )
+              group by p.id, p.code, p.name
+            ),
+            generated as (
+              select p.id as project_id,
+                     count(distinct t.id) as generated,
+                     sum(case when t.status = 'DRAFT' then 1 else 0 end) as draft,
+                     sum(case when t.status = 'SUBMITTED' then 1 else 0 end) as submitted,
+                     sum(case when t.status = 'APPROVED' then 1 else 0 end) as approved,
+                     sum(case when t.status = 'LOCKED' then 1 else 0 end) as locked
+              from timesheet t
+              join employee e on e.id = t.employee_id
+              join assignment a on a.employee_id = e.id
+                and upper(coalesce(a.status, '')) = 'ACTIVE'
+                and a.primary_assignment = true
+                and a.effective_to is null
+              join project p on p.id = a.project_id
+              where t.company_id = :companyId
+                and t.period_year = :year
+                and t.period_month = :month
+                and (:projectId is null or p.id = :projectId)
+              group by p.id
+            )
+            select e.project_id,
+                   e.project_code,
+                   e.project_name,
+                   e.eligible,
+                   coalesce(g.generated, 0) as generated,
+                   greatest(e.eligible - coalesce(g.generated, 0), 0) as missing,
+                   coalesce(g.draft, 0) as draft,
+                   coalesce(g.submitted, 0) as submitted,
+                   coalesce(g.approved, 0) as approved,
+                   coalesce(g.locked, 0) as locked
+            from eligible e
+            left join generated g on g.project_id = e.project_id
+            order by e.project_code
+            """, nativeQuery = true)
+    List<Object[]> projectSummary(@Param("companyId") UUID companyId,
+                                  @Param("year") int year,
+                                  @Param("month") int month,
+                                  @Param("projectId") UUID projectId);
+
     List<Timesheet> findByCompanyIdAndEmployeeIdAndPeriodYearOrderByPeriodMonth(
             UUID companyId, UUID employeeId, int periodYear);
 

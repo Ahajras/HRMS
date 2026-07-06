@@ -6,6 +6,7 @@ import com.hrms.common.tenant.TenantContext;
 import com.hrms.common.web.PageResponse;
 import com.hrms.employee.domain.Employee;
 import com.hrms.employee.dto.EmployeeDto;
+import com.hrms.employee.dto.EmployeeProjectSummaryDto;
 import com.hrms.employee.dto.EmployeeSummaryDto;
 import com.hrms.employee.repository.EmployeeRepository;
 import org.springframework.data.domain.Page;
@@ -15,6 +16,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.util.UUID;
 import java.util.List;
+import java.util.ArrayList;
 
 /**
  * CRUD for employees (FTDD Vol.1 Ch.2). Company-scoped via {@link TenantContext}.
@@ -54,6 +56,23 @@ public class EmployeeService {
         long daily = asLong(row, 3);
         long withoutProject = asLong(row, 4);
         return new EmployeeSummaryDto(total, active, total - active, monthly, daily, withoutProject);
+    }
+
+    @Transactional(readOnly = true)
+    public List<EmployeeProjectSummaryDto> projectSummary() {
+        UUID companyId = TenantContext.requireCompanyId();
+        List<EmployeeProjectSummaryDto> out = new ArrayList<>();
+        for (Object[] row : repository.projectSummary(companyId)) {
+            out.add(new EmployeeProjectSummaryDto(
+                    (UUID) row[0],
+                    (String) row[1],
+                    (String) row[2],
+                    asLong(row, 3),
+                    asLong(row, 4),
+                    asLong(row, 5),
+                    asLong(row, 6)));
+        }
+        return out;
     }
 
     private static long asLong(Object[] row, int idx) {

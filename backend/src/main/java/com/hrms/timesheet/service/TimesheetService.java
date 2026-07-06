@@ -36,6 +36,7 @@ import com.hrms.timesheet.dto.TimekeeperDayDto;
 import com.hrms.timesheet.dto.TimekeeperMarkRequest;
 import com.hrms.timesheet.dto.TimesheetDayCostDto;
 import com.hrms.timesheet.dto.TimesheetDayDto;
+import com.hrms.timesheet.dto.TimesheetProjectSummaryDto;
 import com.hrms.timesheet.dto.TimesheetSummaryDto;
 import com.hrms.reference.repository.OvertimeCategoryRepository;
 import com.hrms.timesheet.dto.TimesheetDto;
@@ -178,6 +179,41 @@ public class TimesheetService {
     private PageResponse<TimesheetDto> emptyPage(Pageable pageable) {
         Page<TimesheetDto> page = new PageImpl<>(List.of(), pageable, 0);
         return PageResponse.from(page);
+    }
+
+    private static long asLong(Object[] row, int idx) {
+        if (row == null || idx >= row.length || row[idx] == null) {
+            return 0L;
+        }
+        return ((Number) row[idx]).longValue();
+    }
+
+    @Transactional(readOnly = true)
+    public List<TimesheetProjectSummaryDto> projectSummary(int year, int month, UUID projectId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        Set<UUID> allowed = restrictedProjects();
+        if (projectId != null && allowed != null && !allowed.contains(projectId)) {
+            return List.of();
+        }
+        List<TimesheetProjectSummaryDto> out = new ArrayList<>();
+        for (Object[] row : timesheetRepo.projectSummary(companyId, year, month, projectId)) {
+            UUID rowProjectId = (UUID) row[0];
+            if (allowed != null && !allowed.contains(rowProjectId)) {
+                continue;
+            }
+            out.add(new TimesheetProjectSummaryDto(
+                    rowProjectId,
+                    (String) row[1],
+                    (String) row[2],
+                    asLong(row, 3),
+                    asLong(row, 4),
+                    asLong(row, 5),
+                    asLong(row, 6),
+                    asLong(row, 7),
+                    asLong(row, 8),
+                    asLong(row, 9)));
+        }
+        return out;
     }
 
     // --- timekeeper project scoping ----------------------------------

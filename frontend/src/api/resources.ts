@@ -7,6 +7,7 @@ import type {
   Country,
   Currency,
   Employee,
+  EmployeeProjectSummary,
   EmployeeSummary,
   EmployeeBankAccount,
   EmployeeDocument,
@@ -39,6 +40,7 @@ import type {
   TimeType,
   Timesheet,
   TimesheetDay,
+  TimesheetProjectSummary,
   TimesheetSummary,
   BulkTimesheetJob,
   CompanyProfile,
@@ -236,6 +238,8 @@ export const employeeApi = {
         params: { ...(q ? { q } : {}), ...(projectId ? { projectId } : {}) },
       })
       .then((r) => r.data),
+  projectSummary: () =>
+    api.get<EmployeeProjectSummary[]>("/employees/project-summary").then((r) => r.data),
   get: (id: string) => api.get<Employee>(`/employees/${id}`).then((r) => r.data),
   timeTypeUsage: (id: string, year: number) =>
     api.get<import("./types").EmployeeTimeTypeUsage>(`/employees/${id}/time-type-usage`, { params: { year } }).then((r) => r.data),
@@ -396,6 +400,10 @@ export const timesheetApi = {
     }).then((r) => r.data),
   get: (id: string) => api.get<Timesheet>(`/timesheets/${id}`).then((r) => r.data),
   summary: (id: string) => api.get<TimesheetSummary>(`/timesheets/${id}/summary`).then((r) => r.data),
+  projectSummary: (year: number, month: number, projectId?: string) =>
+    api.get<TimesheetProjectSummary[]>("/timesheets/project-summary", {
+      params: { year, month, ...(projectId ? { projectId } : {}) },
+    }).then((r) => r.data),
   eligibleEmployees: (periodId: string) =>
     api.get<Employee[]>("/timesheets/eligible-employees", { params: { periodId } }).then((r) => r.data),
   generate: (d: GenerateTimesheetRequest) =>

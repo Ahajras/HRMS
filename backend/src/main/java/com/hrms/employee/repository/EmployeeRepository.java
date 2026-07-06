@@ -148,6 +148,27 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
     Object[] summaryCounts(@Param("companyId") UUID companyId, @Param("q") String q,
                            @Param("projectId") UUID projectId);
 
+    @Query(value = """
+            select
+              p.id as project_id,
+              p.code as project_code,
+              p.name as project_name,
+              count(distinct e.id) as total,
+              sum(case when upper(coalesce(e.status, '')) = 'ACTIVE' then 1 else 0 end) as active,
+              sum(case when lower(coalesce(e.pay_status, '')) like '%monthly%' then 1 else 0 end) as monthly,
+              sum(case when lower(coalesce(e.pay_status, '')) like '%daily%' then 1 else 0 end) as daily
+            from project p
+            left join assignment a on a.project_id = p.id
+              and upper(coalesce(a.status, '')) = 'ACTIVE'
+              and a.primary_assignment = true
+              and a.effective_to is null
+            left join employee e on e.id = a.employee_id and e.company_id = :companyId
+            where p.company_id = :companyId
+            group by p.id, p.code, p.name
+            order by p.code
+            """, nativeQuery = true)
+    List<Object[]> projectSummary(@Param("companyId") UUID companyId);
+
     @Modifying
     @Query("""
             update Employee e

@@ -199,6 +199,24 @@ export default function TimesheetPage() {
     enabled: !!period && !!projectId,
   });
   const rows = list?.content ?? [];
+  const { data: timesheetProjectSummary = [] } = useQuery({
+    queryKey: ["timesheetProjectSummary", period?.periodYear, period?.periodMonth, projectId],
+    queryFn: () => timesheetApi.projectSummary(period!.periodYear, period!.periodMonth, projectId || undefined),
+    enabled: !!period,
+  });
+  const selectedSummary = projectId
+    ? timesheetProjectSummary.find((r) => r.projectId === projectId)
+    : undefined;
+  const summaryTotals = timesheetProjectSummary.reduce((acc, row) => ({
+    eligible: acc.eligible + row.eligible,
+    generated: acc.generated + row.generated,
+    missing: acc.missing + row.missing,
+    draft: acc.draft + row.draft,
+    submitted: acc.submitted + row.submitted,
+    approved: acc.approved + row.approved,
+    locked: acc.locked + row.locked,
+  }), { eligible: 0, generated: 0, missing: 0, draft: 0, submitted: 0, approved: 0, locked: 0 });
+  const summaryScope = selectedSummary ?? summaryTotals;
   const { data: detail } = useQuery({
     queryKey: ["timesheet", selectedId],
     queryFn: () => timesheetApi.get(selectedId!),
@@ -210,6 +228,7 @@ export default function TimesheetPage() {
       timesheetApi.generate({ employeeId: genEmployee, periodId, shiftId: genShift || undefined, overwrite }),
     onSuccess: (ts) => {
       qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
+      qc.invalidateQueries({ queryKey: ["timesheetProjectSummary"] });
       setSelectedId(ts.id ?? null);
     },
   });
@@ -220,12 +239,14 @@ export default function TimesheetPage() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
       qc.invalidateQueries({ queryKey: ["timesheet", selectedId] });
+      qc.invalidateQueries({ queryKey: ["timesheetProjectSummary"] });
     },
   });
   const del = useMutation({
     mutationFn: (id: string) => timesheetApi.remove(id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
+      qc.invalidateQueries({ queryKey: ["timesheetProjectSummary"] });
       setSelectedId(null);
     },
   });
@@ -256,6 +277,7 @@ export default function TimesheetPage() {
     }
     if (bulkJob.status === "COMPLETED") {
       qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
+      qc.invalidateQueries({ queryKey: ["timesheetProjectSummary"] });
       setBulkMsg(`Generated ${bulkJob.created}, skipped ${bulkJob.skipped} in ${fmtDuration(bulkJob.durationSeconds ?? bulkJob.elapsedSeconds)}.`);
       setBulkError(null);
     } else {
@@ -267,6 +289,7 @@ export default function TimesheetPage() {
     mutationFn: () => timesheetApi.generateByCrew(genCrew, periodId),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
+      qc.invalidateQueries({ queryKey: ["timesheetProjectSummary"] });
       const detail = r.messages && r.messages.length ? " — " + r.messages.join("  •  ") : "";
       setBulkMsg(`Crew: generated ${r.created}, skipped ${r.skipped}.${detail}`);
     },
@@ -275,6 +298,7 @@ export default function TimesheetPage() {
     mutationFn: () => timesheetApi.submitAll(period!.periodYear, period!.periodMonth, projectId || undefined),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
+      qc.invalidateQueries({ queryKey: ["timesheetProjectSummary"] });
       setBulkMsg(`Submitted ${r.submitted} draft timesheet(s).`);
     },
   });
@@ -282,6 +306,7 @@ export default function TimesheetPage() {
     mutationFn: () => timesheetApi.approveAll(period!.periodYear, period!.periodMonth, projectId || undefined),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["timesheets", periodId] });
+      qc.invalidateQueries({ queryKey: ["timesheetProjectSummary"] });
       setBulkMsg(`Approved ${r.approved} submitted timesheet(s).`);
     },
   });
@@ -378,6 +403,55 @@ export default function TimesheetPage() {
           )}
         </Grid>
       </Paper>
+
+      {period && (
+        <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
+          <Stack direction="row" spacing={1} flexWrap="wrap">
+            {[
+              { label: "Eligible", value: summaryScope.eligible },
+              { label: "Generated", value: summaryScope.generated },
+              { label: "Missing / skipped", value: summaryScope.missing },
+              { label: "Draft", value: summaryScope.draft },
+              { label: "Submitted", value: summaryScope.submitted },
+              { label: "Approved", value: summaryScope.approved },
+              { label: "Locked", value: summaryScope.locked },
+            ].map((item) => (
+              <Box key={item.label} sx={{ minWidth: 120, border: "1px solid", borderColor: "divider", borderRadius: 1, px: 1.25, py: 1 }}>
+                <Typography variant="caption" color="text.secondary">{item.label}</Typography>
+                <Typography variant="h6">{item.value}</Typography>
+              </Box>
+            ))}
+          </Stack>
+          {!projectId && timesheetProjectSummary.length > 0 && (
+            <Table size="small" sx={{ mt: 1.5 }}>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Project</TableCell>
+                  <TableCell align="right">Eligible</TableCell>
+                  <TableCell align="right">Generated</TableCell>
+                  <TableCell align="right">Missing</TableCell>
+                  <TableCell align="right">Draft</TableCell>
+                  <TableCell align="right">Approved</TableCell>
+                  <TableCell align="right">Locked</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {timesheetProjectSummary.map((row) => (
+                  <TableRow key={row.projectId} hover onClick={() => { setProjectId(row.projectId); setPage(0); }} sx={{ cursor: "pointer" }}>
+                    <TableCell>{row.projectCode} — {row.projectName}</TableCell>
+                    <TableCell align="right">{row.eligible}</TableCell>
+                    <TableCell align="right">{row.generated}</TableCell>
+                    <TableCell align="right">{row.missing}</TableCell>
+                    <TableCell align="right">{row.draft}</TableCell>
+                    <TableCell align="right">{row.approved}</TableCell>
+                    <TableCell align="right">{row.locked}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </Paper>
+      )}
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
         <Typography variant="subtitle2" gutterBottom>Generate timesheet</Typography>
