@@ -72,12 +72,14 @@ export default function PayrollRulesPage() {
   });
 
   const shownRules = projectId ? rules.filter((r) => r.projectId === projectId) : [];
-  const cloneForProject = () => {
-    const defaults = rules.filter((r) => !r.projectId);
-    defaults.forEach((d) => {
-      const { id, ...rest } = d;
-      createRule.mutate({ ...(rest as PayrollRule), projectId });
-    });
+  const missingGroups = projectId
+    ? ["MONTHLY", "DAILY"].filter((g) => !shownRules.some((r) => r.payGroup === g))
+    : [];
+  const cloneForProject = (payGroup: string) => {
+    const base = rules.find((r) => !r.projectId && r.payGroup === payGroup);
+    if (!base) return;
+    const { id, ...rest } = base;
+    createRule.mutate({ ...(rest as PayrollRule), projectId, payGroup });
   };
 
   const save = useMutation({
@@ -117,11 +119,11 @@ export default function PayrollRulesPage() {
             <MenuItem key={p.id} value={p.id}>{p.code} - {p.name}</MenuItem>
           ))}
         </TextField>
-        {projectId && shownRules.length === 0 && (
-          <Button variant="contained" disabled={createRule.isPending} onClick={cloneForProject}>
-            Create payroll structure for this project
+        {projectId && missingGroups.map((g) => (
+          <Button key={g} variant="contained" disabled={createRule.isPending} onClick={() => cloneForProject(g)}>
+            Add {g === "DAILY" ? "Daily" : "Monthly"} structure for this project
           </Button>
-        )}
+        ))}
       </Stack>
 
       {!projectId ? (
