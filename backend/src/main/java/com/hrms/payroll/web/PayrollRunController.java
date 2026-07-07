@@ -1,6 +1,8 @@
 package com.hrms.payroll.web;
 
+import com.hrms.payroll.dto.PayrollCostReportDto;
 import com.hrms.payroll.dto.PayrollRunDto;
+import com.hrms.payroll.service.PayrollCostReportService;
 import com.hrms.payroll.service.PayrollRunService;
 import com.hrms.common.tenant.TenantContext;
 import com.hrms.timesheet.dto.BulkStatusJobDto;
@@ -24,10 +26,18 @@ public class PayrollRunController {
 
     private final PayrollRunService service;
     private final BulkStatusJobService bulkStatusJobService;
+    private final PayrollCostReportService costReportService;
 
-    public PayrollRunController(PayrollRunService service, BulkStatusJobService bulkStatusJobService) {
+    public PayrollRunController(PayrollRunService service, BulkStatusJobService bulkStatusJobService,
+                                PayrollCostReportService costReportService) {
         this.service = service;
         this.bulkStatusJobService = bulkStatusJobService;
+        this.costReportService = costReportService;
+    }
+
+    @GetMapping("/{id}/cost-report")
+    public PayrollCostReportDto costReport(@PathVariable UUID id) {
+        return costReportService.build(id);
     }
 
     @GetMapping

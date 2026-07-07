@@ -483,4 +483,6 @@ export const payrollRuleApi = {
 export const payrollReportApi = {
   payrollListing: (runId: string) =>
     api.get<import("./types").PayrollListingReport>(`/payroll/reports/payroll-listing/${runId}`).then((r) => r.data),
+  costReport: (runId: string) =>
+    api.get<import("./types").PayrollCostReport>(`/payroll-runs/${runId}/cost-report`).then((r) => r.data),
 };

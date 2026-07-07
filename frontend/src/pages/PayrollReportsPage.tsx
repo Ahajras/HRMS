@@ -16,12 +16,13 @@ import {
 import DownloadIcon from "@mui/icons-material/Download";
 import { useQuery } from "@tanstack/react-query";
 import { payrollReportApi, payrollRunApi, periodApi } from "../api/resources";
-import type { PayrollListingReport, PayrollListingRow, PayrollRun } from "../api/types";
+import type { CostCodeLine, PayrollCostReport, PayrollListingReport, PayrollListingRow, PayrollRun } from "../api/types";
 
 const money = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const qty = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 
 export default function PayrollReportsPage() {
+  const [reportType, setReportType] = useState<"payroll-listing" | "cost-allocation">("payroll-listing");
   const [periodId, setPeriodId] = useState("");
   const [runId, setRunId] = useState("");
   const { data: periods = [] } = useQuery({ queryKey: ["periods"], queryFn: () => periodApi.list() });
@@ -29,7 +30,12 @@ export default function PayrollReportsPage() {
   const { data: report } = useQuery({
     queryKey: ["payrollListing", runId],
     queryFn: () => payrollReportApi.payrollListing(runId),
-    enabled: !!runId,
+    enabled: !!runId && reportType === "payroll-listing",
+  });
+  const { data: costReport } = useQuery({
+    queryKey: ["payrollCostReport", runId],
+    queryFn: () => payrollReportApi.costReport(runId),
+    enabled: !!runId && reportType === "cost-allocation",
   });
 
   const runLabel = (run: PayrollRun) => {
@@ -48,10 +54,12 @@ export default function PayrollReportsPage() {
             select
             size="small"
             label="Report"
-            value="payroll-listing"
+            value={reportType}
+            onChange={(e) => setReportType(e.target.value as "payroll-listing" | "cost-allocation")}
             sx={{ minWidth: 220 }}
           >
             <MenuItem value="payroll-listing">Payroll Listing</MenuItem>
+            <MenuItem value="cost-allocation">Cost Allocation</MenuItem>
           </TextField>
           <TextField
             select
@@ -82,15 +90,18 @@ export default function PayrollReportsPage() {
           <Button
             variant="outlined"
             startIcon={<DownloadIcon />}
-            disabled={!report}
-            onClick={() => report && downloadCsv(report)}
+            disabled={reportType === "payroll-listing" ? !report : !costReport}
+            onClick={() => {
+              if (reportType === "payroll-listing" && report) downloadCsv(report);
+              if (reportType === "cost-allocation" && costReport) downloadCostCsv(costReport);
+            }}
           >
             CSV
           </Button>
         </Stack>
       </Paper>
 
-      {report && (
+      {reportType === "payroll-listing" && report && (
         <>
           <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} mb={2}>
             <Total label="Employees" value={report.employeeCount} plain />
@@ -127,6 +138,83 @@ export default function PayrollReportsPage() {
                   <TableRow>
                     <TableCell colSpan={14}>
                       <Typography variant="body2" color="text.secondary">No payroll results found for this run.</Typography>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Paper>
+        </>
+      )}
+
+      {reportType === "cost-allocation" && costReport && (
+        <>
+          <Typography variant="subtitle1" mb={1}>By cost code (all employees combined)</Typography>
+          <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "auto", mb: 3 }}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Project</TableCell>
+                  <TableCell>Cost code</TableCell>
+                  <TableCell align="right">Hours</TableCell>
+                  <TableCell align="right">Value</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {costReport.byCostCode.map((line, i) => (
+                  <TableRow key={i} hover>
+                    <TableCell>{line.projectCode ?? line.projectName ?? ""}</TableCell>
+                    <TableCell>{line.costCodeCode ?? line.costCodeName ?? ""}</TableCell>
+                    <TableCell align="right">{qty(line.hours)}</TableCell>
+                    <TableCell align="right">{money(line.value)}</TableCell>
+                  </TableRow>
+                ))}
+                {costReport.byCostCode.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={4}>
+                      <Typography variant="body2" color="text.secondary">No cost allocation found for this run.</Typography>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </Paper>
+
+          <Typography variant="subtitle1" mb={1}>By employee</Typography>
+          <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "auto" }}>
+            <Table size="small" stickyHeader>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Employee</TableCell>
+                  <TableCell>Project</TableCell>
+                  <TableCell>Cost code</TableCell>
+                  <TableCell align="right">Hours</TableCell>
+                  <TableCell align="right">Value</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {costReport.byEmployee.flatMap((emp) =>
+                  emp.lines.map((line, i) => (
+                    <TableRow key={`${emp.employeeId}-${i}`} hover>
+                      <TableCell>
+                        {i === 0 && (
+                          <>
+                            <Typography variant="body2" fontWeight={700}>{emp.employeeNumber}</Typography>
+                            <Typography variant="caption" color="text.secondary">{emp.employeeName}</Typography>
+                          </>
+                        )}
+                      </TableCell>
+                      <TableCell>{line.projectCode ?? line.projectName ?? ""}</TableCell>
+                      <TableCell>{line.costCodeCode ?? line.costCodeName ?? ""}</TableCell>
+                      <TableCell align="right">{qty(line.hours)}</TableCell>
+                      <TableCell align="right">{money(line.value)}</TableCell>
+                    </TableRow>
+                  ))
+                )}
+                {costReport.byEmployee.every((e) => e.lines.length === 0) && (
+                  <TableRow>
+                    <TableCell colSpan={5}>
+                      <Typography variant="body2" color="text.secondary">No cost allocation found for this run.</Typography>
                     </TableCell>
                   </TableRow>
                 )}
@@ -197,6 +285,24 @@ function downloadCsv(report: PayrollListingReport) {
   const a = document.createElement("a");
   a.href = url;
   a.download = `payroll-listing-${report.periodName ?? report.runId}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadCostCsv(report: PayrollCostReport) {
+  const headers = ["Project", "Cost Code", "Hours", "Value"];
+  const lines = report.byCostCode.map((line: CostCodeLine) => [
+    line.projectCode ?? line.projectName ?? "",
+    line.costCodeCode ?? line.costCodeName ?? "",
+    line.hours,
+    line.value,
+  ]);
+  const csv = [headers, ...lines].map((line) => line.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `cost-allocation-${report.runId}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }

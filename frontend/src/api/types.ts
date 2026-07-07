@@ -922,3 +922,29 @@ export interface PayrollListingRow {
   message?: string;
   componentAmounts: Record<string, number>;
 }
+
+export interface CostCodeLine {
+  projectId?: string;
+  projectCode?: string;
+  projectName?: string;
+  costCodeId?: string;
+  costCodeCode?: string;
+  costCodeName?: string;
+  hours: number;
+  value: number;
+}
+
+export interface EmployeeCostBreakdown {
+  employeeId: string;
+  employeeNumber?: string;
+  employeeName?: string;
+  lines: CostCodeLine[];
+  totalHours: number;
+  totalValue: number;
+}
+
+export interface PayrollCostReport {
+  runId: string;
+  byEmployee: EmployeeCostBreakdown[];
+  byCostCode: CostCodeLine[];
+}
