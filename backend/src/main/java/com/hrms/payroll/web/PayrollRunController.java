@@ -40,6 +40,15 @@ public class PayrollRunController {
         return costReportService.build(id);
     }
 
+    @GetMapping("/{id}/results")
+    public com.hrms.common.web.PageResponse<com.hrms.payroll.dto.PayrollResultDto> results(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size,
+            @RequestParam(required = false) String search) {
+        return service.pagedResults(id, page, size, search);
+    }
+
     @GetMapping
     public List<PayrollRunDto> list(@RequestParam(required = false) UUID periodId) {
         return service.list(periodId);

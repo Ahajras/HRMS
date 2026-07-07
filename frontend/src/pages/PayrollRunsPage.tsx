@@ -234,10 +234,21 @@ export default function PayrollRunsPage() {
 
 function PayrollRunDetail({ run }: { run: PayrollRun }) {
   const [openPayslip, setOpenPayslip] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const pageSize = 25;
+
+  const { data: resultsPage } = useQuery({
+    queryKey: ["payrollRunResults", run.id, page, search],
+    queryFn: () => payrollRunApi.results(run.id!, page, pageSize, search || undefined),
+    enabled: !!run.id,
+  });
+  const rows = resultsPage?.content ?? [];
 
   return (
     <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5}>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1.5} flexWrap="wrap" gap={1}>
         <Box>
           <Typography variant="subtitle1" fontWeight={700}>Payroll results</Typography>
           <Typography variant="caption" color="text.secondary">
@@ -246,6 +257,22 @@ function PayrollRunDetail({ run }: { run: PayrollRun }) {
         </Box>
         <Chip size="small" label={run.status} color={STATUS_COLOR[run.status ?? "DRAFT"] ?? "default"} />
       </Stack>
+
+      <Stack direction="row" spacing={1} mb={1.5} alignItems="center">
+        <TextField
+          size="small"
+          label="Search employee (name or number)"
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { setPage(0); setSearch(searchInput); } }}
+          sx={{ minWidth: 260 }}
+        />
+        <Button size="small" variant="outlined" onClick={() => { setPage(0); setSearch(searchInput); }}>Search</Button>
+        {search && (
+          <Button size="small" onClick={() => { setSearchInput(""); setSearch(""); setPage(0); }}>Clear</Button>
+        )}
+      </Stack>
+
       <Table size="small">
         <TableHead>
           <TableRow>
@@ -262,7 +289,7 @@ function PayrollRunDetail({ run }: { run: PayrollRun }) {
           </TableRow>
         </TableHead>
         <TableBody>
-          {run.results.map((r) => {
+          {rows.map((r) => {
             const isOpen = openPayslip === r.id;
             return (
               <Fragment key={r.id}>
@@ -297,11 +324,23 @@ function PayrollRunDetail({ run }: { run: PayrollRun }) {
               </Fragment>
             );
           })}
-          {run.results.length === 0 && (
-            <TableRow><TableCell colSpan={10}><Typography variant="body2" color="text.secondary" p={1}>Payroll summary is loaded. Detailed payslip rows are not loaded in bulk for large runs.</Typography></TableCell></TableRow>
+          {rows.length === 0 && (
+            <TableRow><TableCell colSpan={10}><Typography variant="body2" color="text.secondary" p={1}>No results match.</Typography></TableCell></TableRow>
           )}
         </TableBody>
       </Table>
+
+      {resultsPage && resultsPage.totalPages > 1 && (
+        <Stack direction="row" justifyContent="space-between" alignItems="center" mt={1.5}>
+          <Typography variant="caption" color="text.secondary">
+            Page {resultsPage.page + 1} of {resultsPage.totalPages} - {resultsPage.totalElements} employee(s)
+          </Typography>
+          <Stack direction="row" spacing={1}>
+            <Button size="small" disabled={resultsPage.first} onClick={() => setPage((p) => Math.max(p - 1, 0))}>Previous</Button>
+            <Button size="small" disabled={resultsPage.last} onClick={() => setPage((p) => p + 1)}>Next</Button>
+          </Stack>
+        </Stack>
+      )}
     </Paper>
   );
 }

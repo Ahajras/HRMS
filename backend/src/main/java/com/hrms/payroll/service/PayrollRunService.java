@@ -227,7 +227,38 @@ public class PayrollRunService {
 
     @Transactional(readOnly = true)
     public PayrollRunDto get(UUID id) {
-        return toDto(getEntity(id), true);
+        return toDto(getEntity(id), false);
+    }
+
+    /** Paginated, searchable results for the run detail screen — avoids
+     * loading thousands of rows at once (the whole run's results used to
+     * come back in a single response, which made large runs very slow to
+     * open). */
+    @Transactional(readOnly = true)
+    public com.hrms.common.web.PageResponse<PayrollResultDto> pagedResults(UUID id, int page, int size, String search) {
+        PayrollRun run = getEntity(id);
+        org.springframework.data.domain.Pageable pageable =
+                org.springframework.data.domain.PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 200));
+        org.springframework.data.domain.Page<PayrollResult> resultsPage;
+        if (search != null && !search.isBlank()) {
+            List<UUID> matchingEmployeeIds = employeeRepo
+                    .search(run.getCompanyId(), search.trim(), org.springframework.data.domain.Pageable.unpaged())
+                    .stream().map(Employee::getId).toList();
+            resultsPage = matchingEmployeeIds.isEmpty()
+                    ? org.springframework.data.domain.Page.empty(pageable)
+                    : resultRepo.findByRunIdAndEmployeeIdIn(id, matchingEmployeeIds, pageable);
+        } else {
+            resultsPage = resultRepo.findByRunId(id, pageable);
+        }
+        // Batch-fetch employees for THIS PAGE only (25-200 rows), not one lookup per row.
+        List<UUID> pageEmployeeIds = resultsPage.getContent().stream().map(PayrollResult::getEmployeeId).toList();
+        Map<UUID, Employee> employeeById = employeeRepo.findAllById(pageEmployeeIds).stream()
+                .collect(java.util.stream.Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
+        List<PayrollResultDto> dtos = resultsPage.getContent().stream()
+                .map(r -> toDto(r, employeeById.get(r.getEmployeeId())))
+                .toList();
+        return new com.hrms.common.web.PageResponse<>(dtos, resultsPage.getNumber(), resultsPage.getSize(),
+                resultsPage.getTotalElements(), resultsPage.getTotalPages(), resultsPage.isFirst(), resultsPage.isLast());
     }
 
     public PayrollRunDto create(UUID periodId, UUID projectId, String payGroup) {
@@ -1243,13 +1274,20 @@ public class PayrollRunService {
     }
 
     private PayrollResultDto toDto(PayrollResult result) {
+        return toDto(result, employeeRepo.findById(result.getEmployeeId()).orElse(null));
+    }
+
+    /** Same mapping, but takes an already-fetched Employee — used by the
+     * paginated results endpoint so a page of 25 only costs ONE batch
+     * employee query, not 25 individual lookups. */
+    private PayrollResultDto toDto(PayrollResult result, Employee employee) {
         PayrollResultDto dto = new PayrollResultDto();
         dto.setId(result.getId());
         dto.setEmployeeId(result.getEmployeeId());
-        employeeRepo.findById(result.getEmployeeId()).ifPresent(e -> {
-            dto.setEmployeeNumber(e.getEmployeeNumber());
-            dto.setEmployeeName((e.getFirstName() + " " + e.getLastName()).trim());
-        });
+        if (employee != null) {
+            dto.setEmployeeNumber(employee.getEmployeeNumber());
+            dto.setEmployeeName((employee.getFirstName() + " " + employee.getLastName()).trim());
+        }
         dto.setPayStatus(result.getPayStatus());
         dto.setWorkedDays(result.getWorkedDays());
         dto.setNormalHours(result.getNormalHours());

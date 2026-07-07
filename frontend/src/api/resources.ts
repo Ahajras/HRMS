@@ -21,6 +21,7 @@ import type {
   PageResponse,
   PayrollComponent,
   PayrollRun,
+  PayrollResult,
   Project,
   CostCode,
   PublicHoliday,
@@ -471,6 +472,10 @@ export const payrollRunApi = {
   approve: (id: string) => api.post<PayrollRun>(`/payroll-runs/${id}/approve`).then((r) => r.data),
   lock: (id: string) => api.post<PayrollRun>(`/payroll-runs/${id}/lock`).then((r) => r.data),
   delete: (id: string) => api.delete(`/payroll-runs/${id}`),
+  results: (id: string, page: number, size: number, search?: string) =>
+    api.get<{ content: PayrollResult[]; page: number; size: number; totalElements: number; totalPages: number; first: boolean; last: boolean }>(
+      `/payroll-runs/${id}/results`, { params: { page, size, ...(search ? { search } : {}) } }
+    ).then((r) => r.data),
 };
 
 export const payrollRuleApi = {
