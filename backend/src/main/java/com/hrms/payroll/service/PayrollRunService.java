@@ -704,6 +704,16 @@ public class PayrollRunService {
         BigDecimal scaled = baseQuantity.multiply(z(explicit.getPercent()).divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP));
         if ("DEDUCT".equalsIgnoreCase(explicit.getAction())) {
             DayEffect legacy = legacyEffect(type, day, rule, shiftHours);
+            // A daily-rate employee's pay is simply the sum of days actually
+            // worked — an unpaid/absence day already contributes nothing to
+            // that sum. Deducting it again here would subtract the same
+            // absence twice. This does NOT apply to monthly employees, whose
+            // base pay starts full and genuinely needs this deduction.
+            String category = type != null ? type.getCategory() : "REGULAR";
+            boolean unpaidDay = isUnpaidCategory(category) || (type != null && !type.isPaid());
+            if (isDailyRule(rule) && unpaidDay) {
+                return DayEffect.none();
+            }
             return new DayEffect(legacy.payQuantity(), scaled, explicit.getBasis());
         }
         if ("PAY".equalsIgnoreCase(explicit.getAction())) {
@@ -724,6 +734,12 @@ public class PayrollRunService {
             return DayEffect.none();
         }
         if (isUnpaidCategory(category) || (type != null && !type.isPaid())) {
+            if (daily) {
+                // Daily pay = days actually worked x daily rate. An absent/
+                // unpaid day already contributes nothing to that sum, so
+                // there is nothing left here to deduct on top of it.
+                return DayEffect.none();
+            }
             return new DayEffect(BigDecimal.ZERO, payrollHours(day, standardHours), "HOURS");
         }
         if (type == null || type.isPaid()) {
