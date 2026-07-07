@@ -227,7 +227,7 @@ public class PayrollRunService {
 
     @Transactional(readOnly = true)
     public PayrollRunDto get(UUID id) {
-        return toDto(getEntity(id), false);
+        return toDto(getEntity(id), true);
     }
 
     public PayrollRunDto create(UUID periodId, UUID projectId, String payGroup) {
