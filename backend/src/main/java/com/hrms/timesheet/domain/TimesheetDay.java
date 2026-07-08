@@ -70,6 +70,12 @@ public class TimesheetDay extends AuditableEntity {
     @Column(name = "remarks", length = 255)
     private String remarks;
 
+    /** True when this day was paid on a default assumption because the
+     * project's period was locked before the real month finished (Day
+     * Zero early close), rather than on confirmed attendance/leave. */
+    @Column(name = "estimated", nullable = false)
+    private boolean estimated = false;
+
     public UUID getTimesheetId() { return timesheetId; }
     public void setTimesheetId(UUID timesheetId) { this.timesheetId = timesheetId; }
 
@@ -120,4 +126,6 @@ public class TimesheetDay extends AuditableEntity {
 
     public String getRemarks() { return remarks; }
     public void setRemarks(String remarks) { this.remarks = remarks; }
+    public boolean isEstimated() { return estimated; }
+    public void setEstimated(boolean estimated) { this.estimated = estimated; }
 }

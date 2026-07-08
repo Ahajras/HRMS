@@ -45,6 +45,12 @@ public class PayrollRule extends AuditableEntity {
     @Column(name = "status", nullable = false, length = 20)
     private String status = "ACTIVE";
 
+    /** If set (e.g. 22), any day after this day-of-month gets marked
+     * "estimated" when the project is locked — Day Zero early-close. Null
+     * means the feature is off for this rule (normal end-of-month lock). */
+    @Column(name = "day_zero_cutoff_day")
+    private Integer dayZeroCutoffDay;
+
     public UUID getCompanyId() { return companyId; }
     public void setCompanyId(UUID companyId) { this.companyId = companyId; }
     public UUID getProjectId() { return projectId; }
@@ -67,4 +73,6 @@ public class PayrollRule extends AuditableEntity {
     public void setWeeklyRestPaid(boolean weeklyRestPaid) { this.weeklyRestPaid = weeklyRestPaid; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public Integer getDayZeroCutoffDay() { return dayZeroCutoffDay; }
+    public void setDayZeroCutoffDay(Integer dayZeroCutoffDay) { this.dayZeroCutoffDay = dayZeroCutoffDay; }
 }

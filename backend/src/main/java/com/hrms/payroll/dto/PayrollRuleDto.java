@@ -17,6 +17,7 @@ public class PayrollRuleDto {
     private String divisorMode;
     private java.util.UUID projectId;
     private String status;
+    private Integer dayZeroCutoffDay;
     private List<PayrollCategoryRuleDto> categoryRules = new ArrayList<>();
 
     public UUID getId() { return id; }
@@ -41,6 +42,8 @@ public class PayrollRuleDto {
     public void setProjectId(java.util.UUID projectId) { this.projectId = projectId; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public Integer getDayZeroCutoffDay() { return dayZeroCutoffDay; }
+    public void setDayZeroCutoffDay(Integer dayZeroCutoffDay) { this.dayZeroCutoffDay = dayZeroCutoffDay; }
     public List<PayrollCategoryRuleDto> getCategoryRules() { return categoryRules; }
     public void setCategoryRules(List<PayrollCategoryRuleDto> categoryRules) { this.categoryRules = categoryRules; }
 }

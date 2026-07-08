@@ -51,6 +51,7 @@ public class PayrollRuleService {
         rule.setMonthDivisor(dto.getMonthDivisor() != null ? dto.getMonthDivisor() : new java.math.BigDecimal("30.00"));
         rule.setDivisorMode(dto.getDivisorMode() != null ? dto.getDivisorMode() : "FIXED");
         rule.setWeeklyRestPaid(dto.isWeeklyRestPaid());
+        rule.setDayZeroCutoffDay(dto.getDayZeroCutoffDay());
         rule.setStatus("ACTIVE");
         rule = repository.save(rule);
         saveCategoryRules(companyId, rule.getId(), dto.getCategoryRules());
@@ -72,6 +73,7 @@ public class PayrollRuleService {
         if (dto.getDivisorMode() != null) rule.setDivisorMode(dto.getDivisorMode());
         rule.setProjectId(dto.getProjectId());
         rule.setWeeklyRestPaid(dto.isWeeklyRestPaid());
+        rule.setDayZeroCutoffDay(dto.getDayZeroCutoffDay());
         rule = repository.save(rule);
         saveCategoryRules(rule.getCompanyId(), rule.getId(), dto.getCategoryRules());
         ensureDefaultCategoryRules(rule.getCompanyId(), rule.getId());
@@ -132,6 +134,7 @@ public class PayrollRuleService {
         dto.setDivisorMode(rule.getDivisorMode());
         dto.setProjectId(rule.getProjectId());
         dto.setWeeklyRestPaid(rule.isWeeklyRestPaid());
+        dto.setDayZeroCutoffDay(rule.getDayZeroCutoffDay());
         dto.setStatus(rule.getStatus());
         dto.setCategoryRules(categoryRuleRepository
                 .findByPayrollRuleIdAndStatusOrderByCategory(rule.getId(), "ACTIVE")

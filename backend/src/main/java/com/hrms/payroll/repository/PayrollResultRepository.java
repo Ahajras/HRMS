@@ -15,6 +15,10 @@ public interface PayrollResultRepository extends JpaRepository<PayrollResult, UU
 
     List<PayrollResult> findByRunIdOrderByEmployeeId(UUID runId);
 
+    /** Used by Day Zero to find what an employee was actually paid for a
+     * prior, already-locked/calculated period. */
+    java.util.Optional<PayrollResult> findByRunIdAndEmployeeId(UUID runId, UUID employeeId);
+
     /** Paginated — used by the run detail screen so opening a large run
      * (thousands of employees) stays fast. */
     Page<PayrollResult> findByRunId(UUID runId, Pageable pageable);

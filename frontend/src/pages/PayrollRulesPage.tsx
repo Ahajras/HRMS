@@ -142,6 +142,7 @@ export default function PayrollRulesPage() {
                 <TableCell align="right">Rest day OT</TableCell>
                 <TableCell align="right">Month divisor</TableCell>
                 <TableCell>Divisor mode</TableCell>
+                <TableCell align="right">Day Zero cutoff</TableCell>
                 <TableCell align="right">Actions</TableCell>
               </TableRow>
             </TableHead>
@@ -179,14 +180,33 @@ export default function PayrollRulesPage() {
                         </TextField>
                       </TableCell>
                       <TableCell align="right">
+                        <TextField
+                          size="small"
+                          type="number"
+                          placeholder="None"
+                          value={row.dayZeroCutoffDay ?? ""}
+                          onChange={(e) => set(rule, { dayZeroCutoffDay: e.target.value === "" ? null : Number(e.target.value) })}
+                          inputProps={{ step: "1", min: "1", max: "31" }}
+                          sx={{ width: 90 }}
+                        />
+                      </TableCell>
+                      <TableCell align="right">
                         <Button size="small" variant="contained" disabled={!drafts[rule.id ?? ""] || save.isPending} onClick={() => save.mutate(row)}>Save</Button>
                       </TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell colSpan={8} sx={{ bgcolor: "action.hover" }}>
+                      <TableCell colSpan={9} sx={{ bgcolor: "action.hover" }}>
                         <Typography variant="body2" color="text.secondary" mb={1}>
                           <b>{rule.payGroup} formula:</b> {formulaFor(row)} Shift hours come from the employee's assigned shift on the timesheet.
                         </Typography>
+                        {row.dayZeroCutoffDay != null && (
+                          <Typography variant="body2" color="text.secondary" mb={1}>
+                            <b>Day Zero:</b> when this project is locked, any day after day {row.dayZeroCutoffDay} of the month is marked
+                            as estimated. If something changes it later (e.g. an approved leave), the whole month is recalculated with the
+                            correction and compared to what was actually paid — the difference lands on the employee's next payslip
+                            instead of reopening this locked period.
+                          </Typography>
+                        )}
                         <Table size="small" sx={{ bgcolor: "background.paper" }}>
                           <TableHead>
                             <TableRow>

@@ -284,6 +284,98 @@ public class PayrollRunService {
         return get(id);
     }
 
+    /** Day Zero — recomputes what an employee's NET pay would have been for
+     * an already-calculated period if the given days had different time
+     * types, using the exact same building blocks (payableBreakdown,
+     * buildLines, buildOvertimeLines, buildMonthlyUnpaidDeductionLine) the
+     * real calculation uses. Nothing is persisted — this is a pure "what-if"
+     * used only to compute the size of a prior-period correction. Returns
+     * null if there is nothing to compare against (no original run, or no
+     * timesheet for that period). */
+    /** Day Zero — the actual, already-paid result for an employee in a
+     * prior run, used as the "before" side of the correction diff. */
+    @Transactional(readOnly = true)
+    public Optional<PayrollResult> findResultForEmployee(UUID runId, UUID employeeId) {
+        return resultRepo.findByRunIdAndEmployeeId(runId, employeeId);
+    }
+
+    public BigDecimal simulateNetWithOverride(UUID originalRunId, UUID employeeId, Map<UUID, UUID> dayTimeTypeOverrides) {
+        PayrollRun run = runRepo.findById(originalRunId).orElse(null);
+        if (run == null) {
+            return null;
+        }
+        PayrollPeriod period = periodRepo.findById(run.getPeriodId()).orElse(null);
+        if (period == null) {
+            return null;
+        }
+        Timesheet ts = timesheetRepo.findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(
+                run.getCompanyId(), employeeId, period.getPeriodYear(), period.getPeriodMonth()).orElse(null);
+        if (ts == null) {
+            return null;
+        }
+        Employee emp = employeeRepo.findById(employeeId).orElse(null);
+        if (emp == null) {
+            return null;
+        }
+
+        List<TimesheetDay> realDays = dayRepo.findByTimesheetIdOrderByWorkDate(ts.getId());
+        List<TimesheetDay> simulatedDays = new ArrayList<>();
+        for (TimesheetDay d : realDays) {
+            UUID overrideType = dayTimeTypeOverrides.get(d.getId());
+            if (overrideType == null) {
+                simulatedDays.add(d);
+                continue;
+            }
+            TimesheetDay copy = new TimesheetDay();
+            copy.setTimesheetId(d.getTimesheetId());
+            copy.setWorkDate(d.getWorkDate());
+            copy.setShiftId(d.getShiftId());
+            copy.setTimeTypeId(overrideType);
+            copy.setPlannedHours(d.getPlannedHours());
+            copy.setWorkedHours(BigDecimal.ZERO);
+            copy.setOtHours(BigDecimal.ZERO);
+            copy.setNormalHours(BigDecimal.ZERO);
+            copy.setProjectId(d.getProjectId());
+            copy.setCostCodeId(d.getCostCodeId());
+            simulatedDays.add(copy);
+        }
+
+        PayrollCalculationContext ctx = payrollCalculationContext(run, period, List.of(ts));
+        UUID empProject = run.getProjectId() != null ? run.getProjectId() : ctx.employeeProjects().get(emp.getId());
+        PayrollRule rule = payrollRule(ctx.rules(), run.getCompanyId(), empProject, emp.getPayStatus());
+        BigDecimal shiftHours = shiftHours(ts, rule, ctx.shifts());
+        int periodDays = period.getEndDate() != null ? period.getEndDate().getDayOfMonth() : 30;
+
+        PayableBreakdown breakdown = payableBreakdown(simulatedDays, rule, shiftHours, ctx.timeTypes());
+        PayrollPolicyContext policy = payrollPolicyContext(ctx, ts, emp, rule, shiftHours, simulatedDays);
+        PayrollResult simResult = buildResult(run, ts, emp, rule, breakdown);
+        UUID dummyResultId = UUID.randomUUID();
+
+        BigDecimal earnings = BigDecimal.ZERO;
+        BigDecimal deductions = BigDecimal.ZERO;
+        for (ContractPayItem item : activePayItems(ctx.payItemsByEmployee().getOrDefault(emp.getId(), List.of()), period.getEndDate())) {
+            PayrollComponent component = ctx.components().get(item.getPayComponentId());
+            if (component == null) {
+                continue;
+            }
+            for (PayrollResultLine line : buildLines(run.getCompanyId(), dummyResultId, item, component, simResult, rule, breakdown, policy, shiftHours, periodDays, ctx.categoryPolicies())) {
+                if ("DEDUCTION".equalsIgnoreCase(line.getComponentType())) {
+                    deductions = deductions.add(line.getAmount());
+                } else {
+                    earnings = earnings.add(line.getAmount());
+                }
+            }
+        }
+        for (PayrollResultLine otLine : buildOvertimeLines(run.getCompanyId(), dummyResultId, simResult, rule, breakdown)) {
+            earnings = earnings.add(otLine.getAmount());
+        }
+        PayrollResultLine unpaidDeduction = buildMonthlyUnpaidDeductionLine(run.getCompanyId(), dummyResultId, earnings, rule, breakdown, policy);
+        if (unpaidDeduction != null) {
+            deductions = deductions.add(unpaidDeduction.getAmount());
+        }
+        return earnings.subtract(deductions);
+    }
+
     public Map<String, Object> calculate(UUID id, TimesheetService.BulkStatusProgressListener progress) {
         PayrollRun run = getEntity(id);
         if (!DRAFT.equals(run.getStatus()) && !CALCULATED.equals(run.getStatus())) {

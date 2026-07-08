@@ -71,6 +71,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -122,6 +123,9 @@ public class TimesheetService {
     private final CostCodeRepository costCodeRepo;
     private final LeaveRequestRepository leaveRequestRepo;
     private final LeaveTypeRepository leaveTypeRepo;
+    private final com.hrms.payroll.repository.PayrollRunRepository payrollRunRepo;
+    private final com.hrms.payroll.repository.PayrollAdjustmentRepository payrollAdjustmentRepo;
+    private final com.hrms.payroll.service.PayrollRunService payrollRunService;
     private final TransactionTemplate transactionTemplate;
 
     public TimesheetService(TimesheetRepository timesheetRepo, TimesheetDayRepository dayRepo,
@@ -137,6 +141,9 @@ public class TimesheetService {
                             CostCodeRepository costCodeRepo,
                             LeaveRequestRepository leaveRequestRepo,
                             LeaveTypeRepository leaveTypeRepo,
+                            com.hrms.payroll.repository.PayrollRunRepository payrollRunRepo,
+                            com.hrms.payroll.repository.PayrollAdjustmentRepository payrollAdjustmentRepo,
+                            com.hrms.payroll.service.PayrollRunService payrollRunService,
                             TransactionTemplate transactionTemplate) {
         this.timesheetRepo = timesheetRepo;
         this.dayRepo = dayRepo;
@@ -158,6 +165,9 @@ public class TimesheetService {
         this.costCodeRepo = costCodeRepo;
         this.leaveRequestRepo = leaveRequestRepo;
         this.leaveTypeRepo = leaveTypeRepo;
+        this.payrollRunRepo = payrollRunRepo;
+        this.payrollAdjustmentRepo = payrollAdjustmentRepo;
+        this.payrollRunService = payrollRunService;
         this.transactionTemplate = transactionTemplate;
     }
 
@@ -1667,13 +1677,25 @@ public class TimesheetService {
     private void syncLeaveRequestMonth(Timesheet ts, LeaveRequest request, LeaveType type,
                                        UUID normalTypeId, boolean approved) {
         List<TimesheetDay> days = dayRepo.findByTimesheetIdOrderByWorkDate(ts.getId());
-        boolean hasAffectedDays = days.stream().anyMatch(day -> leaveSyncAffectsDay(day, request, type, normalTypeId, approved));
-        if (!hasAffectedDays) {
+        List<TimesheetDay> affected = days.stream()
+                .filter(day -> leaveSyncAffectsDay(day, request, type, normalTypeId, approved))
+                .toList();
+        if (affected.isEmpty()) {
             return;
         }
         if (!DRAFT.equals(ts.getStatus())) {
-            throw new BusinessRuleException("leave.timesheet.not.draft",
-                    "Leave changes can sync only to DRAFT timesheets. Reopen the employee timesheet first.");
+            // Day Zero: a LOCKED period stays locked and untouched — but if
+            // every affected day was only ever an ESTIMATE (paid on a default
+            // assumption because the period closed early), we record the
+            // difference as a pending adjustment for the next payroll run
+            // instead of blocking the change outright.
+            boolean allEstimated = approved && affected.stream().allMatch(TimesheetDay::isEstimated);
+            if (!allEstimated) {
+                throw new BusinessRuleException("leave.timesheet.not.draft",
+                        "Leave changes can sync only to DRAFT timesheets. Reopen the employee timesheet first.");
+            }
+            createDayZeroAdjustment(ts, affected, type);
+            return;
         }
 
         Map<UUID, Shift> shiftCache = new HashMap<>();
@@ -1710,6 +1732,67 @@ public class TimesheetService {
             recomputeTotals(ts);
             timesheetRepo.save(ts);
         }
+    }
+
+    /** Day Zero — computes the correction by re-running the REAL payroll
+     * engine on the original month with the affected day(s) switched to the
+     * new leave type, then diffing the result against what was actually
+     * paid. This automatically accounts for anything the engine already
+     * knows about (sick-leave thresholds, allowance cutoffs, etc.) — it is
+     * not a hand-rolled formula that only understands "unpaid = zero". */
+    private void createDayZeroAdjustment(Timesheet ts, List<TimesheetDay> affectedDays, LeaveType type) {
+        UUID projectId = employeeProject(ts.getEmployeeId());
+        com.hrms.payroll.domain.PayrollRun originalRun = findOriginalPayrollRun(ts.getCompanyId(), ts.getPeriodId(), projectId);
+        if (originalRun == null) {
+            return;
+        }
+        Optional<com.hrms.payroll.domain.PayrollResult> original =
+                payrollRunService.findResultForEmployee(originalRun.getId(), ts.getEmployeeId());
+        if (original.isEmpty()) {
+            return;
+        }
+        BigDecimal actualNet = original.get().getNet();
+        if (actualNet == null) {
+            return;
+        }
+
+        Map<UUID, UUID> overrides = new HashMap<>();
+        for (TimesheetDay day : affectedDays) {
+            overrides.put(day.getId(), type.getTimeTypeId());
+        }
+        BigDecimal simulatedNet = payrollRunService.simulateNetWithOverride(originalRun.getId(), ts.getEmployeeId(), overrides);
+        if (simulatedNet == null) {
+            return;
+        }
+        BigDecimal amount = simulatedNet.subtract(actualNet);
+        if (amount.compareTo(BigDecimal.ZERO) == 0) {
+            return;
+        }
+
+        com.hrms.payroll.domain.PayrollAdjustment adj = new com.hrms.payroll.domain.PayrollAdjustment();
+        adj.setCompanyId(ts.getCompanyId());
+        adj.setEmployeeId(ts.getEmployeeId());
+        adj.setWorkDate(affectedDays.get(0).getWorkDate());
+        adj.setOriginalPeriodId(ts.getPeriodId());
+        String dates = affectedDays.size() == 1
+                ? affectedDays.get(0).getWorkDate().toString()
+                : affectedDays.get(0).getWorkDate() + " to " + affectedDays.get(affectedDays.size() - 1).getWorkDate();
+        adj.setReason("Day Zero: " + dates + " reclassified as " + type.getName()
+                + " after the period was already locked (recomputed against the original month)");
+        adj.setAmount(amount);
+        adj.setSource("SYSTEM");
+        adj.setStatus("PENDING");
+        payrollAdjustmentRepo.save(adj);
+    }
+
+    private com.hrms.payroll.domain.PayrollRun findOriginalPayrollRun(UUID companyId, UUID periodId, UUID projectId) {
+        for (com.hrms.payroll.domain.PayrollRun run : payrollRunRepo.findByCompanyIdAndPeriodIdOrderByCreatedAtDesc(companyId, periodId)) {
+            boolean projectMatches = projectId == null ? run.getProjectId() == null : projectId.equals(run.getProjectId());
+            if (projectMatches) {
+                return run;
+            }
+        }
+        return null;
     }
 
     private boolean leaveSyncAffectsDay(TimesheetDay day, LeaveRequest request, LeaveType type,

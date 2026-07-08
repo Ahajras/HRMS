@@ -831,6 +831,7 @@ export interface PayrollRule {
   divisorMode?: string;
   projectId?: string | null;
   status?: string;
+  dayZeroCutoffDay?: number | null;
   categoryRules?: PayrollCategoryRule[];
 }
 
