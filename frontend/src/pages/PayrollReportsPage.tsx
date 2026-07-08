@@ -15,7 +15,7 @@ import {
 } from "@mui/material";
 import DownloadIcon from "@mui/icons-material/Download";
 import { useQuery } from "@tanstack/react-query";
-import { payrollReportApi, payrollRunApi, periodApi } from "../api/resources";
+import { payrollReportApi, payrollRunApi, periodApi, projectApi } from "../api/resources";
 import type { EmployeeCostBreakdown, PayrollListingRow, PayrollListingSummary, PayrollRun } from "../api/types";
 
 const money = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -26,6 +26,7 @@ export default function PayrollReportsPage() {
   const [reportType, setReportType] = useState<"payroll-listing" | "cost-allocation">("payroll-listing");
   const [periodId, setPeriodId] = useState("");
   const [runId, setRunId] = useState("");
+  const [costProjectId, setCostProjectId] = useState(""); // "" = every project's run for the period
 
   // Payroll listing — fast summary, then paginated + searchable rows
   const [listingPage, setListingPage] = useState(0);
@@ -39,6 +40,7 @@ export default function PayrollReportsPage() {
 
   const { data: periods = [] } = useQuery({ queryKey: ["periods"], queryFn: () => periodApi.list() });
   const { data: runs = [] } = useQuery({ queryKey: ["payrollRuns", periodId], queryFn: () => payrollRunApi.list(periodId), enabled: !!periodId });
+  const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: () => projectApi.list() });
 
   const { data: listingSummary } = useQuery({
     queryKey: ["payrollListingSummary", runId],
@@ -52,15 +54,18 @@ export default function PayrollReportsPage() {
   });
   const listingRows = listingRowsPage?.content ?? [];
 
+  // Cost allocation is period-based (optionally narrowed to one project) —
+  // each project is calculated as its own separate payroll run, so a
+  // "whole month" view has to combine several runs, not pick just one.
   const { data: costSummary } = useQuery({
-    queryKey: ["payrollCostSummary", runId],
-    queryFn: () => payrollReportApi.costReportSummary(runId),
-    enabled: !!runId && reportType === "cost-allocation",
+    queryKey: ["payrollCostSummary", periodId, costProjectId],
+    queryFn: () => payrollReportApi.costAllocationSummary(periodId, costProjectId || undefined),
+    enabled: !!periodId && reportType === "cost-allocation",
   });
   const { data: costEmployeesPage } = useQuery({
-    queryKey: ["payrollCostEmployees", runId, costPage, costSearch],
-    queryFn: () => payrollReportApi.costReportEmployees(runId, costPage, PAGE_SIZE, costSearch || undefined),
-    enabled: !!runId && reportType === "cost-allocation",
+    queryKey: ["payrollCostEmployees", periodId, costProjectId, costPage, costSearch],
+    queryFn: () => payrollReportApi.costAllocationEmployees(periodId, costProjectId || undefined, costPage, PAGE_SIZE, costSearch || undefined),
+    enabled: !!periodId && reportType === "cost-allocation",
   });
   const costEmployeeRows = costEmployeesPage?.content ?? [];
 
@@ -99,18 +104,33 @@ export default function PayrollReportsPage() {
             <MenuItem value="">Select period</MenuItem>
             {periods.map((p) => <MenuItem key={p.id} value={p.id}>{p.name}</MenuItem>)}
           </TextField>
-          <TextField
-            select
-            size="small"
-            label="Payroll run"
-            value={runId}
-            onChange={(e) => setRunId(e.target.value)}
-            disabled={!periodId}
-            sx={{ minWidth: 320 }}
-          >
-            <MenuItem value="">Select run</MenuItem>
-            {runs.map((r) => <MenuItem key={r.id} value={r.id}>{runLabel(r)}</MenuItem>)}
-          </TextField>
+          {reportType === "payroll-listing" ? (
+            <TextField
+              select
+              size="small"
+              label="Payroll run"
+              value={runId}
+              onChange={(e) => setRunId(e.target.value)}
+              disabled={!periodId}
+              sx={{ minWidth: 320 }}
+            >
+              <MenuItem value="">Select run</MenuItem>
+              {runs.map((r) => <MenuItem key={r.id} value={r.id}>{runLabel(r)}</MenuItem>)}
+            </TextField>
+          ) : (
+            <TextField
+              select
+              size="small"
+              label="Project"
+              value={costProjectId}
+              onChange={(e) => { setCostProjectId(e.target.value); setCostPage(0); }}
+              disabled={!periodId}
+              sx={{ minWidth: 260 }}
+            >
+              <MenuItem value="">All projects (whole period)</MenuItem>
+              {projects.map((p) => <MenuItem key={p.id} value={p.id}>{p.code} — {p.name}</MenuItem>)}
+            </TextField>
+          )}
           <Button
             variant="outlined"
             startIcon={<DownloadIcon />}
@@ -121,8 +141,8 @@ export default function PayrollReportsPage() {
                 downloadListingCsv(runId, listingSummary, allRows);
               }
               if (reportType === "cost-allocation" && costSummary) {
-                const allEmployees = await fetchAllPages((page) => payrollReportApi.costReportEmployees(runId, page, 200));
-                downloadCostCsv(runId, allEmployees);
+                const allEmployees = await fetchAllPages((page) => payrollReportApi.costAllocationEmployees(periodId, costProjectId || undefined, page, 200));
+                downloadCostCsv(periodId, allEmployees);
               }
             }}
           >
@@ -372,7 +392,7 @@ function downloadListingCsv(runId: string, summary: PayrollListingSummary, rows:
   URL.revokeObjectURL(url);
 }
 
-function downloadCostCsv(runId: string, employees: EmployeeCostBreakdown[]) {
+function downloadCostCsv(periodId: string, employees: EmployeeCostBreakdown[]) {
   const headers = ["Employee No", "Employee Name", "Project", "Cost Code", "Hours", "Value"];
   const lines = employees.flatMap((emp) =>
     (emp.lines.length > 0 ? emp.lines : [null]).map((line) => [
@@ -389,7 +409,7 @@ function downloadCostCsv(runId: string, employees: EmployeeCostBreakdown[]) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `cost-allocation-${runId}.csv`;
+  a.download = `cost-allocation-${periodId}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }

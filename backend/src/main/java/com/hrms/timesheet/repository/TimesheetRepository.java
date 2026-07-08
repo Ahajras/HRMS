@@ -22,6 +22,12 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
     List<Timesheet> findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
             UUID companyId, int periodYear, int periodMonth);
 
+    /** Scoped variant — only the given employees' timesheets for the period,
+     * not every timesheet the whole company has for that month (which can
+     * include thousands of unrelated employees on other projects). */
+    List<Timesheet> findByCompanyIdAndPeriodYearAndPeriodMonthAndEmployeeIdIn(
+            UUID companyId, int periodYear, int periodMonth, Collection<UUID> employeeIds);
+
     @Query(value = """
             select t.*
             from timesheet t

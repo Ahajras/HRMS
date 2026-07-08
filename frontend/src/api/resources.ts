@@ -494,10 +494,10 @@ export const payrollReportApi = {
     api.get<{ content: import("./types").PayrollListingRow[]; page: number; size: number; totalElements: number; totalPages: number; first: boolean; last: boolean }>(
       `/payroll/reports/payroll-listing/${runId}/rows`, { params: { page, size, ...(search ? { search } : {}) } }
     ).then((r) => r.data),
-  costReportSummary: (runId: string) =>
-    api.get<CostCodeLine[]>(`/payroll-runs/${runId}/cost-report/summary`).then((r) => r.data),
-  costReportEmployees: (runId: string, page: number, size: number, search?: string) =>
+  costAllocationSummary: (periodId: string, projectId?: string) =>
+    api.get<CostCodeLine[]>("/payroll/reports/cost-allocation/summary", { params: { periodId, ...(projectId ? { projectId } : {}) } }).then((r) => r.data),
+  costAllocationEmployees: (periodId: string, projectId: string | undefined, page: number, size: number, search?: string) =>
     api.get<{ content: EmployeeCostBreakdown[]; page: number; size: number; totalElements: number; totalPages: number; first: boolean; last: boolean }>(
-      `/payroll-runs/${runId}/cost-report/employees`, { params: { page, size, ...(search ? { search } : {}) } }
+      "/payroll/reports/cost-allocation/employees", { params: { periodId, ...(projectId ? { projectId } : {}), page, size, ...(search ? { search } : {}) } }
     ).then((r) => r.data),
 };

@@ -22,6 +22,15 @@ public interface PayrollResultRepository extends JpaRepository<PayrollResult, UU
     /** Paginated + restricted to a specific set of employees (used for search). */
     Page<PayrollResult> findByRunIdAndEmployeeIdIn(UUID runId, Collection<UUID> employeeIds, Pageable pageable);
 
+    /** Combine several runs together — e.g. every project's run for one
+     * period — for reports that need a whole-month view rather than one
+     * project's run at a time. */
+    List<PayrollResult> findByRunIdInOrderByEmployeeId(Collection<UUID> runIds);
+
+    Page<PayrollResult> findByRunIdIn(Collection<UUID> runIds, Pageable pageable);
+
+    Page<PayrollResult> findByRunIdInAndEmployeeIdIn(Collection<UUID> runIds, Collection<UUID> employeeIds, Pageable pageable);
+
     void deleteByRunId(UUID runId);
 
     @Query("""
