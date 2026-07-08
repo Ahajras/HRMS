@@ -106,8 +106,7 @@ public class PayrollCostReportService {
         List<TimesheetDay> allDays = dayRepo.findByTimesheetIdInOrderByTimesheetIdAscWorkDateAsc(timesheetIds);
         Map<UUID, List<TimesheetDay>> daysByTimesheet = allDays.stream()
                 .collect(Collectors.groupingBy(TimesheetDay::getTimesheetId));
-        Map<UUID, List<TimesheetDayCost>> costsByDay = dayCostRepo.findByTimesheetDayIdIn(
-                allDays.stream().map(TimesheetDay::getId).toList()).stream()
+        Map<UUID, List<TimesheetDayCost>> costsByDay = dayCostRepo.findByTimesheetIdIn(timesheetIds).stream()
                 .collect(Collectors.groupingBy(TimesheetDayCost::getTimesheetDayId));
 
         Map<UUID, Project> projectById = new LinkedHashMap<>();
@@ -172,8 +171,7 @@ public class PayrollCostReportService {
         List<TimesheetDay> days = dayRepo.findByTimesheetIdInOrderByTimesheetIdAscWorkDateAsc(timesheetIds);
         Map<UUID, List<TimesheetDay>> daysByTimesheet = days.stream()
                 .collect(Collectors.groupingBy(TimesheetDay::getTimesheetId));
-        Map<UUID, List<TimesheetDayCost>> costsByDay = dayCostRepo.findByTimesheetDayIdIn(
-                days.stream().map(TimesheetDay::getId).toList()).stream()
+        Map<UUID, List<TimesheetDayCost>> costsByDay = dayCostRepo.findByTimesheetIdIn(timesheetIds).stream()
                 .collect(Collectors.groupingBy(TimesheetDayCost::getTimesheetDayId));
 
         Map<UUID, Project> projectById = new LinkedHashMap<>();
@@ -231,8 +229,7 @@ public class PayrollCostReportService {
         List<TimesheetDay> allDays = dayRepo.findByTimesheetIdInOrderByTimesheetIdAscWorkDateAsc(timesheetIds);
         Map<UUID, List<TimesheetDay>> daysByTimesheet = allDays.stream()
                 .collect(Collectors.groupingBy(TimesheetDay::getTimesheetId));
-        Map<UUID, List<TimesheetDayCost>> costsByDay = dayCostRepo.findByTimesheetDayIdIn(
-                allDays.stream().map(TimesheetDay::getId).toList()).stream()
+        Map<UUID, List<TimesheetDayCost>> costsByDay = dayCostRepo.findByTimesheetIdIn(timesheetIds).stream()
                 .collect(Collectors.groupingBy(TimesheetDayCost::getTimesheetDayId));
 
         Map<UUID, Project> projectById = new LinkedHashMap<>();
@@ -295,8 +292,7 @@ public class PayrollCostReportService {
         List<TimesheetDay> days = dayRepo.findByTimesheetIdInOrderByTimesheetIdAscWorkDateAsc(timesheetIds);
         Map<UUID, List<TimesheetDay>> daysByTimesheet = days.stream()
                 .collect(Collectors.groupingBy(TimesheetDay::getTimesheetId));
-        Map<UUID, List<TimesheetDayCost>> costsByDay = dayCostRepo.findByTimesheetDayIdIn(
-                days.stream().map(TimesheetDay::getId).toList()).stream()
+        Map<UUID, List<TimesheetDayCost>> costsByDay = dayCostRepo.findByTimesheetIdIn(timesheetIds).stream()
                 .collect(Collectors.groupingBy(TimesheetDayCost::getTimesheetDayId));
 
         Map<UUID, Project> projectById = new LinkedHashMap<>();
