@@ -35,9 +35,18 @@ public class PayrollRunController {
         this.costReportService = costReportService;
     }
 
-    @GetMapping("/{id}/cost-report")
-    public PayrollCostReportDto costReport(@PathVariable UUID id) {
-        return costReportService.build(id);
+    @GetMapping("/{id}/cost-report/summary")
+    public java.util.List<com.hrms.payroll.dto.CostCodeLineDto> costReportSummary(@PathVariable UUID id) {
+        return costReportService.buildSummary(id);
+    }
+
+    @GetMapping("/{id}/cost-report/employees")
+    public com.hrms.common.web.PageResponse<com.hrms.payroll.dto.EmployeeCostBreakdownDto> costReportEmployees(
+            @PathVariable UUID id,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "25") int size,
+            @RequestParam(required = false) String search) {
+        return costReportService.pagedByEmployee(id, page, size, search);
     }
 
     @GetMapping("/{id}/results")

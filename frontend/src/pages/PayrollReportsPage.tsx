@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import {
   Box,
   Button,
@@ -16,34 +16,58 @@ import {
 import DownloadIcon from "@mui/icons-material/Download";
 import { useQuery } from "@tanstack/react-query";
 import { payrollReportApi, payrollRunApi, periodApi } from "../api/resources";
-import type { CostCodeLine, PayrollCostReport, PayrollListingReport, PayrollListingRow, PayrollRun } from "../api/types";
+import type { EmployeeCostBreakdown, PayrollListingRow, PayrollListingSummary, PayrollRun } from "../api/types";
 
 const money = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const qty = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
+const PAGE_SIZE = 25;
 
 export default function PayrollReportsPage() {
   const [reportType, setReportType] = useState<"payroll-listing" | "cost-allocation">("payroll-listing");
   const [periodId, setPeriodId] = useState("");
   const [runId, setRunId] = useState("");
+
+  // Payroll listing — fast summary, then paginated + searchable rows
+  const [listingPage, setListingPage] = useState(0);
+  const [listingSearch, setListingSearch] = useState("");
+  const [listingSearchInput, setListingSearchInput] = useState("");
+
+  // Cost allocation — fast summary, then paginated + searchable employees
+  const [costPage, setCostPage] = useState(0);
+  const [costSearch, setCostSearch] = useState("");
+  const [costSearchInput, setCostSearchInput] = useState("");
+
   const { data: periods = [] } = useQuery({ queryKey: ["periods"], queryFn: () => periodApi.list() });
   const { data: runs = [] } = useQuery({ queryKey: ["payrollRuns", periodId], queryFn: () => payrollRunApi.list(periodId), enabled: !!periodId });
-  const { data: report } = useQuery({
-    queryKey: ["payrollListing", runId],
-    queryFn: () => payrollReportApi.payrollListing(runId),
+
+  const { data: listingSummary } = useQuery({
+    queryKey: ["payrollListingSummary", runId],
+    queryFn: () => payrollReportApi.payrollListingSummary(runId),
     enabled: !!runId && reportType === "payroll-listing",
   });
-  const { data: costReport } = useQuery({
-    queryKey: ["payrollCostReport", runId],
-    queryFn: () => payrollReportApi.costReport(runId),
+  const { data: listingRowsPage } = useQuery({
+    queryKey: ["payrollListingRows", runId, listingPage, listingSearch],
+    queryFn: () => payrollReportApi.payrollListingRows(runId, listingPage, PAGE_SIZE, listingSearch || undefined),
+    enabled: !!runId && reportType === "payroll-listing",
+  });
+  const listingRows = listingRowsPage?.content ?? [];
+
+  const { data: costSummary } = useQuery({
+    queryKey: ["payrollCostSummary", runId],
+    queryFn: () => payrollReportApi.costReportSummary(runId),
     enabled: !!runId && reportType === "cost-allocation",
   });
+  const { data: costEmployeesPage } = useQuery({
+    queryKey: ["payrollCostEmployees", runId, costPage, costSearch],
+    queryFn: () => payrollReportApi.costReportEmployees(runId, costPage, PAGE_SIZE, costSearch || undefined),
+    enabled: !!runId && reportType === "cost-allocation",
+  });
+  const costEmployeeRows = costEmployeesPage?.content ?? [];
 
   const runLabel = (run: PayrollRun) => {
     const scope = [run.projectId ? "Project" : "All projects", run.payGroup ?? "ALL"].join(" / ");
     return `${scope} - ${run.status}`;
   };
-
-  const rows = useMemo(() => report?.rows ?? [], [report]);
 
   return (
     <Box>
@@ -90,26 +114,47 @@ export default function PayrollReportsPage() {
           <Button
             variant="outlined"
             startIcon={<DownloadIcon />}
-            disabled={reportType === "payroll-listing" ? !report : !costReport}
-            onClick={() => {
-              if (reportType === "payroll-listing" && report) downloadCsv(report);
-              if (reportType === "cost-allocation" && costReport) downloadCostCsv(costReport);
+            disabled={reportType === "payroll-listing" ? !listingSummary : !costSummary}
+            onClick={async () => {
+              if (reportType === "payroll-listing" && listingSummary) {
+                const allRows = await fetchAllPages((page) => payrollReportApi.payrollListingRows(runId, page, 200));
+                downloadListingCsv(runId, listingSummary, allRows);
+              }
+              if (reportType === "cost-allocation" && costSummary) {
+                const allEmployees = await fetchAllPages((page) => payrollReportApi.costReportEmployees(runId, page, 200));
+                downloadCostCsv(runId, allEmployees);
+              }
             }}
           >
-            CSV
+            CSV (full detail)
           </Button>
         </Stack>
       </Paper>
 
-      {reportType === "payroll-listing" && report && (
+      {reportType === "payroll-listing" && listingSummary && (
         <>
           <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} mb={2}>
-            <Total label="Employees" value={report.employeeCount} plain />
-            <Total label="Basic" value={report.totalBasic} />
-            <Total label="Allowances" value={report.totalAllowances} />
-            <Total label="Overtime" value={report.totalOvertime} />
-            <Total label="Deductions" value={report.totalDeductions} />
-            <Total label="Net" value={report.totalNet} />
+            <Total label="Employees" value={listingSummary.employeeCount} plain />
+            <Total label="Basic" value={listingSummary.totalBasic} />
+            <Total label="Allowances" value={listingSummary.totalAllowances} />
+            <Total label="Overtime" value={listingSummary.totalOvertime} />
+            <Total label="Deductions" value={listingSummary.totalDeductions} />
+            <Total label="Net" value={listingSummary.totalNet} />
+          </Stack>
+
+          <Stack direction="row" spacing={1} mb={1.5} alignItems="center">
+            <TextField
+              size="small"
+              label="Search employee (name or number)"
+              value={listingSearchInput}
+              onChange={(e) => setListingSearchInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") { setListingPage(0); setListingSearch(listingSearchInput); } }}
+              sx={{ minWidth: 260 }}
+            />
+            <Button size="small" variant="outlined" onClick={() => { setListingPage(0); setListingSearch(listingSearchInput); }}>Search</Button>
+            {listingSearch && (
+              <Button size="small" onClick={() => { setListingSearchInput(""); setListingSearch(""); setListingPage(0); }}>Clear</Button>
+            )}
           </Stack>
 
           <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "auto" }}>
@@ -133,21 +178,32 @@ export default function PayrollReportsPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {rows.map((row) => <ListingRow key={row.employeeId} row={row} />)}
-                {rows.length === 0 && (
+                {listingRows.map((row) => <ListingRow key={row.employeeId} row={row} />)}
+                {listingRows.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={14}>
-                      <Typography variant="body2" color="text.secondary">No payroll results found for this run.</Typography>
+                      <Typography variant="body2" color="text.secondary">No payroll results match.</Typography>
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </Paper>
+          {listingRowsPage && listingRowsPage.totalPages > 1 && (
+            <Stack direction="row" justifyContent="space-between" alignItems="center" mt={1.5}>
+              <Typography variant="caption" color="text.secondary">
+                Page {listingRowsPage.page + 1} of {listingRowsPage.totalPages} - {listingRowsPage.totalElements} employee(s)
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Button size="small" disabled={listingRowsPage.first} onClick={() => setListingPage((p) => Math.max(p - 1, 0))}>Previous</Button>
+                <Button size="small" disabled={listingRowsPage.last} onClick={() => setListingPage((p) => p + 1)}>Next</Button>
+              </Stack>
+            </Stack>
+          )}
         </>
       )}
 
-      {reportType === "cost-allocation" && costReport && (
+      {reportType === "cost-allocation" && costSummary && (
         <>
           <Typography variant="subtitle1" mb={1}>By cost code (all employees combined)</Typography>
           <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "auto", mb: 3 }}>
@@ -161,7 +217,7 @@ export default function PayrollReportsPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {costReport.byCostCode.map((line, i) => (
+                {costSummary.map((line, i) => (
                   <TableRow key={i} hover>
                     <TableCell>{line.projectCode ?? line.projectName ?? ""}</TableCell>
                     <TableCell>{line.costCodeCode ?? line.costCodeName ?? ""}</TableCell>
@@ -169,7 +225,7 @@ export default function PayrollReportsPage() {
                     <TableCell align="right">{money(line.value)}</TableCell>
                   </TableRow>
                 ))}
-                {costReport.byCostCode.length === 0 && (
+                {costSummary.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={4}>
                       <Typography variant="body2" color="text.secondary">No cost allocation found for this run.</Typography>
@@ -180,7 +236,23 @@ export default function PayrollReportsPage() {
             </Table>
           </Paper>
 
-          <Typography variant="subtitle1" mb={1}>By employee</Typography>
+          <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1} flexWrap="wrap" gap={1}>
+            <Typography variant="subtitle1">By employee</Typography>
+            <Stack direction="row" spacing={1} alignItems="center">
+              <TextField
+                size="small"
+                label="Search employee (name or number)"
+                value={costSearchInput}
+                onChange={(e) => setCostSearchInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") { setCostPage(0); setCostSearch(costSearchInput); } }}
+                sx={{ minWidth: 260 }}
+              />
+              <Button size="small" variant="outlined" onClick={() => { setCostPage(0); setCostSearch(costSearchInput); }}>Search</Button>
+              {costSearch && (
+                <Button size="small" onClick={() => { setCostSearchInput(""); setCostSearch(""); setCostPage(0); }}>Clear</Button>
+              )}
+            </Stack>
+          </Stack>
           <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "auto" }}>
             <Table size="small" stickyHeader>
               <TableHead>
@@ -193,8 +265,8 @@ export default function PayrollReportsPage() {
                 </TableRow>
               </TableHead>
               <TableBody>
-                {costReport.byEmployee.flatMap((emp) =>
-                  emp.lines.map((line, i) => (
+                {costEmployeeRows.flatMap((emp) =>
+                  (emp.lines.length > 0 ? emp.lines : [null]).map((line, i) => (
                     <TableRow key={`${emp.employeeId}-${i}`} hover>
                       <TableCell>
                         {i === 0 && (
@@ -204,23 +276,34 @@ export default function PayrollReportsPage() {
                           </>
                         )}
                       </TableCell>
-                      <TableCell>{line.projectCode ?? line.projectName ?? ""}</TableCell>
-                      <TableCell>{line.costCodeCode ?? line.costCodeName ?? ""}</TableCell>
-                      <TableCell align="right">{qty(line.hours)}</TableCell>
-                      <TableCell align="right">{money(line.value)}</TableCell>
+                      <TableCell>{line?.projectCode ?? line?.projectName ?? ""}</TableCell>
+                      <TableCell>{line?.costCodeCode ?? line?.costCodeName ?? ""}</TableCell>
+                      <TableCell align="right">{line ? qty(line.hours) : ""}</TableCell>
+                      <TableCell align="right">{line ? money(line.value) : ""}</TableCell>
                     </TableRow>
                   ))
                 )}
-                {costReport.byEmployee.every((e) => e.lines.length === 0) && (
+                {costEmployeeRows.length === 0 && (
                   <TableRow>
                     <TableCell colSpan={5}>
-                      <Typography variant="body2" color="text.secondary">No cost allocation found for this run.</Typography>
+                      <Typography variant="body2" color="text.secondary">No employees match.</Typography>
                     </TableCell>
                   </TableRow>
                 )}
               </TableBody>
             </Table>
           </Paper>
+          {costEmployeesPage && costEmployeesPage.totalPages > 1 && (
+            <Stack direction="row" justifyContent="space-between" alignItems="center" mt={1.5}>
+              <Typography variant="caption" color="text.secondary">
+                Page {costEmployeesPage.page + 1} of {costEmployeesPage.totalPages} - {costEmployeesPage.totalElements} employee(s)
+              </Typography>
+              <Stack direction="row" spacing={1}>
+                <Button size="small" disabled={costEmployeesPage.first} onClick={() => setCostPage((p) => Math.max(p - 1, 0))}>Previous</Button>
+                <Button size="small" disabled={costEmployeesPage.last} onClick={() => setCostPage((p) => p + 1)}>Next</Button>
+              </Stack>
+            </Stack>
+          )}
         </>
       )}
     </Box>
@@ -260,9 +343,9 @@ function ListingRow({ row }: { row: PayrollListingRow }) {
   );
 }
 
-function downloadCsv(report: PayrollListingReport) {
+function downloadListingCsv(runId: string, summary: PayrollListingSummary, rows: PayrollListingRow[]) {
   const headers = ["Employee No", "Employee Name", "Project", "Cost Code", "Pay Group", "Days", "Normal Hours", "OT Hours", "Basic", "Allowances", "Overtime", "Deductions", "Gross", "Net", "Status"];
-  const lines = report.rows.map((row) => [
+  const lines = rows.map((row) => [
     row.employeeNumber,
     row.employeeName,
     row.projectCode,
@@ -284,27 +367,46 @@ function downloadCsv(report: PayrollListingReport) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `payroll-listing-${report.periodName ?? report.runId}.csv`;
+  a.download = `payroll-listing-${summary.periodName ?? runId}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }
 
-function downloadCostCsv(report: PayrollCostReport) {
-  const headers = ["Project", "Cost Code", "Hours", "Value"];
-  const lines = report.byCostCode.map((line: CostCodeLine) => [
-    line.projectCode ?? line.projectName ?? "",
-    line.costCodeCode ?? line.costCodeName ?? "",
-    line.hours,
-    line.value,
-  ]);
+function downloadCostCsv(runId: string, employees: EmployeeCostBreakdown[]) {
+  const headers = ["Employee No", "Employee Name", "Project", "Cost Code", "Hours", "Value"];
+  const lines = employees.flatMap((emp) =>
+    (emp.lines.length > 0 ? emp.lines : [null]).map((line) => [
+      emp.employeeNumber ?? "",
+      emp.employeeName ?? "",
+      line?.projectCode ?? line?.projectName ?? "",
+      line?.costCodeCode ?? line?.costCodeName ?? "",
+      line?.hours ?? "",
+      line?.value ?? "",
+    ])
+  );
   const csv = [headers, ...lines].map((line) => line.map(csvCell).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `cost-allocation-${report.runId}.csv`;
+  a.download = `cost-allocation-${runId}.csv`;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+/** Walks every page of a paginated endpoint (large page size) and
+ * concatenates the results — used only for the explicit "download all"
+ * action, never for the on-screen table (which stays paginated). */
+async function fetchAllPages<T>(
+  fetchPage: (page: number) => Promise<{ content: T[]; totalPages: number }>
+): Promise<T[]> {
+  const first = await fetchPage(0);
+  let all = [...first.content];
+  for (let page = 1; page < first.totalPages; page++) {
+    const next = await fetchPage(page);
+    all = all.concat(next.content);
+  }
+  return all;
 }
 
 function csvCell(value: unknown) {

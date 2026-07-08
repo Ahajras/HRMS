@@ -898,6 +898,8 @@ export interface PayrollListingReport {
   rows: PayrollListingRow[];
 }
 
+export type PayrollListingSummary = Omit<PayrollListingReport, "rows">;
+
 export interface PayrollListingRow {
   employeeId: string;
   employeeNumber?: string;

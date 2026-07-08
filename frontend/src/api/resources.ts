@@ -22,6 +22,8 @@ import type {
   PayrollComponent,
   PayrollRun,
   PayrollResult,
+  CostCodeLine,
+  EmployeeCostBreakdown,
   Project,
   CostCode,
   PublicHoliday,
@@ -486,8 +488,16 @@ export const payrollRuleApi = {
 };
 
 export const payrollReportApi = {
-  payrollListing: (runId: string) =>
-    api.get<import("./types").PayrollListingReport>(`/payroll/reports/payroll-listing/${runId}`).then((r) => r.data),
-  costReport: (runId: string) =>
-    api.get<import("./types").PayrollCostReport>(`/payroll-runs/${runId}/cost-report`).then((r) => r.data),
+  payrollListingSummary: (runId: string) =>
+    api.get<import("./types").PayrollListingSummary>(`/payroll/reports/payroll-listing/${runId}/summary`).then((r) => r.data),
+  payrollListingRows: (runId: string, page: number, size: number, search?: string) =>
+    api.get<{ content: import("./types").PayrollListingRow[]; page: number; size: number; totalElements: number; totalPages: number; first: boolean; last: boolean }>(
+      `/payroll/reports/payroll-listing/${runId}/rows`, { params: { page, size, ...(search ? { search } : {}) } }
+    ).then((r) => r.data),
+  costReportSummary: (runId: string) =>
+    api.get<CostCodeLine[]>(`/payroll-runs/${runId}/cost-report/summary`).then((r) => r.data),
+  costReportEmployees: (runId: string, page: number, size: number, search?: string) =>
+    api.get<{ content: EmployeeCostBreakdown[]; page: number; size: number; totalElements: number; totalPages: number; first: boolean; last: boolean }>(
+      `/payroll-runs/${runId}/cost-report/employees`, { params: { page, size, ...(search ? { search } : {}) } }
+    ).then((r) => r.data),
 };

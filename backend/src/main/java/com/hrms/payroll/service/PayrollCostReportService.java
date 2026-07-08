@@ -74,68 +74,105 @@ public class PayrollCostReportService {
         this.employeeRepo = employeeRepo;
     }
 
-    public PayrollCostReportDto build(UUID runId) {
+    /** Fast path — the aggregate "by cost code" table only. Still has to scan
+     * every employee's days once to total correctly, but skips building the
+     * (potentially thousands of rows) per-employee breakdown, so the payload
+     * stays small and this comes back quickly even for large runs. */
+    public List<CostCodeLineDto> buildSummary(UUID runId) {
         PayrollRun run = runRepo.findById(runId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payroll run not found: " + runId));
         PayrollPeriod period = periodRepo.findById(run.getPeriodId())
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + run.getPeriodId()));
         List<PayrollResult> results = resultRepo.findByRunIdOrderByEmployeeId(runId);
 
-        // 1) all employees in one query
-        List<UUID> employeeIds = results.stream().map(PayrollResult::getEmployeeId).toList();
-        Map<UUID, Employee> employeeById = employeeRepo.findAllById(employeeIds).stream()
-                .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
-
-        // 2) all timesheets for the period in one query, mapped by employee
         Map<UUID, Timesheet> timesheetByEmployee = timesheetRepo
                 .findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
                         run.getCompanyId(), period.getPeriodYear(), period.getPeriodMonth())
                 .stream()
                 .collect(Collectors.toMap(Timesheet::getEmployeeId, t -> t, (a, b) -> a));
-
-        // 3) all days for those timesheets in one query
         List<UUID> timesheetIds = timesheetByEmployee.values().stream().map(Timesheet::getId).toList();
         List<TimesheetDay> allDays = dayRepo.findByTimesheetIdInOrderByTimesheetIdAscWorkDateAsc(timesheetIds);
         Map<UUID, List<TimesheetDay>> daysByTimesheet = allDays.stream()
                 .collect(Collectors.groupingBy(TimesheetDay::getTimesheetId));
-
-        // 4) all cost splits for those days in one query
-        List<UUID> dayIds = allDays.stream().map(TimesheetDay::getId).toList();
-        Map<UUID, List<TimesheetDayCost>> costsByDay = dayCostRepo.findByTimesheetDayIdIn(dayIds).stream()
+        Map<UUID, List<TimesheetDayCost>> costsByDay = dayCostRepo.findByTimesheetDayIdIn(
+                allDays.stream().map(TimesheetDay::getId).toList()).stream()
                 .collect(Collectors.groupingBy(TimesheetDayCost::getTimesheetDayId));
 
-        // 5) all referenced projects / cost codes in one query each, for display names
         Map<UUID, Project> projectById = new LinkedHashMap<>();
         Map<UUID, CostCode> costCodeById = new LinkedHashMap<>();
         collectProjectAndCostCodeIds(allDays, costsByDay, projectById, costCodeById);
-        if (!projectById.isEmpty()) {
-            projectRepo.findAllById(projectById.keySet()).forEach(p -> projectById.put(p.getId(), p));
-        }
-        if (!costCodeById.isEmpty()) {
-            costCodeRepo.findAllById(costCodeById.keySet()).forEach(c -> costCodeById.put(c.getId(), c));
-        }
+        hydrate(projectById, costCodeById);
 
-        // 6) build the per-employee breakdown, accumulating the per-cost-code aggregate as we go
         Map<String, CostCodeLineDto> aggregate = new LinkedHashMap<>();
-        List<EmployeeCostBreakdownDto> byEmployee = new ArrayList<>();
         for (PayrollResult result : results) {
             Timesheet ts = timesheetByEmployee.get(result.getEmployeeId());
             List<TimesheetDay> days = ts != null ? daysByTimesheet.getOrDefault(ts.getId(), List.of()) : List.of();
-            Map<String, BigDecimal> hoursByKey = new LinkedHashMap<>();
-            for (TimesheetDay day : days) {
-                List<TimesheetDayCost> costs = costsByDay.get(day.getId());
-                if (costs == null || costs.isEmpty()) {
-                    if (day.getProjectId() != null || day.getCostCodeId() != null) {
-                        String key = key(day.getProjectId(), day.getCostCodeId());
-                        hoursByKey.merge(key, z(day.getWorkedHours()), BigDecimal::add);
-                    }
-                } else {
-                    for (TimesheetDayCost c : costs) {
-                        String key = key(c.getProjectId(), c.getCostCodeId());
-                        hoursByKey.merge(key, z(c.getHours()), BigDecimal::add);
-                    }
-                }
+            Map<String, BigDecimal> hoursByKey = hoursByKey(days, costsByDay);
+            BigDecimal hourlyRate = z(result.getHourlyRate());
+            for (Map.Entry<String, BigDecimal> e : hoursByKey.entrySet()) {
+                UUID[] ids = parseKey(e.getKey());
+                BigDecimal hours = e.getValue();
+                BigDecimal value = hours.multiply(hourlyRate).setScale(2, RoundingMode.HALF_UP);
+                aggregate.computeIfAbsent(e.getKey(), k -> newLine(ids[0], ids[1], projectById, costCodeById))
+                        .add(hours, value);
             }
+        }
+        return new ArrayList<>(aggregate.values());
+    }
+
+    /** Paginated per-employee breakdown — only fetches timesheets/days/costs
+     * for the employees on THIS page (25 by default), not the whole run, so
+     * both the computation and the response stay small regardless of how
+     * many thousands of employees the run covers. */
+    public com.hrms.common.web.PageResponse<EmployeeCostBreakdownDto> pagedByEmployee(
+            UUID runId, int page, int size, String search) {
+        PayrollRun run = runRepo.findById(runId)
+                .orElseThrow(() -> new ResourceNotFoundException("Payroll run not found: " + runId));
+        PayrollPeriod period = periodRepo.findById(run.getPeriodId())
+                .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + run.getPeriodId()));
+        org.springframework.data.domain.Pageable pageable =
+                org.springframework.data.domain.PageRequest.of(Math.max(page, 0), Math.min(Math.max(size, 1), 200));
+        org.springframework.data.domain.Page<PayrollResult> resultsPage;
+        if (search != null && !search.isBlank()) {
+            List<UUID> matchingEmployeeIds = employeeRepo
+                    .search(run.getCompanyId(), search.trim(), org.springframework.data.domain.Pageable.unpaged())
+                    .stream().map(Employee::getId).toList();
+            resultsPage = matchingEmployeeIds.isEmpty()
+                    ? org.springframework.data.domain.Page.empty(pageable)
+                    : resultRepo.findByRunIdAndEmployeeIdIn(runId, matchingEmployeeIds, pageable);
+        } else {
+            resultsPage = resultRepo.findByRunId(runId, pageable);
+        }
+
+        List<PayrollResult> pageResults = resultsPage.getContent();
+        List<UUID> pageEmployeeIds = pageResults.stream().map(PayrollResult::getEmployeeId).toList();
+        Map<UUID, Employee> employeeById = employeeRepo.findAllById(pageEmployeeIds).stream()
+                .collect(Collectors.toMap(Employee::getId, e -> e, (a, b) -> a));
+
+        Map<UUID, Timesheet> timesheetByEmployee = timesheetRepo
+                .findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(
+                        run.getCompanyId(), period.getPeriodYear(), period.getPeriodMonth())
+                .stream()
+                .filter(t -> pageEmployeeIds.contains(t.getEmployeeId()))
+                .collect(Collectors.toMap(Timesheet::getEmployeeId, t -> t, (a, b) -> a));
+        List<UUID> timesheetIds = timesheetByEmployee.values().stream().map(Timesheet::getId).toList();
+        List<TimesheetDay> days = dayRepo.findByTimesheetIdInOrderByTimesheetIdAscWorkDateAsc(timesheetIds);
+        Map<UUID, List<TimesheetDay>> daysByTimesheet = days.stream()
+                .collect(Collectors.groupingBy(TimesheetDay::getTimesheetId));
+        Map<UUID, List<TimesheetDayCost>> costsByDay = dayCostRepo.findByTimesheetDayIdIn(
+                days.stream().map(TimesheetDay::getId).toList()).stream()
+                .collect(Collectors.groupingBy(TimesheetDayCost::getTimesheetDayId));
+
+        Map<UUID, Project> projectById = new LinkedHashMap<>();
+        Map<UUID, CostCode> costCodeById = new LinkedHashMap<>();
+        collectProjectAndCostCodeIds(days, costsByDay, projectById, costCodeById);
+        hydrate(projectById, costCodeById);
+
+        List<EmployeeCostBreakdownDto> dtos = new ArrayList<>();
+        for (PayrollResult result : pageResults) {
+            Timesheet ts = timesheetByEmployee.get(result.getEmployeeId());
+            List<TimesheetDay> empDays = ts != null ? daysByTimesheet.getOrDefault(ts.getId(), List.of()) : List.of();
+            Map<String, BigDecimal> hoursByKey = hoursByKey(empDays, costsByDay);
             BigDecimal hourlyRate = z(result.getHourlyRate());
             List<CostCodeLineDto> lines = new ArrayList<>();
             BigDecimal empHours = BigDecimal.ZERO;
@@ -149,16 +186,43 @@ public class PayrollCostReportService {
                 lines.add(line);
                 empHours = empHours.add(hours);
                 empValue = empValue.add(value);
-                aggregate.computeIfAbsent(e.getKey(), k -> newLine(ids[0], ids[1], projectById, costCodeById))
-                        .add(hours, value);
             }
             Employee emp = employeeById.get(result.getEmployeeId());
             String empNumber = emp != null ? emp.getEmployeeNumber() : "";
             String empName = emp != null ? (nzs(emp.getFirstName()) + " " + nzs(emp.getLastName())).trim() : "";
-            byEmployee.add(new EmployeeCostBreakdownDto(result.getEmployeeId(), empNumber, empName, lines, empHours, empValue));
+            dtos.add(new EmployeeCostBreakdownDto(result.getEmployeeId(), empNumber, empName, lines, empHours, empValue));
         }
 
-        return new PayrollCostReportDto(runId, byEmployee, new ArrayList<>(aggregate.values()));
+        return new com.hrms.common.web.PageResponse<>(dtos, resultsPage.getNumber(), resultsPage.getSize(),
+                resultsPage.getTotalElements(), resultsPage.getTotalPages(), resultsPage.isFirst(), resultsPage.isLast());
+    }
+
+    private Map<String, BigDecimal> hoursByKey(List<TimesheetDay> days, Map<UUID, List<TimesheetDayCost>> costsByDay) {
+        Map<String, BigDecimal> hoursByKey = new LinkedHashMap<>();
+        for (TimesheetDay day : days) {
+            List<TimesheetDayCost> costs = costsByDay.get(day.getId());
+            if (costs == null || costs.isEmpty()) {
+                if (day.getProjectId() != null || day.getCostCodeId() != null) {
+                    String key = key(day.getProjectId(), day.getCostCodeId());
+                    hoursByKey.merge(key, z(day.getWorkedHours()), BigDecimal::add);
+                }
+            } else {
+                for (TimesheetDayCost c : costs) {
+                    String key = key(c.getProjectId(), c.getCostCodeId());
+                    hoursByKey.merge(key, z(c.getHours()), BigDecimal::add);
+                }
+            }
+        }
+        return hoursByKey;
+    }
+
+    private void hydrate(Map<UUID, Project> projectById, Map<UUID, CostCode> costCodeById) {
+        if (!projectById.isEmpty()) {
+            projectRepo.findAllById(projectById.keySet()).forEach(p -> projectById.put(p.getId(), p));
+        }
+        if (!costCodeById.isEmpty()) {
+            costCodeRepo.findAllById(costCodeById.keySet()).forEach(c -> costCodeById.put(c.getId(), c));
+        }
     }
 
     private void collectProjectAndCostCodeIds(List<TimesheetDay> days, Map<UUID, List<TimesheetDayCost>> costsByDay,
