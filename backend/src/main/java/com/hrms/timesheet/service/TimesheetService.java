@@ -437,6 +437,11 @@ public class TimesheetService {
         int total = timesheetRepo.countApprovedForProjectLock(companyId, period.getPeriodYear(),
                 period.getPeriodMonth(), projectId, payGroup);
         progress.onProgress(0, total);
+        // Day Zero: tag any day past the configured cutoff as "estimated"
+        // BEFORE the lock flips status away from APPROVED (this query
+        // matches on status = 'APPROVED'). A rule with no cutoff configured
+        // is a no-op here — nothing gets tagged.
+        dayRepo.markEstimatedForProjectLock(companyId, period.getPeriodYear(), period.getPeriodMonth(), projectId, payGroup);
         int done = timesheetRepo.lockApprovedForProject(companyId, period.getPeriodYear(),
                 period.getPeriodMonth(), projectId, payGroup, Instant.now());
         progress.onProgress(done, total);
