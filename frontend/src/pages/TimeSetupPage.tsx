@@ -141,7 +141,7 @@ function TimeTypesSection() {
               Initialize default rules
             </Button>
             <Typography variant="caption" color="text.secondary" sx={{ alignSelf: "center" }}>
-              Adds missing payroll components as DEFAULT, so current calculation behavior is preserved until you change a row.
+              Adds missing payroll components as IGNORE. Review each row and change required components to PAY or DEDUCT before payroll calculation.
             </Typography>
           </Stack>
           <Grid container spacing={1.5}>
@@ -163,7 +163,6 @@ function TimeTypesSection() {
             </Grid>
             <Grid item xs={6} sm={2}>
               <TextField select fullWidth size="small" label="Action" value={ruleForm.action} onChange={(e) => setRuleForm({ ...ruleForm, action: e.target.value })}>
-                <MenuItem value="DEFAULT">Default behavior</MenuItem>
                 <MenuItem value="PAY">Pay</MenuItem>
                 <MenuItem value="DEDUCT">Deduct</MenuItem>
                 <MenuItem value="SUSPEND">Suspend (stop)</MenuItem>

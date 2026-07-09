@@ -79,7 +79,7 @@ public class TimeTypePayrollRuleService {
             entity.setCompanyId(companyId);
             entity.setTimeTypeId(timeTypeId);
             entity.setPayrollComponentId(component.getId());
-            entity.setAction("DEFAULT");
+            entity.setAction("IGNORE");
             entity.setPercent(new java.math.BigDecimal("100.00"));
             entity.setBasis("HOURS");
             entity.setThresholdDays(0);
@@ -88,7 +88,7 @@ public class TimeTypePayrollRuleService {
             entity.setAffectsOvertime(false);
             entity.setProcessSeparately(false);
             entity.setSortOrder(component.getPriority());
-            entity.setRemarks("Initialized default rule; follows standard time type behavior until changed.");
+            entity.setRemarks("Initialized rule; review and change to PAY or DEDUCT when this time type should affect the component.");
             repository.save(entity);
         }
         return findByTimeType(timeTypeId);

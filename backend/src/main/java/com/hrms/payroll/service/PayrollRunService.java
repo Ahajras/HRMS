@@ -772,9 +772,13 @@ public class PayrollRunService {
             TimeType type = day.getTimeTypeId() != null ? policy.types().get(day.getTimeTypeId()) : null;
             Map<UUID, TimeTypePayrollRule> byComponent = day.getTimeTypeId() != null ? policy.rulesByTimeType().get(day.getTimeTypeId()) : null;
             TimeTypePayrollRule explicit = byComponent != null ? byComponent.get(item.getPayComponentId()) : null;
-            DayEffect effect = explicit != null
-                    ? explicitEffect(explicit, day, type, rule, policy.shiftHours())
-                    : legacyEffect(type, day, rule, policy.shiftHours());
+            if (day.getTimeTypeId() != null && explicit == null) {
+                throw new BusinessRuleException("payroll.time_type_rule.missing",
+                        "Payroll setup is incomplete. Configure payroll rules for time type "
+                                + timeTypeLabel(type, day.getTimeTypeId()) + " and pay component "
+                                + component.getCode() + " - " + component.getName() + ".");
+            }
+            DayEffect effect = explicitEffect(explicit, day, type, rule, policy.shiftHours());
             if (!effect.hasAny()) {
                 continue;
             }
@@ -805,7 +809,7 @@ public class PayrollRunService {
     }
 
     private DayEffect explicitEffect(TimeTypePayrollRule explicit, TimesheetDay day, TimeType type, PayrollRule rule, BigDecimal shiftHours) {
-        if ("DEFAULT".equalsIgnoreCase(explicit.getAction())) {
+        if (explicit == null) {
             return legacyEffect(type, day, rule, shiftHours);
         }
         BigDecimal baseQuantity = quantityForBasis(day, explicit.getBasis(), shiftHours);
@@ -828,6 +832,13 @@ public class PayrollRunService {
             return new DayEffect(scaled, BigDecimal.ZERO, explicit.getBasis());
         }
         return DayEffect.none();
+    }
+
+    private static String timeTypeLabel(TimeType type, UUID timeTypeId) {
+        if (type == null) {
+            return String.valueOf(timeTypeId);
+        }
+        return type.getCode() + " - " + type.getName();
     }
 
     private DayEffect legacyEffect(TimeType type, TimesheetDay day, PayrollRule rule, BigDecimal shiftHours) {
