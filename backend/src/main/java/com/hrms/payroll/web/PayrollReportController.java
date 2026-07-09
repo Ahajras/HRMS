@@ -2,6 +2,7 @@ package com.hrms.payroll.web;
 
 import com.hrms.payroll.dto.CostCodeLineDto;
 import com.hrms.payroll.dto.EmployeeCostBreakdownDto;
+import com.hrms.payroll.dto.PayrollCostControlReportDto;
 import com.hrms.payroll.dto.PayrollListingReportDto;
 import com.hrms.payroll.dto.PayrollListingSummaryDto;
 import com.hrms.payroll.service.PayrollCostReportService;
@@ -59,5 +60,12 @@ public class PayrollReportController {
             @RequestParam(defaultValue = "25") int size,
             @RequestParam(required = false) String search) {
         return costReportService.pagedByEmployeeForPeriod(periodId, projectId, page, size, search);
+    }
+
+    @GetMapping("/cost-control")
+    public PayrollCostControlReportDto costControl(
+            @RequestParam UUID periodId,
+            @RequestParam(required = false) UUID projectId) {
+        return costReportService.buildCostControl(periodId, projectId);
     }
 }

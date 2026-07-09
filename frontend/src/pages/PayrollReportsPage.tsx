@@ -16,14 +16,14 @@ import {
 import DownloadIcon from "@mui/icons-material/Download";
 import { useQuery } from "@tanstack/react-query";
 import { payrollReportApi, payrollRunApi, periodApi, projectApi } from "../api/resources";
-import type { EmployeeCostBreakdown, PayrollListingRow, PayrollListingSummary, PayrollRun } from "../api/types";
+import type { EmployeeCostBreakdown, PayrollCostControlLine, PayrollCostControlReport, PayrollListingRow, PayrollListingSummary, PayrollRun } from "../api/types";
 
 const money = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const qty = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 const PAGE_SIZE = 25;
 
 export default function PayrollReportsPage() {
-  const [reportType, setReportType] = useState<"payroll-listing" | "cost-allocation">("payroll-listing");
+  const [reportType, setReportType] = useState<"payroll-listing" | "cost-allocation" | "cost-control">("payroll-listing");
   const [periodId, setPeriodId] = useState("");
   const [runId, setRunId] = useState("");
   const [costProjectId, setCostProjectId] = useState(""); // "" = every project's run for the period
@@ -68,6 +68,11 @@ export default function PayrollReportsPage() {
     enabled: !!periodId && reportType === "cost-allocation",
   });
   const costEmployeeRows = costEmployeesPage?.content ?? [];
+  const { data: costControl } = useQuery({
+    queryKey: ["payrollCostControl", periodId, costProjectId],
+    queryFn: () => payrollReportApi.costControl(periodId, costProjectId || undefined),
+    enabled: !!periodId && reportType === "cost-control",
+  });
 
   const runLabel = (run: PayrollRun) => {
     const scope = [run.projectId ? "Project" : "All projects", run.payGroup ?? "ALL"].join(" / ");
@@ -84,11 +89,12 @@ export default function PayrollReportsPage() {
             size="small"
             label="Report"
             value={reportType}
-            onChange={(e) => setReportType(e.target.value as "payroll-listing" | "cost-allocation")}
+            onChange={(e) => setReportType(e.target.value as "payroll-listing" | "cost-allocation" | "cost-control")}
             sx={{ minWidth: 220 }}
           >
             <MenuItem value="payroll-listing">Payroll Listing</MenuItem>
             <MenuItem value="cost-allocation">Cost Allocation</MenuItem>
+            <MenuItem value="cost-control">Cost / Control</MenuItem>
           </TextField>
           <TextField
             select
@@ -134,7 +140,7 @@ export default function PayrollReportsPage() {
           <Button
             variant="outlined"
             startIcon={<DownloadIcon />}
-            disabled={reportType === "payroll-listing" ? !listingSummary : !costSummary}
+            disabled={reportType === "payroll-listing" ? !listingSummary : reportType === "cost-allocation" ? !costSummary : !costControl}
             onClick={async () => {
               if (reportType === "payroll-listing" && listingSummary) {
                 const allRows = await fetchAllPages((page) => payrollReportApi.payrollListingRows(runId, page, 200));
@@ -143,6 +149,9 @@ export default function PayrollReportsPage() {
               if (reportType === "cost-allocation" && costSummary) {
                 const allEmployees = await fetchAllPages((page) => payrollReportApi.costAllocationEmployees(periodId, costProjectId || undefined, page, 200));
                 downloadCostCsv(periodId, allEmployees);
+              }
+              if (reportType === "cost-control" && costControl) {
+                downloadCostControlCsv(periodId, costControl);
               }
             }}
           >
@@ -326,6 +335,10 @@ export default function PayrollReportsPage() {
           )}
         </>
       )}
+
+      {reportType === "cost-control" && costControl && (
+        <CostControlView report={costControl} />
+      )}
     </Box>
   );
 }
@@ -335,6 +348,65 @@ function Total({ label, value, plain = false }: { label: string; value: number; 
     <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, minWidth: 150 }}>
       <Typography variant="caption" color="text.secondary">{label}</Typography>
       <Typography fontWeight={700}>{plain ? value : money(value)}</Typography>
+    </Paper>
+  );
+}
+
+function CostControlView({ report }: { report: PayrollCostControlReport }) {
+  return (
+    <>
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} mb={2}>
+        <Total label="Debit total" value={report.debitTotal} />
+        <Total label="Credit total" value={report.creditTotal} />
+        <Total label="Difference" value={report.difference} />
+      </Stack>
+      <Stack direction={{ xs: "column", lg: "row" }} spacing={2} alignItems="flex-start">
+        <CostControlTable title="Debit" rows={report.debitLines} total={report.debitTotal} />
+        <CostControlTable title="Credit" rows={report.creditLines} total={report.creditTotal} />
+      </Stack>
+    </>
+  );
+}
+
+function CostControlTable({ title, rows, total }: { title: string; rows: PayrollCostControlLine[]; total: number }) {
+  return (
+    <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "auto", width: "100%" }}>
+      <Box sx={{ p: 1.5, borderBottom: "1px solid", borderColor: "divider" }}>
+        <Typography variant="subtitle1" fontWeight={800}>{title}</Typography>
+      </Box>
+      <Table size="small" stickyHeader>
+        <TableHead>
+          <TableRow>
+            <TableCell>Account</TableCell>
+            <TableCell>Description</TableCell>
+            <TableCell>Project</TableCell>
+            <TableCell>Source</TableCell>
+            <TableCell align="right">Amount</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((row, i) => (
+            <TableRow key={`${title}-${i}`} hover>
+              <TableCell>{row.accountCode ?? ""}</TableCell>
+              <TableCell>{row.description}</TableCell>
+              <TableCell>{row.projectCode ?? row.projectName ?? ""}</TableCell>
+              <TableCell>{row.source}</TableCell>
+              <TableCell align="right">{money(row.amount)}</TableCell>
+            </TableRow>
+          ))}
+          {rows.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={5}>
+                <Typography variant="body2" color="text.secondary">No lines.</Typography>
+              </TableCell>
+            </TableRow>
+          )}
+          <TableRow>
+            <TableCell colSpan={4}><Typography fontWeight={800}>Total</Typography></TableCell>
+            <TableCell align="right"><Typography fontWeight={800}>{money(total)}</Typography></TableCell>
+          </TableRow>
+        </TableBody>
+      </Table>
     </Paper>
   );
 }
@@ -410,6 +482,29 @@ function downloadCostCsv(periodId: string, employees: EmployeeCostBreakdown[]) {
   const a = document.createElement("a");
   a.href = url;
   a.download = `cost-allocation-${periodId}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function downloadCostControlCsv(periodId: string, report: PayrollCostControlReport) {
+  const headers = ["Side", "Account", "Description", "Project", "Source", "Amount"];
+  const lines = [...report.debitLines, ...report.creditLines].map((line) => [
+    line.side,
+    line.accountCode ?? "",
+    line.description,
+    line.projectCode ?? line.projectName ?? "",
+    line.source ?? "",
+    line.amount,
+  ]);
+  lines.push(["DEBIT TOTAL", "", "", "", "", report.debitTotal]);
+  lines.push(["CREDIT TOTAL", "", "", "", "", report.creditTotal]);
+  lines.push(["DIFFERENCE", "", "", "", "", report.difference]);
+  const csv = [headers, ...lines].map((line) => line.map(csvCell).join(",")).join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `cost-control-${periodId}.csv`;
   a.click();
   URL.revokeObjectURL(url);
 }

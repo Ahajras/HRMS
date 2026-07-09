@@ -525,6 +525,10 @@ export const payrollReportApi = {
     api.get<{ content: EmployeeCostBreakdown[]; page: number; size: number; totalElements: number; totalPages: number; first: boolean; last: boolean }>(
       "/payroll/reports/cost-allocation/employees", { params: { periodId, ...(projectId ? { projectId } : {}), page, size, ...(search ? { search } : {}) } }
     ).then((r) => r.data),
+  costControl: (periodId: string, projectId?: string) =>
+    api.get<import("./types").PayrollCostControlReport>("/payroll/reports/cost-control", {
+      params: { periodId, ...(projectId ? { projectId } : {}) },
+    }).then((r) => r.data),
 };
 
 export const dayZeroApi = {

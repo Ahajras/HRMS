@@ -5,11 +5,14 @@ import com.hrms.employee.domain.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.payroll.domain.PayrollResult;
 import com.hrms.payroll.domain.PayrollRun;
+import com.hrms.payroll.domain.ProvisionRun;
 import com.hrms.payroll.dto.CostCodeLineDto;
 import com.hrms.payroll.dto.EmployeeCostBreakdownDto;
+import com.hrms.payroll.dto.PayrollCostControlReportDto;
 import com.hrms.payroll.dto.PayrollCostReportDto;
 import com.hrms.payroll.repository.PayrollResultRepository;
 import com.hrms.payroll.repository.PayrollRunRepository;
+import com.hrms.payroll.repository.ProvisionRunRepository;
 import com.hrms.project.domain.CostCode;
 import com.hrms.project.domain.Project;
 import com.hrms.project.repository.CostCodeRepository;
@@ -57,12 +60,14 @@ public class PayrollCostReportService {
     private final ProjectRepository projectRepo;
     private final CostCodeRepository costCodeRepo;
     private final EmployeeRepository employeeRepo;
+    private final ProvisionRunRepository provisionRunRepo;
 
     public PayrollCostReportService(PayrollRunRepository runRepo, PayrollResultRepository resultRepo,
                                     PayrollPeriodRepository periodRepo, TimesheetRepository timesheetRepo,
                                     TimesheetDayRepository dayRepo, TimesheetDayCostRepository dayCostRepo,
                                     ProjectRepository projectRepo, CostCodeRepository costCodeRepo,
-                                    EmployeeRepository employeeRepo) {
+                                    EmployeeRepository employeeRepo,
+                                    ProvisionRunRepository provisionRunRepo) {
         this.runRepo = runRepo;
         this.resultRepo = resultRepo;
         this.periodRepo = periodRepo;
@@ -72,6 +77,7 @@ public class PayrollCostReportService {
         this.projectRepo = projectRepo;
         this.costCodeRepo = costCodeRepo;
         this.employeeRepo = employeeRepo;
+        this.provisionRunRepo = provisionRunRepo;
     }
 
     /** Resolves which payroll runs belong to a period (optionally scoped to
@@ -206,6 +212,82 @@ public class PayrollCostReportService {
 
         return new com.hrms.common.web.PageResponse<>(dtos, resultsPage.getNumber(), resultsPage.getSize(),
                 resultsPage.getTotalElements(), resultsPage.getTotalPages(), resultsPage.isFirst(), resultsPage.isLast());
+    }
+
+    public PayrollCostControlReportDto buildCostControl(UUID periodId, UUID projectId) {
+        UUID companyId = com.hrms.common.tenant.TenantContext.requireCompanyId();
+        PayrollPeriod period = periodRepo.findById(periodId)
+                .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
+        List<PayrollRun> runs = runRepo.findByCompanyIdAndPeriodIdOrderByCreatedAtDesc(companyId, periodId).stream()
+                .filter(r -> projectId == null || projectId.equals(r.getProjectId()))
+                .toList();
+        List<UUID> runIds = runs.stream().map(PayrollRun::getId).toList();
+        List<PayrollResult> results = runIds.isEmpty() ? List.of() : resultRepo.findByRunIdInOrderByEmployeeId(runIds);
+
+        Map<UUID, Project> projectById = new LinkedHashMap<>();
+        runs.stream().map(PayrollRun::getProjectId).filter(java.util.Objects::nonNull)
+                .forEach(id -> projectById.putIfAbsent(id, null));
+        if (!projectById.isEmpty()) {
+            projectRepo.findAllById(projectById.keySet()).forEach(p -> projectById.put(p.getId(), p));
+        }
+
+        Map<UUID, UUID> projectByRun = new LinkedHashMap<>();
+        for (PayrollRun run : runs) {
+            projectByRun.put(run.getId(), run.getProjectId());
+        }
+        Map<String, PayrollCostControlReportDto.Line> debitPayroll = new LinkedHashMap<>();
+        BigDecimal netPay = BigDecimal.ZERO;
+        BigDecimal deductions = BigDecimal.ZERO;
+        for (PayrollResult result : results) {
+            UUID runProjectId = projectByRun.get(result.getRunId());
+            String key = runProjectId == null ? "ALL" : runProjectId.toString();
+            PayrollCostControlReportDto.Line line = debitPayroll.computeIfAbsent(key,
+                    k -> line("DEBIT", "", "PAYROLL COST", runProjectId, projectById, "PAYROLL", BigDecimal.ZERO));
+            line.setAmount(z(line.getAmount()).add(z(result.getGross())));
+            netPay = netPay.add(z(result.getNet()));
+            deductions = deductions.add(z(result.getTotalDeductions()));
+        }
+
+        List<ProvisionRun> provisionRuns = provisionRunRepo
+                .findByCompanyIdAndPeriodIdAndStatusInOrderByCreatedAtDesc(companyId, periodId, List.of("CALCULATED", "APPROVED", "LOCKED"))
+                .stream()
+                .filter(r -> projectId == null || projectId.equals(r.getProjectId()))
+                .toList();
+
+        Map<String, BigDecimal> provisionByType = new LinkedHashMap<>();
+        for (ProvisionRun run : provisionRuns) {
+            String type = run.getProvisionType() == null ? "OTHER" : run.getProvisionType().toUpperCase();
+            provisionByType.merge(type, z(run.getTotalProvisionAmount()), BigDecimal::add);
+        }
+
+        PayrollCostControlReportDto report = new PayrollCostControlReportDto();
+        report.setPeriodId(period.getId());
+        report.setPeriodName(period.getName());
+        report.setPeriodStartDate(period.getStartDate());
+        report.setPeriodEndDate(period.getEndDate());
+        report.setProjectId(projectId);
+
+        List<PayrollCostControlReportDto.Line> debit = new ArrayList<>();
+        debit.addAll(debitPayroll.values());
+        provisionByType.forEach((type, amount) ->
+                debit.add(line("DEBIT", "", provisionExpenseDescription(type), null, projectById, "PROVISION", amount)));
+
+        List<PayrollCostControlReportDto.Line> credit = new ArrayList<>();
+        credit.add(line("CREDIT", "", "NET PAY", null, projectById, "PAYROLL", netPay));
+        if (deductions.compareTo(BigDecimal.ZERO) != 0) {
+            credit.add(line("CREDIT", "", "P/A - DEDUCTIONS", null, projectById, "PAYROLL", deductions));
+        }
+        provisionByType.forEach((type, amount) ->
+                credit.add(line("CREDIT", "", provisionLiabilityDescription(type), null, projectById, "PROVISION", amount)));
+
+        report.setDebitLines(roundLines(debit));
+        report.setCreditLines(roundLines(credit));
+        BigDecimal debitTotal = sum(report.getDebitLines());
+        BigDecimal creditTotal = sum(report.getCreditLines());
+        report.setDebitTotal(debitTotal);
+        report.setCreditTotal(creditTotal);
+        report.setDifference(debitTotal.subtract(creditTotal).setScale(2, RoundingMode.HALF_UP));
+        return report;
     }
 
     /** Fast path — the aggregate "by cost code" table only. Still has to scan
@@ -391,6 +473,53 @@ public class PayrollCostReportService {
         return new UUID[]{
                 "null".equals(parts[0]) ? null : UUID.fromString(parts[0]),
                 "null".equals(parts[1]) ? null : UUID.fromString(parts[1])
+        };
+    }
+
+    private PayrollCostControlReportDto.Line line(String side, String accountCode, String description,
+                                                  UUID projectId, Map<UUID, Project> projectById,
+                                                  String source, BigDecimal amount) {
+        Project p = projectId == null ? null : projectById.get(projectId);
+        return new PayrollCostControlReportDto.Line(
+                side,
+                accountCode,
+                description,
+                projectId,
+                p != null ? p.getCode() : null,
+                p != null ? p.getName() : null,
+                source,
+                z(amount));
+    }
+
+    private List<PayrollCostControlReportDto.Line> roundLines(List<PayrollCostControlReportDto.Line> lines) {
+        for (PayrollCostControlReportDto.Line line : lines) {
+            line.setAmount(z(line.getAmount()).setScale(2, RoundingMode.HALF_UP));
+        }
+        return lines;
+    }
+
+    private BigDecimal sum(List<PayrollCostControlReportDto.Line> lines) {
+        return lines.stream()
+                .map(PayrollCostControlReportDto.Line::getAmount)
+                .map(PayrollCostReportService::z)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String provisionExpenseDescription(String type) {
+        return "PROV. " + provisionLabel(type) + " EXPENSE";
+    }
+
+    private String provisionLiabilityDescription(String type) {
+        return "PROV. " + provisionLabel(type);
+    }
+
+    private String provisionLabel(String type) {
+        return switch (type) {
+            case "LEAVE" -> "A/L";
+            case "EOS" -> "EOS";
+            case "TICKET" -> "TICKET";
+            default -> type;
         };
     }
 

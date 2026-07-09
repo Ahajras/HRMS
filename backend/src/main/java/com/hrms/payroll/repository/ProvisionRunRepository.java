@@ -11,4 +11,6 @@ public interface ProvisionRunRepository extends JpaRepository<ProvisionRun, UUID
     List<ProvisionRun> findByCompanyIdOrderByCreatedAtDesc(UUID companyId);
 
     List<ProvisionRun> findByCompanyIdAndPeriodIdOrderByCreatedAtDesc(UUID companyId, UUID periodId);
+
+    List<ProvisionRun> findByCompanyIdAndPeriodIdAndStatusInOrderByCreatedAtDesc(UUID companyId, UUID periodId, java.util.Collection<String> statuses);
 }

@@ -1014,6 +1014,30 @@ export interface PayrollCostReport {
   byCostCode: CostCodeLine[];
 }
 
+export interface PayrollCostControlLine {
+  side: "DEBIT" | "CREDIT";
+  accountCode?: string;
+  description: string;
+  projectId?: string;
+  projectCode?: string;
+  projectName?: string;
+  source?: string;
+  amount: number;
+}
+
+export interface PayrollCostControlReport {
+  periodId: string;
+  periodName?: string;
+  periodStartDate?: string;
+  periodEndDate?: string;
+  projectId?: string;
+  debitTotal: number;
+  creditTotal: number;
+  difference: number;
+  debitLines: PayrollCostControlLine[];
+  creditLines: PayrollCostControlLine[];
+}
+
 export interface DayZeroDay {
   id: string;
   workDate: string;
