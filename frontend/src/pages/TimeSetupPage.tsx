@@ -141,7 +141,7 @@ function TimeTypesSection() {
               Initialize default rules
             </Button>
             <Typography variant="caption" color="text.secondary" sx={{ alignSelf: "center" }}>
-              Adds missing payroll components as IGNORE. Review each row and change required components to PAY or DEDUCT before payroll calculation.
+              Adds missing payroll components as PAY, except U is initialized as DEDUCT. Review and adjust special cases before payroll calculation.
             </Typography>
           </Stack>
           <Grid container spacing={1.5}>

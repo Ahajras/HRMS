@@ -65,7 +65,8 @@ public class TimeTypePayrollRuleService {
 
     public List<TimeTypePayrollRuleDto> initializeDefaults(UUID timeTypeId) {
         UUID companyId = TenantContext.requireCompanyId();
-        requireTimeType(companyId, timeTypeId);
+        TimeType timeType = requireTimeType(companyId, timeTypeId);
+        String defaultAction = "U".equalsIgnoreCase(timeType.getCode()) ? "DEDUCT" : "PAY";
         for (PayrollComponent component : payrollComponentRepository.findByCompanyIdOrderByPriority(companyId)) {
             if (!"ACTIVE".equalsIgnoreCase(component.getStatus())) {
                 continue;
@@ -79,7 +80,7 @@ public class TimeTypePayrollRuleService {
             entity.setCompanyId(companyId);
             entity.setTimeTypeId(timeTypeId);
             entity.setPayrollComponentId(component.getId());
-            entity.setAction("IGNORE");
+            entity.setAction(defaultAction);
             entity.setPercent(new java.math.BigDecimal("100.00"));
             entity.setBasis("HOURS");
             entity.setThresholdDays(0);
@@ -88,7 +89,7 @@ public class TimeTypePayrollRuleService {
             entity.setAffectsOvertime(false);
             entity.setProcessSeparately(false);
             entity.setSortOrder(component.getPriority());
-            entity.setRemarks("Initialized rule; review and change to PAY or DEDUCT when this time type should affect the component.");
+            entity.setRemarks("Initialized rule; review and adjust this component if the time type should behave differently.");
             repository.save(entity);
         }
         return findByTimeType(timeTypeId);
@@ -100,12 +101,13 @@ public class TimeTypePayrollRuleService {
         repository.deleteByCompanyIdAndTimeTypeIdAndPayrollComponentId(companyId, timeTypeId, componentId);
     }
 
-    private void requireTimeType(UUID companyId, UUID timeTypeId) {
+    private TimeType requireTimeType(UUID companyId, UUID timeTypeId) {
         TimeType timeType = timeTypeRepository.findById(timeTypeId)
                 .orElseThrow(() -> new ResourceNotFoundException("Time type not found: " + timeTypeId));
         if (!companyId.equals(timeType.getCompanyId())) {
             throw new ResourceNotFoundException("Time type not found: " + timeTypeId);
         }
+        return timeType;
     }
 
     private PayrollComponent requireComponent(UUID companyId, UUID componentId) {
