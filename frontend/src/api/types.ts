@@ -823,6 +823,7 @@ export interface PayrollRule {
   id?: string;
   payGroup: string;
   payItemBasis: string;
+  quantitySource?: string;
   otMultiplier: number;
   restDayOtMultiplier: number;
   standardHoursPerDay: number;

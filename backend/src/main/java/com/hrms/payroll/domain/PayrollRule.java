@@ -24,6 +24,9 @@ public class PayrollRule extends AuditableEntity {
     @Column(name = "pay_item_basis", nullable = false, length = 30)
     private String payItemBasis = "FIXED_AMOUNT";
 
+    @Column(name = "quantity_source", nullable = false, length = 30)
+    private String quantitySource = "PAYABLE_SCHEDULE";
+
     @Column(name = "ot_multiplier", nullable = false, precision = 8, scale = 4)
     private BigDecimal otMultiplier = new BigDecimal("1.2500");
 
@@ -59,6 +62,8 @@ public class PayrollRule extends AuditableEntity {
     public void setPayGroup(String payGroup) { this.payGroup = payGroup; }
     public String getPayItemBasis() { return payItemBasis; }
     public void setPayItemBasis(String payItemBasis) { this.payItemBasis = payItemBasis; }
+    public String getQuantitySource() { return quantitySource; }
+    public void setQuantitySource(String quantitySource) { this.quantitySource = quantitySource; }
     public BigDecimal getOtMultiplier() { return otMultiplier; }
     public void setOtMultiplier(BigDecimal otMultiplier) { this.otMultiplier = otMultiplier; }
     public BigDecimal getStandardHoursPerDay() { return standardHoursPerDay; }

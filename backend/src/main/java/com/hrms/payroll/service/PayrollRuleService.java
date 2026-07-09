@@ -46,6 +46,7 @@ public class PayrollRuleService {
         rule.setPayGroup(group);
         rule.setProjectId(dto.getProjectId());
         rule.setPayItemBasis(payItemBasis);
+        rule.setQuantitySource(normalizeQuantitySource(dto.getQuantitySource(), payItemBasis));
         rule.setOtMultiplier(dto.getOtMultiplier() != null ? dto.getOtMultiplier() : new java.math.BigDecimal("1.2500"));
         rule.setRestDayOtMultiplier(dto.getRestDayOtMultiplier() != null ? dto.getRestDayOtMultiplier() : new java.math.BigDecimal("1.5000"));
         rule.setStandardHoursPerDay(dto.getStandardHoursPerDay() != null ? dto.getStandardHoursPerDay() : new java.math.BigDecimal("8.00"));
@@ -74,6 +75,7 @@ public class PayrollRuleService {
             throw new ResourceNotFoundException("Payroll rule not found: " + id);
         }
         rule.setPayItemBasis(dto.getPayItemBasis());
+        rule.setQuantitySource(normalizeQuantitySource(dto.getQuantitySource(), dto.getPayItemBasis()));
         rule.setOtMultiplier(dto.getOtMultiplier());
         rule.setRestDayOtMultiplier(dto.getRestDayOtMultiplier());
         rule.setStandardHoursPerDay(dto.getStandardHoursPerDay());
@@ -111,6 +113,16 @@ public class PayrollRuleService {
         }
     }
 
+    private static String normalizeQuantitySource(String value, String payItemBasis) {
+        if (value != null && !value.isBlank()) {
+            String normalized = value.trim().toUpperCase();
+            if ("ACTUAL_WORKED".equals(normalized) || "PLANNED_SHIFT".equals(normalized) || "PAYABLE_SCHEDULE".equals(normalized)) {
+                return normalized;
+            }
+        }
+        return "DAILY_RATE".equalsIgnoreCase(payItemBasis) ? "ACTUAL_WORKED" : "PAYABLE_SCHEDULE";
+    }
+
     private void ensureDefaultCategoryRules(UUID companyId, UUID payrollRuleId) {
         ensureDefaultCategoryRule(companyId, payrollRuleId, "SALARY", "FULL_MONTH");
         ensureDefaultCategoryRule(companyId, payrollRuleId, "ALLOWANCE", "ACTUAL_PAYABLE");
@@ -135,6 +147,7 @@ public class PayrollRuleService {
         dto.setId(rule.getId());
         dto.setPayGroup(rule.getPayGroup());
         dto.setPayItemBasis(rule.getPayItemBasis());
+        dto.setQuantitySource(rule.getQuantitySource());
         dto.setOtMultiplier(rule.getOtMultiplier());
         dto.setRestDayOtMultiplier(rule.getRestDayOtMultiplier());
         dto.setStandardHoursPerDay(rule.getStandardHoursPerDay());

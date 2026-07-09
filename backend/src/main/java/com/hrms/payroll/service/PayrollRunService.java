@@ -822,7 +822,7 @@ public class PayrollRunService {
         if (explicit == null) {
             return legacyEffect(type, day, rule, shiftHours);
         }
-        BigDecimal baseQuantity = quantityForBasis(day, explicit.getBasis(), shiftHours, isDailyRule(rule));
+        BigDecimal baseQuantity = quantityForBasis(day, explicit.getBasis(), shiftHours, quantitySource(rule));
         BigDecimal scaled = baseQuantity.multiply(z(explicit.getPercent()).divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP));
         if ("DEDUCT".equalsIgnoreCase(explicit.getAction())) {
             DayEffect legacy = legacyEffect(type, day, rule, shiftHours);
@@ -833,7 +833,7 @@ public class PayrollRunService {
             // base pay starts full and genuinely needs this deduction.
             String category = type != null ? type.getCategory() : "REGULAR";
             boolean unpaidDay = isUnpaidCategory(category) || (type != null && !type.isPaid());
-            if (isDailyRule(rule) && unpaidDay) {
+            if (usesActualWorked(rule) && unpaidDay) {
                 return DayEffect.none();
             }
             return new DayEffect(legacy.payQuantity(), scaled, explicit.getBasis());
@@ -882,17 +882,17 @@ public class PayrollRunService {
         return DayEffect.none();
     }
 
-    private BigDecimal quantityForBasis(TimesheetDay day, String basis, BigDecimal shiftHours, boolean daily) {
+    private BigDecimal quantityForBasis(TimesheetDay day, String basis, BigDecimal shiftHours, String quantitySource) {
         String normalized = basis == null ? "HOURS" : basis.toUpperCase();
         BigDecimal standardHours = shiftHours;
         if ("DAYS".equals(normalized) || "FIXED".equals(normalized)) {
-            BigDecimal hours = daily ? actualPayHours(day) : payrollHours(day, standardHours);
+            BigDecimal hours = quantityHours(day, standardHours, quantitySource);
             if (hours.compareTo(BigDecimal.ZERO) <= 0) {
                 return BigDecimal.ZERO;
             }
             return hours.divide(standardHours, 4, RoundingMode.HALF_UP);
         }
-        return daily ? actualPayHours(day) : payrollHours(day, standardHours);
+        return quantityHours(day, standardHours, quantitySource);
     }
 
     private BigDecimal unitRate(BigDecimal amount, PayrollRule rule, String basis, BigDecimal shiftHours,
@@ -1041,6 +1041,38 @@ public class PayrollRunService {
         BigDecimal normal = z(day.getNormalHours());
         if (normal.compareTo(BigDecimal.ZERO) > 0) return normal;
         return z(day.getWorkedHours()).subtract(z(day.getOtHours())).max(BigDecimal.ZERO);
+    }
+
+    private static BigDecimal plannedShiftHours(TimesheetDay day, BigDecimal standardHours) {
+        BigDecimal normal = z(day.getNormalHours());
+        if (normal.compareTo(BigDecimal.ZERO) > 0) return normal;
+        BigDecimal planned = z(day.getPlannedHours());
+        if (planned.compareTo(BigDecimal.ZERO) > 0) return planned;
+        BigDecimal worked = z(day.getWorkedHours()).subtract(z(day.getOtHours())).max(BigDecimal.ZERO);
+        if (worked.compareTo(BigDecimal.ZERO) > 0) return worked;
+        return z(standardHours);
+    }
+
+    private static BigDecimal quantityHours(TimesheetDay day, BigDecimal standardHours, String quantitySource) {
+        if ("ACTUAL_WORKED".equalsIgnoreCase(quantitySource)) {
+            return actualPayHours(day);
+        }
+        if ("PLANNED_SHIFT".equalsIgnoreCase(quantitySource)) {
+            return plannedShiftHours(day, standardHours);
+        }
+        return payrollHours(day, standardHours);
+    }
+
+    private static String quantitySource(PayrollRule rule) {
+        String source = rule != null ? rule.getQuantitySource() : null;
+        if (source == null || source.isBlank()) {
+            return isDailyRule(rule) ? "ACTUAL_WORKED" : "PAYABLE_SCHEDULE";
+        }
+        return source.trim().toUpperCase();
+    }
+
+    private static boolean usesActualWorked(PayrollRule rule) {
+        return "ACTUAL_WORKED".equalsIgnoreCase(quantitySource(rule));
     }
 
     private static boolean isUnpaidCategory(String category) {

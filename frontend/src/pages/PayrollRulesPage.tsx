@@ -25,6 +25,12 @@ const BASIS = [
   { value: "DAILY_RATE", label: "Daily rate x payable days" },
 ];
 
+const QUANTITY_SOURCE = [
+  { value: "ACTUAL_WORKED", label: "Actual worked" },
+  { value: "PLANNED_SHIFT", label: "Planned shift" },
+  { value: "PAYABLE_SCHEDULE", label: "Payable schedule" },
+];
+
 const CATEGORY_BASIS = [
   { value: "FULL_MONTH", label: "Full divisor" },
   { value: "ACTUAL_PAYABLE", label: "Actual payable" },
@@ -44,9 +50,9 @@ const DEFAULT_CATEGORY_RULES: PayrollCategoryRule[] = [
 
 function formulaFor(rule: PayrollRule) {
   if (rule.payItemBasis === "DAILY_RATE") {
-    return "Daily pay = worked days x daily rate. Hourly rate = daily rate / employee shift hours. Overtime = hourly rate x OT hours x OT multiplier.";
+    return "Daily pay = quantity from the selected source x daily rate. Hourly rate = daily rate / employee shift hours. Overtime = hourly rate x OT hours x OT multiplier.";
   }
-  return "Fixed pay = configured component amount using this rule's category/divisor settings. Hourly rate = amount / (divisor x employee shift hours). Unpaid days and overtime follow this rule and time type rules.";
+  return "Fixed pay = configured component amount using this rule's category/divisor settings. Time type rules use the selected quantity source for deductions or variable pay.";
 }
 
 function categoryRulesFor(rule: PayrollRule): PayrollCategoryRule[] {
@@ -84,6 +90,7 @@ export default function PayrollRulesPage() {
         payGroup,
         projectId,
         payItemBasis: "FIXED_AMOUNT",
+        quantitySource: payGroup === "DAILY" ? "ACTUAL_WORKED" : "PAYABLE_SCHEDULE",
         otMultiplier: 1.25,
         restDayOtMultiplier: 1.5,
         standardHoursPerDay: 8,
@@ -154,6 +161,7 @@ export default function PayrollRulesPage() {
               <TableRow>
                 <TableCell>Pay group</TableCell>
                 <TableCell>Pay item basis</TableCell>
+                <TableCell>Quantity source</TableCell>
                 <TableCell>Weekly rest paid</TableCell>
                 <TableCell align="right">OT multiplier</TableCell>
                 <TableCell align="right">Rest day OT</TableCell>
@@ -173,6 +181,11 @@ export default function PayrollRulesPage() {
                       <TableCell>
                         <TextField select size="small" fullWidth value={row.payItemBasis} onChange={(e) => set(rule, { payItemBasis: e.target.value })}>
                           {BASIS.map((b) => <MenuItem key={b.value} value={b.value}>{b.label}</MenuItem>)}
+                        </TextField>
+                      </TableCell>
+                      <TableCell>
+                        <TextField select size="small" fullWidth value={row.quantitySource ?? "PAYABLE_SCHEDULE"} onChange={(e) => set(rule, { quantitySource: e.target.value })}>
+                          {QUANTITY_SOURCE.map((s) => <MenuItem key={s.value} value={s.value}>{s.label}</MenuItem>)}
                         </TextField>
                       </TableCell>
                       <TableCell>
@@ -212,7 +225,7 @@ export default function PayrollRulesPage() {
                       </TableCell>
                     </TableRow>
                     <TableRow>
-                      <TableCell colSpan={9} sx={{ bgcolor: "action.hover" }}>
+                      <TableCell colSpan={10} sx={{ bgcolor: "action.hover" }}>
                         <Typography variant="body2" color="text.secondary" mb={1}>
                           <b>{rule.payGroup} formula:</b> {formulaFor(row)} Shift hours come from the employee's assigned shift on the timesheet.
                         </Typography>

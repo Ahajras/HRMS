@@ -9,6 +9,7 @@ public class PayrollRuleDto {
     private UUID id;
     private String payGroup;
     private String payItemBasis;
+    private String quantitySource;
     private BigDecimal otMultiplier;
     private BigDecimal standardHoursPerDay;
     private BigDecimal restDayOtMultiplier;
@@ -26,6 +27,8 @@ public class PayrollRuleDto {
     public void setPayGroup(String payGroup) { this.payGroup = payGroup; }
     public String getPayItemBasis() { return payItemBasis; }
     public void setPayItemBasis(String payItemBasis) { this.payItemBasis = payItemBasis; }
+    public String getQuantitySource() { return quantitySource; }
+    public void setQuantitySource(String quantitySource) { this.quantitySource = quantitySource; }
     public BigDecimal getOtMultiplier() { return otMultiplier; }
     public void setOtMultiplier(BigDecimal otMultiplier) { this.otMultiplier = otMultiplier; }
     public BigDecimal getStandardHoursPerDay() { return standardHoursPerDay; }
