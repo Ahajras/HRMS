@@ -859,6 +859,27 @@ export interface ProvisionCreateRequest {
   provisionType: string;
 }
 
+export interface ProvisionRule {
+  id?: string;
+  projectId?: string;
+  payGroup: string;
+  provisionType: string;
+  name: string;
+  basisMode: string;
+  basisCategories?: string;
+  basisComponentCodes?: string;
+  formulaExpression: string;
+  divisor: number;
+  fixedAmount: number;
+  entitlementDaysUnderFive: number;
+  entitlementDaysFiveOrMore: number;
+  ticketCycleMonths: number;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  status?: string;
+  notes?: string;
+}
+
 export interface PayrollRule {
   id?: string;
   payGroup: string;

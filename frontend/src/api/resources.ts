@@ -21,6 +21,7 @@ import type {
   PageResponse,
   PayrollComponent,
   ProvisionCreateRequest,
+  ProvisionRule,
   ProvisionRun,
   PayrollRun,
   PayrollResult,
@@ -492,6 +493,16 @@ export const provisionApi = {
   calculate: (payload: ProvisionCreateRequest) =>
     api.post<ProvisionRun>("/provisions", payload).then((r) => r.data),
   delete: (id: string) => api.delete(`/provisions/${id}`).then(() => undefined),
+};
+
+export const provisionRuleApi = {
+  list: () => api.get<ProvisionRule[]>("/provision-rules").then((r) => r.data),
+  save: (payload: ProvisionRule) => payload.id
+    ? api.put<ProvisionRule>(`/provision-rules/${payload.id}`, payload).then((r) => r.data)
+    : api.post<ProvisionRule>("/provision-rules", payload).then((r) => r.data),
+  initializeDefaults: () =>
+    api.post<ProvisionRule[]>("/provision-rules/initialize-defaults").then((r) => r.data),
+  delete: (id: string) => api.delete(`/provision-rules/${id}`).then(() => undefined),
 };
 
 export const payrollRuleApi = {
