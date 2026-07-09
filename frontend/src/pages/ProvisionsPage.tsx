@@ -18,8 +18,9 @@ import {
 } from "@mui/material";
 import CalculateIcon from "@mui/icons-material/Calculate";
 import DeleteIcon from "@mui/icons-material/Delete";
+import RestartAltIcon from "@mui/icons-material/RestartAlt";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { lookupApi, periodApi, projectApi, provisionApi } from "../api/resources";
+import { lookupApi, periodApi, projectApi, provisionApi, provisionRuleApi } from "../api/resources";
 import type { ProvisionRun } from "../api/types";
 
 const money = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -65,6 +66,13 @@ export default function ProvisionsPage() {
     onSuccess: (run) => {
       qc.invalidateQueries({ queryKey: ["provisions"] });
       setSelectedId(run.id ?? null);
+    },
+  });
+
+  const initRules = useMutation({
+    mutationFn: provisionRuleApi.initializeDefaults,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["provisionRules"] });
     },
   });
 
@@ -121,13 +129,28 @@ export default function ProvisionsPage() {
               Calculate
             </Button>
           </Grid>
+          <Grid item xs={12}>
+            <Button
+              variant="outlined"
+              startIcon={<RestartAltIcon />}
+              disabled={initRules.isPending}
+              onClick={() => initRules.mutate()}
+            >
+              Initialize default templates
+            </Button>
+          </Grid>
         </Grid>
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.25 }}>
           Provision is an accounting accrual preview. It does not change payroll net pay.
         </Typography>
-        {calculate.isError && (
+        {(calculate.isError || initRules.isError) && (
           <Alert severity="error" sx={{ mt: 1.5 }}>
-            {(calculate.error as any)?.response?.data?.message ?? "Provision calculation failed."}
+            {((calculate.error || initRules.error) as any)?.response?.data?.message ?? "Provision action failed."}
+          </Alert>
+        )}
+        {initRules.isSuccess && (
+          <Alert severity="success" sx={{ mt: 1.5 }}>
+            Default provision templates are ready. You can edit them from Payroll - Provision Rules.
           </Alert>
         )}
       </Paper>
