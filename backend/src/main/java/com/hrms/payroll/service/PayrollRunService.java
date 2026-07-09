@@ -341,6 +341,19 @@ public class PayrollRunService {
         }
 
         PayrollCalculationContext ctx = payrollCalculationContext(run, period, List.of(ts));
+        // The context's time-type lookup only contains types that actually
+        // appeared in the ORIGINAL month's real days. If we're overriding a
+        // day to a type that was never used that month (e.g. the employee
+        // never had a sick day, and we're now testing "what if this was
+        // sick"), that type would be missing here — and a missing type
+        // silently falls back to "paid/normal", making every override look
+        // like it changed nothing. Fetch and add any missing override types.
+        java.util.Set<UUID> missingTypeIds = dayTimeTypeOverrides.values().stream()
+                .filter(typeId -> typeId != null && !ctx.timeTypes().containsKey(typeId))
+                .collect(java.util.stream.Collectors.toSet());
+        if (!missingTypeIds.isEmpty()) {
+            timeTypeRepo.findAllById(missingTypeIds).forEach(t -> ctx.timeTypes().put(t.getId(), t));
+        }
         UUID empProject = run.getProjectId() != null ? run.getProjectId() : ctx.employeeProjects().get(emp.getId());
         PayrollRule rule = payrollRule(ctx.rules(), run.getCompanyId(), empProject, emp.getPayStatus());
         BigDecimal shiftHours = shiftHours(ts, rule, ctx.shifts());
