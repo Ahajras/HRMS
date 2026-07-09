@@ -12,6 +12,7 @@ public class PayrollResultLineDto {
     private BigDecimal rate;
     private BigDecimal amount;
     private String source;
+    private String details;
 
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }
@@ -29,4 +30,6 @@ public class PayrollResultLineDto {
     public void setAmount(BigDecimal amount) { this.amount = amount; }
     public String getSource() { return source; }
     public void setSource(String source) { this.source = source; }
+    public String getDetails() { return details; }
+    public void setDetails(String details) { this.details = details; }
 }

@@ -777,6 +777,7 @@ export interface PayrollResultLine {
   rate?: number;
   amount: number;
   source?: string;
+  details?: string;
 }
 
 export interface PayrollResult {

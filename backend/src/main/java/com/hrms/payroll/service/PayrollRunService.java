@@ -545,10 +545,12 @@ public class PayrollRunService {
             BigDecimal deductQty = z(policyBreakdown.deductQuantity());
             if (deductQty.compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal deductionRate = unitRate(amount, rule, policyBreakdown.basis(), shiftHours, categoryPolicy, periodDays);
-                lines.add(manualLine(companyId, resultId, component.getCode(),
+                PayrollResultLine deductionLine = manualLine(companyId, resultId, component.getCode(),
                         component.getName() + " - Time type deduction", "DEDUCTION", component.getCategory(),
                         deductQty, deductionRate, round(deductionRate.multiply(deductQty)),
-                        "TIME_TYPE_RULE_DEDUCT", component.getPriority() + 1));
+                        "TIME_TYPE_RULE_DEDUCT", component.getPriority() + 1);
+                deductionLine.setDetails(policyBreakdown.details());
+                lines.add(deductionLine);
             }
             return lines;
         }
@@ -588,10 +590,12 @@ public class PayrollRunService {
                     BigDecimal deductQty = z(policyBreakdown.deductQuantity());
                     if (deductQty.compareTo(BigDecimal.ZERO) > 0) {
                         BigDecimal deductionRate = unitRate(rate, rule, policyBreakdown.basis(), shiftHours, categoryPolicy, periodDays);
-                        lines.add(manualLine(companyId, resultId, component.getCode(),
+                        PayrollResultLine deductionLine = manualLine(companyId, resultId, component.getCode(),
                                 component.getName() + " - Time type deduction", "DEDUCTION", component.getCategory(),
                                 deductQty, deductionRate, round(deductionRate.multiply(deductQty)),
-                                "TIME_TYPE_RULE_DEDUCT", component.getPriority() + 2));
+                                "TIME_TYPE_RULE_DEDUCT", component.getPriority() + 2);
+                        deductionLine.setDetails(policyBreakdown.details());
+                        lines.add(deductionLine);
                     }
                 }
                 return lines;
@@ -638,10 +642,12 @@ public class PayrollRunService {
                     payQty, unitRate, payAmount, "TIME_TYPE_RULE_PAY", component.getPriority()));
         }
         if (deductQty.compareTo(BigDecimal.ZERO) > 0) {
-            lines.add(manualLine(companyId, resultId, component.getCode(),
+            PayrollResultLine deductionLine = manualLine(companyId, resultId, component.getCode(),
                     component.getName() + " - Time type deduction",
                     "DEDUCTION", component.getCategory(),
-                    deductQty, unitRate, deductAmount, "TIME_TYPE_RULE_DEDUCT", component.getPriority() + 1));
+                    deductQty, unitRate, deductAmount, "TIME_TYPE_RULE_DEDUCT", component.getPriority() + 1);
+            deductionLine.setDetails(breakdown.details());
+            lines.add(deductionLine);
         }
         return lines;
     }
@@ -778,6 +784,7 @@ public class PayrollRunService {
         BigDecimal legacyPayHours = BigDecimal.ZERO;
         String basis = "HOURS";
         boolean touched = false;
+        List<String> deductionDetails = new ArrayList<>();
         for (TimesheetDay day : policy.days()) {
             TimeType type = day.getTimeTypeId() != null ? policy.types().get(day.getTimeTypeId()) : null;
             Map<UUID, TimeTypePayrollRule> byComponent = day.getTimeTypeId() != null ? policy.rulesByTimeType().get(day.getTimeTypeId()) : null;
@@ -807,6 +814,9 @@ public class PayrollRunService {
             basis = effect.basis();
             payQty = payQty.add(effect.payQuantity());
             deductQty = deductQty.add(effect.deductQuantity());
+            if (effect.deductQuantity().compareTo(BigDecimal.ZERO) > 0) {
+                deductionDetails.add(timeTypeDetail(day, type, explicit, effect.deductQuantity()));
+            }
             if (explicit == null) {
                 legacyPayHours = legacyPayHours.add(effect.payQuantity());
             }
@@ -815,7 +825,7 @@ public class PayrollRunService {
             BigDecimal divisorFull = effectiveDivisor(rule, categoryPolicy, periodDays).multiply(policy.shiftHours());
             payQty = payQty.subtract(legacyPayHours).add(divisorFull);
         }
-        return new ComponentPolicyBreakdown(payQty, deductQty, basis, touched);
+        return new ComponentPolicyBreakdown(payQty, deductQty, basis, touched, String.join("\n", deductionDetails));
     }
 
     private DayEffect explicitEffect(TimeTypePayrollRule explicit, TimesheetDay day, TimeType type, PayrollRule rule, BigDecimal shiftHours) {
@@ -854,6 +864,17 @@ public class PayrollRunService {
             return String.valueOf(timeTypeId);
         }
         return type.getCode() + " - " + type.getName();
+    }
+
+    private static String timeTypeDetail(TimesheetDay day, TimeType type, TimeTypePayrollRule rule, BigDecimal quantity) {
+        String code = type != null ? type.getCode() : String.valueOf(day.getTimeTypeId());
+        String name = type != null ? type.getName() : "";
+        String basis = rule != null && rule.getBasis() != null ? rule.getBasis() : "HOURS";
+        String action = rule != null && rule.getAction() != null ? rule.getAction() : "DEDUCT";
+        BigDecimal percent = rule != null ? z(rule.getPercent()) : new BigDecimal("100.00");
+        return day.getWorkDate() + " | " + code + (name == null || name.isBlank() ? "" : " - " + name)
+                + " | " + z(quantity).stripTrailingZeros().toPlainString() + " " + basis
+                + " | " + action + " " + percent.stripTrailingZeros().toPlainString() + "%";
     }
 
     private DayEffect legacyEffect(TimeType type, TimesheetDay day, PayrollRule rule, BigDecimal shiftHours) {
@@ -1219,7 +1240,7 @@ public class PayrollRunService {
         }
     }
 
-    private record ComponentPolicyBreakdown(BigDecimal payQuantity, BigDecimal deductQuantity, String basis, boolean touched) {
+    private record ComponentPolicyBreakdown(BigDecimal payQuantity, BigDecimal deductQuantity, String basis, boolean touched, String details) {
         boolean hasAny() {
             return touched && (z(payQuantity).compareTo(BigDecimal.ZERO) > 0 || z(deductQuantity).compareTo(BigDecimal.ZERO) > 0);
         }
@@ -1492,6 +1513,7 @@ public class PayrollRunService {
         dto.setRate(line.getRate());
         dto.setAmount(line.getAmount());
         dto.setSource(line.getSource());
+        dto.setDetails(line.getDetails());
         return dto;
     }
 

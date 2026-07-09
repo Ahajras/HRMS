@@ -441,6 +441,7 @@ function PayslipLineTable({ title, lines, empty, total }: { title: string; lines
             <TableRow key={line.id ?? `${line.source}-${line.componentName}`}>
               <TableCell>
                 <Typography variant="body2">{line.componentName}</Typography>
+                <LineDetails details={line.details} />
                 <Typography variant="caption" color="text.secondary">{line.componentCode} · {line.source ?? "PAY_ITEM"}</Typography>
               </TableCell>
               <TableCell align="right">{qty(line.quantity)}</TableCell>
@@ -472,6 +473,20 @@ function SummaryRow({ label, value, strong, negative }: { label: string; value: 
       <Typography variant="body2" fontWeight={strong ? 800 : 500} color={negative ? "error.main" : "text.primary"}>
         {negative && value > 0 ? "-" : ""}{money(value)}
       </Typography>
+    </Stack>
+  );
+}
+
+function LineDetails({ details }: { details?: string }) {
+  const rows = String(details ?? "").split(/\r?\n/).map((row) => row.trim()).filter(Boolean);
+  if (rows.length === 0) return null;
+  return (
+    <Stack spacing={0.15} mt={0.5}>
+      {rows.map((row, idx) => (
+        <Typography key={`${idx}-${row}`} variant="caption" color="text.secondary" display="block">
+          {row}
+        </Typography>
+      ))}
     </Stack>
   );
 }
@@ -602,7 +617,7 @@ function printLineTable(lines: PayrollResultLine[]) {
       <tbody>
         ${lines.map((line) => `
           <tr>
-            <td>${escapeHtml(line.componentName ?? "")}<div class="muted">${escapeHtml(String(line.componentCode ?? ""))}</div></td>
+            <td>${escapeHtml(line.componentName ?? "")}<div class="muted">${escapeHtml(String(line.componentCode ?? ""))}</div>${printDetails(line.details)}</td>
             <td class="right">${qty(line.quantity)}</td>
             <td class="right">${money(line.rate)}</td>
             <td class="right">${money(line.amount)}</td>
@@ -611,6 +626,12 @@ function printLineTable(lines: PayrollResultLine[]) {
       </tbody>
     </table>
   `;
+}
+
+function printDetails(details?: string) {
+  const rows = String(details ?? "").split(/\r?\n/).map((row) => row.trim()).filter(Boolean);
+  if (rows.length === 0) return "";
+  return `<div class="muted">${rows.map((row) => escapeHtml(row)).join("<br/>")}</div>`;
 }
 
 function openPrintWindow(html: string) {
@@ -643,7 +664,7 @@ type ComponentBreakdownRow = {
   payAmount: number;
   deductAmount: number;
   netAmount: number;
-  details: Array<{ label: string; qty: number; amount: number; kind: "pay" | "deduct" }>;
+  details: Array<{ label: string; qty: number; amount: number; kind: "pay" | "deduct"; details?: string }>;
 };
 
 function PayslipBreakdownTable({ items }: { items: ComponentBreakdownRow[] }) {
@@ -722,11 +743,11 @@ function buildComponentBreakdown(lines: PayrollResultLine[]): ComponentBreakdown
     if (line.componentType === "DEDUCTION") {
       row.deductQty += lineQty;
       row.deductAmount += lineAmount;
-      row.details.push({ label: detailLabel(line), qty: lineQty, amount: lineAmount, kind: "deduct" });
+      row.details.push({ label: detailLabel(line), qty: lineQty, amount: lineAmount, kind: "deduct", details: line.details });
     } else {
       row.payQty += lineQty;
       row.payAmount += lineAmount;
-      row.details.push({ label: detailLabel(line), qty: lineQty, amount: lineAmount, kind: "pay" });
+      row.details.push({ label: detailLabel(line), qty: lineQty, amount: lineAmount, kind: "pay", details: line.details });
     }
     row.netAmount = row.payAmount - row.deductAmount;
     grouped.set(key, row);

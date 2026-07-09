@@ -43,6 +43,9 @@ public class PayrollResultLine extends AuditableEntity {
     @Column(name = "source", nullable = false, length = 30)
     private String source = "PAY_ITEM";
 
+    @Column(name = "details", columnDefinition = "TEXT")
+    private String details;
+
     @Column(name = "sort_order", nullable = false)
     private int sortOrder = 100;
 
@@ -75,6 +78,9 @@ public class PayrollResultLine extends AuditableEntity {
 
     public String getSource() { return source; }
     public void setSource(String source) { this.source = source; }
+
+    public String getDetails() { return details; }
+    public void setDetails(String details) { this.details = details; }
 
     public int getSortOrder() { return sortOrder; }
     public void setSortOrder(int sortOrder) { this.sortOrder = sortOrder; }
