@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
 import { Link as RouterLink, useLocation } from "react-router-dom";
 import {
   Alert,
@@ -6,7 +6,6 @@ import {
   Avatar,
   Box,
   Button,
-  Chip,
   Collapse,
   Divider,
   Drawer,
@@ -48,13 +47,17 @@ import ImportExportIcon from "@mui/icons-material/ImportExport";
 import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
 import KeyboardDoubleArrowLeftIcon from "@mui/icons-material/KeyboardDoubleArrowLeft";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
+import LightModeIcon from "@mui/icons-material/LightMode";
 import { useQuery } from "@tanstack/react-query";
 import { COMPANY_STORAGE_KEY, getCompanyId, setCompanyId } from "../api/client";
 import { companyProfileApi } from "../api/resources";
 import { useAuth } from "../auth/AuthContext";
+import { ThemeModeContext } from "../theme";
 
 const DRAWER_WIDTH = 284;
 const RAIL_WIDTH = 76;
+const BRANDING_STORAGE_KEY = "hrms.branding";
 
 interface NavItem {
   to: string;
@@ -128,6 +131,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const desktop = useMediaQuery(theme.breakpoints.up("lg"));
   const tabletUp = useMediaQuery(theme.breakpoints.up("md"));
   const { user, logout, hasAuthority } = useAuth();
+  const { mode, toggleMode } = useContext(ThemeModeContext);
   const [company, setCompany] = useState(getCompanyId());
   const [mobileOpen, setMobileOpen] = useState(false);
   const [rail, setRail] = useState(false);
@@ -143,6 +147,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const companyName = profile?.companyName || "HRMS";
   const logoUrl = profile?.logoUrl || "";
+
+  useEffect(() => {
+    if (profile?.companyName || profile?.logoUrl) {
+      localStorage.setItem(BRANDING_STORAGE_KEY, JSON.stringify({
+        companyName: profile.companyName,
+        legalName: profile.legalName,
+        logoUrl: profile.logoUrl,
+      }));
+    }
+  }, [profile]);
 
   const onCompanyChange = (value: string) => {
     setCompany(value);
@@ -187,7 +201,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         )}
       </Stack>
       <Divider sx={{ borderColor: "rgba(148,163,184,.18)" }} />
-      <Box sx={{ flex: 1, overflowY: "auto", py: 1.25 }}>
+      <Box
+        sx={{
+          flex: 1,
+          overflowY: "auto",
+          py: 1.25,
+          scrollbarWidth: "thin",
+          scrollbarColor: "rgba(148,163,184,.34) transparent",
+          "&::-webkit-scrollbar": { width: 8 },
+          "&::-webkit-scrollbar-track": { bgcolor: "transparent" },
+          "&::-webkit-scrollbar-thumb": { bgcolor: "rgba(148,163,184,.34)", borderRadius: 8 },
+        }}
+      >
         {groups.map((group) => {
           const hasActive = group.items.some((i) => location.pathname.startsWith(i.to));
           const isOpen = rail && desktop ? true : (!collapsed[group.label] || hasActive);
@@ -259,7 +284,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         position="fixed"
         elevation={0}
         sx={{
-          bgcolor: "rgba(255,255,255,.94)",
+          bgcolor: mode === "dark" ? "rgba(17,24,39,.94)" : "rgba(255,255,255,.94)",
           color: "text.primary",
           borderBottom: "1px solid",
           borderColor: "divider",
@@ -295,12 +320,17 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               />
             </Tooltip>
           )}
-          <Chip
-            avatar={<Avatar>{(user?.fullName || user?.username || "U").slice(0, 1).toUpperCase()}</Avatar>}
-            label={user?.fullName ?? user?.username}
-            variant="outlined"
-            sx={{ maxWidth: { xs: 120, sm: 220 }, display: { xs: "none", sm: "flex" } }}
-          />
+          <Stack direction="row" spacing={1} alignItems="center" sx={{ display: { xs: "none", sm: "flex" }, maxWidth: 240 }}>
+            <Avatar sx={{ width: 30, height: 30, bgcolor: mode === "dark" ? "#1f2937" : "#e2e8f0", color: "text.primary", fontSize: 13 }}>
+              {(user?.fullName || user?.username || "U").slice(0, 1).toUpperCase()}
+            </Avatar>
+            <Typography variant="body2" noWrap color="text.secondary">{user?.fullName ?? user?.username}</Typography>
+          </Stack>
+          <Tooltip title={mode === "dark" ? "Morning theme" : "Evening theme"}>
+            <IconButton onClick={toggleMode} color="primary" aria-label="Toggle theme">
+              {mode === "dark" ? <LightModeIcon /> : <DarkModeIcon />}
+            </IconButton>
+          </Tooltip>
           <Button color="primary" startIcon={<LogoutIcon />} onClick={logout} sx={{ minWidth: { xs: 40, sm: 96 } }}>
             <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>Logout</Box>
           </Button>

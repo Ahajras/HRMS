@@ -5,24 +5,64 @@ import {
   Avatar,
   Box,
   Button,
+  Checkbox,
   Divider,
+  FormControlLabel,
+  IconButton,
+  Link,
   Paper,
   Stack,
   TextField,
   Typography,
+  useTheme,
 } from "@mui/material";
 import BusinessCenterIcon from "@mui/icons-material/BusinessCenter";
 import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
 import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
+import { useQuery } from "@tanstack/react-query";
+import { companyProfileApi } from "../api/resources";
 import { useAuth } from "../auth/AuthContext";
+
+const REMEMBER_LOGIN_KEY = "hrms.rememberLogin";
+const SAVED_USERNAME_KEY = "hrms.savedUsername";
+const BRANDING_STORAGE_KEY = "hrms.branding";
+
+function cachedBranding() {
+  try {
+    return JSON.parse(localStorage.getItem(BRANDING_STORAGE_KEY) || "{}") as {
+      companyName?: string;
+      legalName?: string;
+      logoUrl?: string;
+    };
+  } catch {
+    return {};
+  }
+}
 
 export default function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
-  const [username, setUsername] = useState("");
+  const theme = useTheme();
+  const [remember, setRemember] = useState(() => localStorage.getItem(REMEMBER_LOGIN_KEY) === "true");
+  const [username, setUsername] = useState(() => localStorage.getItem(SAVED_USERNAME_KEY) || "");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [forgotMsg, setForgotMsg] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [brandCache] = useState(cachedBranding);
+  const { data: publicBrand } = useQuery({
+    queryKey: ["publicCompanyProfile"],
+    queryFn: companyProfileApi.getPublic,
+    retry: false,
+  });
+
+  const brand = publicBrand?.companyName ? publicBrand : brandCache;
+  const companyName = brand.companyName || "HRMS";
+  const legalName = brand.legalName || "Workforce & Payroll";
+  const logoUrl = brand.logoUrl || "";
 
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,6 +70,13 @@ export default function LoginPage() {
     setSubmitting(true);
     try {
       await login(username.trim(), password);
+      if (remember) {
+        localStorage.setItem(REMEMBER_LOGIN_KEY, "true");
+        localStorage.setItem(SAVED_USERNAME_KEY, username.trim());
+      } else {
+        localStorage.removeItem(REMEMBER_LOGIN_KEY);
+        localStorage.removeItem(SAVED_USERNAME_KEY);
+      }
       navigate("/", { replace: true });
     } catch (err: any) {
       const msg = err?.response?.data?.message ?? "Login failed. Check your credentials.";
@@ -45,7 +92,7 @@ export default function LoginPage() {
         minHeight: "100vh",
         display: "grid",
         placeItems: "center",
-        bgcolor: "#eef3f8",
+        bgcolor: theme.palette.mode === "dark" ? "#0b1120" : "#eef3f8",
         p: { xs: 1.5, sm: 3 },
         position: "relative",
         overflow: "hidden",
@@ -78,11 +125,11 @@ export default function LoginPage() {
           <Stack spacing={3} sx={{ height: "100%" }}>
             <Stack direction="row" spacing={1.25} alignItems="center">
               <Avatar variant="rounded" sx={{ bgcolor: "primary.main", width: 44, height: 44 }}>
-                <BusinessCenterIcon />
+                {logoUrl ? <Box component="img" src={logoUrl} alt="" sx={{ width: "100%", height: "100%", objectFit: "cover" }} /> : <BusinessCenterIcon />}
               </Avatar>
               <Box>
-                <Typography variant="h6" fontWeight={900}>HRMS</Typography>
-                <Typography variant="caption" color="text.secondary">Workforce & Payroll</Typography>
+                <Typography variant="h6" fontWeight={900}>{companyName}</Typography>
+                <Typography variant="caption" color="text.secondary">{legalName}</Typography>
               </Box>
             </Stack>
 
@@ -109,13 +156,30 @@ export default function LoginPage() {
                 />
                 <TextField
                   label="Password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   required
                   fullWidth
-                  InputProps={{ startAdornment: <LockOutlinedIcon sx={{ color: "text.secondary", mr: 1 }} /> }}
+                  InputProps={{
+                    startAdornment: <LockOutlinedIcon sx={{ color: "text.secondary", mr: 1 }} />,
+                    endAdornment: (
+                      <IconButton edge="end" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? "Hide password" : "Show password"}>
+                        {showPassword ? <VisibilityOffIcon /> : <VisibilityIcon />}
+                      </IconButton>
+                    ),
+                  }}
                 />
+                <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+                  <FormControlLabel
+                    control={<Checkbox checked={remember} onChange={(e) => setRemember(e.target.checked)} />}
+                    label="Save login"
+                  />
+                  <Link component="button" type="button" variant="body2" onClick={() => setForgotMsg(true)}>
+                    Forget password?
+                  </Link>
+                </Stack>
+                {forgotMsg && <Alert severity="info">Please contact your HRMS administrator to reset your password.</Alert>}
                 <Button type="submit" variant="contained" disabled={submitting} fullWidth sx={{ minHeight: 44 }}>
                   {submitting ? "Signing in..." : "Sign in"}
                 </Button>
@@ -141,7 +205,15 @@ export default function LoginPage() {
           }}
         >
           <Stack spacing={2.5} sx={{ position: "relative", zIndex: 1 }}>
-            <Typography variant="h5" fontWeight={900}>Operations command center</Typography>
+            <Stack direction="row" spacing={1.5} alignItems="center">
+              <Avatar src={logoUrl || undefined} variant="rounded" sx={{ width: 54, height: 54, bgcolor: "primary.main" }}>
+                {companyName.slice(0, 1).toUpperCase()}
+              </Avatar>
+              <Box>
+                <Typography variant="h5" fontWeight={900}>{companyName}</Typography>
+                <Typography variant="body2" sx={{ color: "#cbd5e1" }}>{legalName}</Typography>
+              </Box>
+            </Stack>
             <Typography variant="body2" sx={{ color: "#cbd5e1", maxWidth: 460 }}>
               Payroll, attendance, leave, and project cost control in one working surface.
             </Typography>

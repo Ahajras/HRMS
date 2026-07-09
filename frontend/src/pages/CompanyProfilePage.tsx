@@ -13,6 +13,8 @@ import {
 } from "@mui/material";
 import BusinessIcon from "@mui/icons-material/Business";
 import SaveIcon from "@mui/icons-material/Save";
+import UploadIcon from "@mui/icons-material/Upload";
+import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { companyProfileApi } from "../api/resources";
 import type { CompanyProfile } from "../api/types";
@@ -48,6 +50,13 @@ export default function CompanyProfilePage() {
 
   const set = <K extends keyof CompanyProfile>(key: K, value: CompanyProfile[K]) => {
     setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const uploadLogo = (file?: File) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => set("logoUrl", String(reader.result || ""));
+    reader.readAsDataURL(file);
   };
 
   const companyName = form.companyName || "Company name";
@@ -99,7 +108,7 @@ export default function CompanyProfilePage() {
               </Stack>
 
               <Divider sx={{ my: 1.5 }} />
-              <Typography variant="caption" color="text.secondary">
+            <Typography variant="caption" color="text.secondary">
                 Use a square or horizontal logo with a transparent background for the cleanest header result.
               </Typography>
             </Box>
@@ -122,6 +131,36 @@ export default function CompanyProfilePage() {
                 <TextField fullWidth label="Logo URL" value={form.logoUrl ?? ""}
                   onChange={(e) => set("logoUrl", e.target.value)}
                   helperText="This logo appears in the application header and sidebar." />
+              </Grid>
+              <Grid item xs={12}>
+                <Stack direction={{ xs: "column", sm: "row" }} spacing={1}>
+                  <Button variant="outlined" component="label" startIcon={<UploadIcon />}>
+                    Upload logo
+                    <input
+                      hidden
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp,image/svg+xml"
+                      onChange={(e) => uploadLogo(e.target.files?.[0])}
+                    />
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="error"
+                    startIcon={<DeleteOutlineIcon />}
+                    disabled={!form.logoUrl}
+                    onClick={() => set("logoUrl", "")}
+                  >
+                    Remove logo
+                  </Button>
+                  <Button
+                    variant="contained"
+                    startIcon={<SaveIcon />}
+                    disabled={isLoading || save.isPending || !form.companyName}
+                    onClick={() => save.mutate(form)}
+                  >
+                    Save branding
+                  </Button>
+                </Stack>
               </Grid>
             </Grid>
 
@@ -151,6 +190,16 @@ export default function CompanyProfilePage() {
               <Grid item xs={12}>
                 <TextField fullWidth multiline minRows={3} label="Address" value={form.addressLine ?? ""}
                   onChange={(e) => set("addressLine", e.target.value)} />
+              </Grid>
+              <Grid item xs={12}>
+                <Button
+                  variant="contained"
+                  startIcon={<SaveIcon />}
+                  disabled={isLoading || save.isPending || !form.companyName}
+                  onClick={() => save.mutate(form)}
+                >
+                  Save profile
+                </Button>
               </Grid>
             </Grid>
           </Paper>

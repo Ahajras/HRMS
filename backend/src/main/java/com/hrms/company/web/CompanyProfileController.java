@@ -23,6 +23,11 @@ public class CompanyProfileController {
         return service.get();
     }
 
+    @GetMapping("/public")
+    public CompanyProfileDto getPublic() {
+        return service.getPublic();
+    }
+
     @PutMapping
     public CompanyProfileDto save(@RequestBody CompanyProfileDto dto) {
         return service.save(dto);

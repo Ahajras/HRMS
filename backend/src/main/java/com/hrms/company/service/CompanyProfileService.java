@@ -23,6 +23,21 @@ public class CompanyProfileService {
     @Transactional(readOnly = true)
     public CompanyProfileDto get() {
         UUID companyId = TenantContext.requireCompanyId();
+        return getByCompanyId(companyId);
+    }
+
+    @Transactional(readOnly = true)
+    public CompanyProfileDto getPublic() {
+        return TenantContext.getCompanyId()
+                .map(this::getByCompanyId)
+                .orElseGet(() -> {
+                    CompanyProfileDto dto = new CompanyProfileDto();
+                    dto.setCompanyName("HRMS");
+                    return dto;
+                });
+    }
+
+    private CompanyProfileDto getByCompanyId(UUID companyId) {
         return repository.findByCompanyId(companyId).map(this::toDto).orElseGet(() -> {
             CompanyProfileDto dto = new CompanyProfileDto();
             dto.setCompanyId(companyId);

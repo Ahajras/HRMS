@@ -57,6 +57,7 @@ import type {
 
 export const companyProfileApi = {
   get: () => api.get<CompanyProfile>("/company-profile").then((r) => r.data),
+  getPublic: () => api.get<CompanyProfile>("/company-profile/public").then((r) => r.data),
   save: (payload: CompanyProfile) => api.put<CompanyProfile>("/company-profile", payload).then((r) => r.data),
 };
 
