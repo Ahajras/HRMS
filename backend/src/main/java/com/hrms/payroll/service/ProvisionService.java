@@ -404,6 +404,7 @@ public class ProvisionService {
             if (start == pos) throw new BusinessRuleException("provision.formula.invalid", "Invalid provision formula.");
             String name = expression.substring(start, pos);
             BigDecimal value = variables.get(name);
+            if (value == null) value = variables.get(name.toLowerCase());
             if (value == null) throw new BusinessRuleException("provision.formula.variable", "Unknown provision variable: " + name);
             return value;
         }

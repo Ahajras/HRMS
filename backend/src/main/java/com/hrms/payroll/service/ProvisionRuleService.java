@@ -99,7 +99,7 @@ public class ProvisionRuleService {
 
     private void apply(ProvisionRuleDto dto, ProvisionRule rule) {
         String type = norm(dto.getProvisionType(), "provisionType");
-        String formula = norm(dto.getFormulaExpression(), "formulaExpression");
+        String formula = requiredRaw(dto.getFormulaExpression(), "formulaExpression");
         rule.setProjectId(dto.getProjectId());
         rule.setPayGroup(blank(dto.getPayGroup()) ? "ALL" : dto.getPayGroup().trim().toUpperCase());
         rule.setProvisionType(type);
@@ -145,6 +145,11 @@ public class ProvisionRuleService {
     private String norm(String value, String field) {
         if (blank(value)) throw new BusinessRuleException("provision.rule.required", field + " is required.");
         return value.trim().toUpperCase();
+    }
+
+    private String requiredRaw(String value, String field) {
+        if (blank(value)) throw new BusinessRuleException("provision.rule.required", field + " is required.");
+        return value.trim();
     }
 
     private boolean blank(String value) {
