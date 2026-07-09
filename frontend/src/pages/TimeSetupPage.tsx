@@ -208,9 +208,16 @@ function TimeTypesSection() {
               <TextField fullWidth size="small" label="Remarks" value={ruleForm.remarks ?? ""} onChange={(e) => setRuleForm({ ...ruleForm, remarks: e.target.value })} />
             </Grid>
             <Grid item xs={12}>
-              <Button variant="contained" disabled={!ruleForm.payrollComponentId || saveRule.isPending} onClick={() => saveRule.mutate(ruleForm)}>
-                Save Payroll Rule
-              </Button>
+              <Stack direction="row" spacing={1}>
+                <Button variant="contained" disabled={!ruleForm.payrollComponentId || saveRule.isPending} onClick={() => saveRule.mutate(ruleForm)}>
+                  {ruleForm.id ? "Update Payroll Rule" : "Save Payroll Rule"}
+                </Button>
+                {ruleForm.id && (
+                  <Button onClick={() => setRuleForm({ ...EMPTY_RULE, timeTypeId: selectedTimeTypeId })}>
+                    Cancel edit
+                  </Button>
+                )}
+              </Stack>
             </Grid>
           </Grid>
           <Divider sx={{ my: 2 }} />
@@ -224,9 +231,12 @@ function TimeTypesSection() {
                       {rule.action} · {rule.percent}% · {rule.basis}{rule.thresholdDays ? ` · after ${rule.thresholdDays}d (${rule.thresholdScope})` : ""}{rule.affectsOvertime ? " · affects OT" : ""}{rule.processSeparately ? " · separate" : ""}
                     </Typography>
                   </Box>
-                  <IconButton size="small" color="error" onClick={() => deleteRule.mutate(rule.payrollComponentId)}>
-                    <DeleteIcon />
-                  </IconButton>
+                  <Stack direction="row" spacing={0.5}>
+                    <Button size="small" onClick={() => setRuleForm({ ...rule, timeTypeId: selectedTimeTypeId })}>Edit</Button>
+                    <IconButton size="small" color="error" onClick={() => deleteRule.mutate(rule.payrollComponentId)}>
+                      <DeleteIcon />
+                    </IconButton>
+                  </Stack>
                 </Stack>
               </Paper>
             ))}
