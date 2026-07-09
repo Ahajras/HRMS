@@ -86,6 +86,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/payroll-reports", label: "Reports", icon: <PaymentsIcon />, authority: "payroll.config.read" },
       { to: "/payroll-components", label: "Pay Components", icon: <PaymentsIcon />, authority: "payroll.config.read" },
       { to: "/payroll-rules", label: "Payroll Rules", icon: <PaymentsIcon />, authority: "payroll.config.read" },
+      { to: "/day-zero", label: "Day Zero", icon: <PaymentsIcon />, authority: "payroll.config.read" },
     ],
   },
   {

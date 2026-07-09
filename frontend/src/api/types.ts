@@ -951,3 +951,12 @@ export interface PayrollCostReport {
   byEmployee: EmployeeCostBreakdown[];
   byCostCode: CostCodeLine[];
 }
+
+export interface DayZeroDay {
+  id: string;
+  workDate: string;
+  periodYear: number;
+  periodMonth: number;
+  timeTypeCode?: string;
+  timeTypeName?: string;
+}

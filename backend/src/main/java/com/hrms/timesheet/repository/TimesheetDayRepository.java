@@ -54,6 +54,20 @@ public interface TimesheetDayRepository extends JpaRepository<TimesheetDay, UUID
                                     @Param("projectId") UUID projectId,
                                     @Param("payGroup") String payGroup);
 
+    /** Day Zero screen — every estimated day, on an already-locked period,
+     * for one employee, most recent first. */
+    @Query("""
+            select td from TimesheetDay td, Timesheet t
+            where t.id = td.timesheetId
+              and t.companyId = :companyId
+              and t.employeeId = :employeeId
+              and td.estimated = true
+              and t.status = 'LOCKED'
+            order by td.workDate desc
+            """)
+    List<TimesheetDay> findEstimatedLockedDaysForEmployee(@Param("companyId") UUID companyId,
+                                                          @Param("employeeId") UUID employeeId);
+
     @Query("""
             select d from TimesheetDay d
             join Timesheet t on t.id = d.timesheetId

@@ -501,3 +501,10 @@ export const payrollReportApi = {
       "/payroll/reports/cost-allocation/employees", { params: { periodId, ...(projectId ? { projectId } : {}), page, size, ...(search ? { search } : {}) } }
     ).then((r) => r.data),
 };
+
+export const dayZeroApi = {
+  days: (employeeId: string) =>
+    api.get<import("./types").DayZeroDay[]>(`/day-zero/employees/${employeeId}/days`).then((r) => r.data),
+  correct: (employeeId: string, dayTimeTypeOverrides: Record<string, string>, note?: string) =>
+    api.post<{ adjustmentsCreated: number }>(`/day-zero/employees/${employeeId}/correct`, { dayTimeTypeOverrides, note }).then((r) => r.data),
+};
