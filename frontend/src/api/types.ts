@@ -820,6 +820,45 @@ export interface PayrollRun {
   results: PayrollResult[];
 }
 
+export interface ProvisionResult {
+  id?: string;
+  employeeId: string;
+  employeeNumber?: string;
+  employeeName?: string;
+  projectId?: string;
+  payGroup?: string;
+  eligibleAmount: number;
+  provisionAmount: number;
+  formulaNote?: string;
+  status?: string;
+  message?: string;
+}
+
+export interface ProvisionRun {
+  id?: string;
+  periodId: string;
+  periodName?: string;
+  periodStartDate?: string;
+  periodEndDate?: string;
+  projectId?: string;
+  payGroup?: string;
+  provisionType: string;
+  status?: string;
+  calculatedAt?: string;
+  employeeCount: number;
+  totalEligibleAmount: number;
+  totalProvisionAmount: number;
+  notes?: string;
+  results: ProvisionResult[];
+}
+
+export interface ProvisionCreateRequest {
+  periodId: string;
+  projectId?: string;
+  payGroup?: string;
+  provisionType: string;
+}
+
 export interface PayrollRule {
   id?: string;
   payGroup: string;

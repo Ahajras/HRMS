@@ -29,6 +29,7 @@ import PeopleIcon from "@mui/icons-material/People";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import LayersIcon from "@mui/icons-material/Layers";
 import PaymentsIcon from "@mui/icons-material/Payments";
+import SavingsIcon from "@mui/icons-material/Savings";
 import PublicIcon from "@mui/icons-material/Public";
 import GavelIcon from "@mui/icons-material/Gavel";
 import TimerIcon from "@mui/icons-material/Timer";
@@ -98,6 +99,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/payroll-runs", label: "Payroll Runs", icon: <PaymentsIcon />, authority: "payroll.config.read" },
       { to: "/payroll-reports", label: "Reports", icon: <PaymentsIcon />, authority: "payroll.config.read" },
+      { to: "/provisions", label: "Provisions", icon: <SavingsIcon />, authority: "payroll.config.read" },
       { to: "/payroll-components", label: "Pay Components", icon: <PaymentsIcon />, authority: "payroll.config.read" },
       { to: "/payroll-rules", label: "Payroll Rules", icon: <PaymentsIcon />, authority: "payroll.config.read" },
       { to: "/day-zero", label: "Day Zero", icon: <PaymentsIcon />, authority: "payroll.config.read" },

@@ -20,6 +20,8 @@ import type {
   OrganizationUnit,
   PageResponse,
   PayrollComponent,
+  ProvisionCreateRequest,
+  ProvisionRun,
   PayrollRun,
   PayrollResult,
   CostCodeLine,
@@ -481,6 +483,15 @@ export const payrollRunApi = {
     api.get<{ content: PayrollResult[]; page: number; size: number; totalElements: number; totalPages: number; first: boolean; last: boolean }>(
       `/payroll-runs/${id}/results`, { params: { page, size, ...(search ? { search } : {}) } }
     ).then((r) => r.data),
+};
+
+export const provisionApi = {
+  list: (periodId?: string) =>
+    api.get<ProvisionRun[]>("/provisions", { params: periodId ? { periodId } : {} }).then((r) => r.data),
+  get: (id: string) => api.get<ProvisionRun>(`/provisions/${id}`).then((r) => r.data),
+  calculate: (payload: ProvisionCreateRequest) =>
+    api.post<ProvisionRun>("/provisions", payload).then((r) => r.data),
+  delete: (id: string) => api.delete(`/provisions/${id}`).then(() => undefined),
 };
 
 export const payrollRuleApi = {

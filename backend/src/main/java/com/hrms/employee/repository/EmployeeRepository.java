@@ -28,6 +28,30 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
 
     boolean existsByCompanyIdAndEmployeeNumberAndIdNot(UUID companyId, String employeeNumber, UUID id);
 
+    @Query("""
+            select distinct e from Employee e
+            where e.companyId = :companyId
+              and upper(coalesce(e.status, '')) = 'ACTIVE'
+              and e.hireDate <= :periodEnd
+              and (e.terminationDate is null or e.terminationDate >= :periodStart)
+              and (:payGroup is null or :payGroup = '' or upper(:payGroup) = 'ALL'
+                   or upper(coalesce(e.payStatus, '')) = upper(:payGroup))
+              and (:projectId is null or exists (
+                    select 1 from Assignment a
+                    where a.employeeId = e.id
+                      and a.projectId = :projectId
+                      and upper(coalesce(a.status, '')) = 'ACTIVE'
+                      and a.effectiveFrom <= :periodEnd
+                      and (a.effectiveTo is null or a.effectiveTo >= :periodStart)
+              ))
+            order by e.employeeNumber
+            """)
+    List<Employee> findProvisionScope(@Param("companyId") UUID companyId,
+                                      @Param("periodStart") java.time.LocalDate periodStart,
+                                      @Param("periodEnd") java.time.LocalDate periodEnd,
+                                      @Param("projectId") UUID projectId,
+                                      @Param("payGroup") String payGroup);
+
     /**
      * Free-text search across employee identity fields and the action sheet
      * number of any of the employee's contract pay items.
