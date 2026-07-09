@@ -188,6 +188,8 @@ public class EmployeeService {
         entity.setSupervisorEmployeeId(dto.getSupervisorEmployeeId());
         entity.setTimekeeperEmployeeId(dto.getTimekeeperEmployeeId());
         entity.setPhotoUrl(dto.getPhotoUrl());
+        entity.setHomeAirportCode(dto.getHomeAirportCode() != null ? dto.getHomeAirportCode().trim().toUpperCase() : null);
+        entity.setWorkAirportCode(dto.getWorkAirportCode() != null ? dto.getWorkAirportCode().trim().toUpperCase() : null);
         if (dto.getStatus() != null) {
             if (requiresTerminationDate(dto.getStatus()) && dto.getTerminationDate() == null) {
                 throw new BusinessRuleException("employee.termination-date.required",
@@ -229,6 +231,8 @@ public class EmployeeService {
         dto.setSupervisorEmployeeId(entity.getSupervisorEmployeeId());
         dto.setTimekeeperEmployeeId(entity.getTimekeeperEmployeeId());
         dto.setPhotoUrl(entity.getPhotoUrl());
+        dto.setHomeAirportCode(entity.getHomeAirportCode());
+        dto.setWorkAirportCode(entity.getWorkAirportCode());
         if (entity.getSupervisorEmployeeId() != null) {
             repository.findById(entity.getSupervisorEmployeeId()).ifPresent(sup ->
                     dto.setSupervisorName((sup.getFirstName() + " " + sup.getLastName()).trim()));

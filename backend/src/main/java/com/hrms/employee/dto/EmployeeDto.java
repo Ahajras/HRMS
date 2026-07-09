@@ -88,6 +88,8 @@ public class EmployeeDto {
     private UUID timekeeperEmployeeId;
     private String timekeeperName;
     private String photoUrl;
+    private String homeAirportCode;
+    private String workAirportCode;
 
     public UUID getSupervisorEmployeeId() { return supervisorEmployeeId; }
     public void setSupervisorEmployeeId(UUID supervisorEmployeeId) { this.supervisorEmployeeId = supervisorEmployeeId; }
@@ -103,6 +105,12 @@ public class EmployeeDto {
 
     public String getPhotoUrl() { return photoUrl; }
     public void setPhotoUrl(String photoUrl) { this.photoUrl = photoUrl; }
+
+    public String getHomeAirportCode() { return homeAirportCode; }
+    public void setHomeAirportCode(String homeAirportCode) { this.homeAirportCode = homeAirportCode; }
+
+    public String getWorkAirportCode() { return workAirportCode; }
+    public void setWorkAirportCode(String workAirportCode) { this.workAirportCode = workAirportCode; }
 
     public UUID getId() { return id; }
     public void setId(UUID id) { this.id = id; }

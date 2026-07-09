@@ -228,6 +228,14 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
         <TextField fullWidth label="Termination Date" type="date" InputLabelProps={{ shrink: true }}
           value={form.terminationDate ?? ""} onChange={(e) => set("terminationDate", e.target.value)} />
       </Grid>
+      <Grid item xs={12} sm={4}>
+        <TextField fullWidth label="Work airport" value={form.workAirportCode ?? ""}
+          onChange={(e) => set("workAirportCode", e.target.value.toUpperCase())} helperText="Used for ticket fare route" />
+      </Grid>
+      <Grid item xs={12} sm={4}>
+        <TextField fullWidth label="Home airport" value={form.homeAirportCode ?? ""}
+          onChange={(e) => set("homeAirportCode", e.target.value.toUpperCase())} helperText="Used for ticket fare route" />
+      </Grid>
 
       <Grid item xs={12}><Divider textAlign="left"><Typography variant="caption">Employment Classification</Typography></Divider></Grid>
 

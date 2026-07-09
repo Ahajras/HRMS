@@ -183,6 +183,8 @@ export interface Employee {
   timekeeperEmployeeId?: string;
   timekeeperName?: string;
   photoUrl?: string;
+  homeAirportCode?: string;
+  workAirportCode?: string;
 }
 
 export interface EmployeeSummary {
@@ -1036,6 +1038,49 @@ export interface PayrollCostControlReport {
   difference: number;
   debitLines: PayrollCostControlLine[];
   creditLines: PayrollCostControlLine[];
+}
+
+export interface TicketFare {
+  id?: string;
+  fromAirportCode: string;
+  toAirportCode: string;
+  amount: number;
+  currencyCode?: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  status?: string;
+  remarks?: string;
+}
+
+export interface TicketLedger {
+  id?: string;
+  employeeId: string;
+  leaveRequestId?: string;
+  entryType: string;
+  entryDate: string;
+  amount: number;
+  fromAirportCode?: string;
+  toAirportCode?: string;
+  status?: string;
+  remarks?: string;
+}
+
+export interface TicketBalance {
+  employeeId: string;
+  employeeNumber?: string;
+  employeeName?: string;
+  hireDate?: string;
+  asOfDate: string;
+  fromAirportCode?: string;
+  toAirportCode?: string;
+  ticketAmount: number;
+  cycleMonths: number;
+  accruedMonths: number;
+  accruedAmount: number;
+  adjustmentCredit: number;
+  usedAmount: number;
+  balance: number;
+  message?: string;
 }
 
 export interface DayZeroDay {

@@ -40,6 +40,7 @@ const VARIABLES = [
   "period_days",
   "month_days",
   "ticket_cycle_months",
+  "ticket_amount",
 ];
 
 const emptyRule = (): ProvisionRule => ({

@@ -3,6 +3,7 @@ package com.hrms.payroll.service;
 import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
+import com.hrms.benefits.service.TicketService;
 import com.hrms.employee.domain.Assignment;
 import com.hrms.employee.domain.ContractPayItem;
 import com.hrms.employee.domain.Employee;
@@ -51,6 +52,7 @@ public class ProvisionService {
     private final ContractPayItemRepository payItemRepo;
     private final PayrollComponentRepository componentRepo;
     private final ProvisionRuleRepository ruleRepo;
+    private final TicketService ticketService;
 
     public ProvisionService(ProvisionRunRepository runRepo,
                             ProvisionResultRepository resultRepo,
@@ -60,7 +62,8 @@ public class ProvisionService {
                             AssignmentRepository assignmentRepo,
                             ContractPayItemRepository payItemRepo,
                             PayrollComponentRepository componentRepo,
-                            ProvisionRuleRepository ruleRepo) {
+                            ProvisionRuleRepository ruleRepo,
+                            TicketService ticketService) {
         this.runRepo = runRepo;
         this.resultRepo = resultRepo;
         this.periodRepo = periodRepo;
@@ -70,6 +73,7 @@ public class ProvisionService {
         this.payItemRepo = payItemRepo;
         this.componentRepo = componentRepo;
         this.ruleRepo = ruleRepo;
+        this.ticketService = ticketService;
     }
 
     @Transactional(readOnly = true)
@@ -245,6 +249,7 @@ public class ProvisionService {
         vars.put("period_days", BigDecimal.valueOf(ChronoUnit.DAYS.between(period.getStartDate(), period.getEndDate()) + 1));
         vars.put("month_days", BigDecimal.valueOf(period.getEndDate().lengthOfMonth()));
         vars.put("ticket_cycle_months", BigDecimal.valueOf(Math.max(1, rule.getTicketCycleMonths())));
+        vars.put("ticket_amount", scale4(ticketService.ticketAmountForEmployee(employee, period.getEndDate())));
         return vars;
     }
 

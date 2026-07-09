@@ -4,6 +4,7 @@ import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
 import com.hrms.common.web.PageResponse;
+import com.hrms.benefits.service.TicketService;
 import com.hrms.employee.domain.Assignment;
 import com.hrms.employee.domain.Employee;
 import com.hrms.employee.repository.AssignmentRepository;
@@ -63,6 +64,7 @@ public class LeaveService {
     private final TimesheetService timesheetService;
     private final TimekeeperService timekeeperService;
     private final AppUserRepository appUserRepo;
+    private final TicketService ticketService;
 
     public LeaveService(LeaveTypeRepository typeRepo, LeaveRequestRepository requestRepo,
                         LeaveAdjustmentRepository adjustmentRepo, EmployeeRepository employeeRepo,
@@ -70,7 +72,7 @@ public class LeaveService {
                         CompanyRulePackageRepository companyRulePackageRepo,
                         RulePackageRepository rulePackageRepo, RuleRepository ruleRepo,
                         TimesheetService timesheetService, TimekeeperService timekeeperService,
-                        AppUserRepository appUserRepo) {
+                        AppUserRepository appUserRepo, TicketService ticketService) {
         this.typeRepo = typeRepo;
         this.requestRepo = requestRepo;
         this.adjustmentRepo = adjustmentRepo;
@@ -83,6 +85,7 @@ public class LeaveService {
         this.timesheetService = timesheetService;
         this.timekeeperService = timekeeperService;
         this.appUserRepo = appUserRepo;
+        this.ticketService = ticketService;
     }
 
     @Transactional(readOnly = true)
@@ -194,6 +197,7 @@ public class LeaveService {
         }
         LeaveRequest saved = requestRepo.save(row);
         timesheetService.syncLeaveRequest(saved, type);
+        ticketService.syncLeaveTicket(saved);
         return toDto(saved);
     }
 
@@ -207,6 +211,7 @@ public class LeaveService {
         }
         LeaveRequest saved = requestRepo.save(row);
         timesheetService.syncLeaveRequest(saved, getType(saved.getLeaveTypeId()));
+        ticketService.syncLeaveTicket(saved);
         return toDto(saved);
     }
 

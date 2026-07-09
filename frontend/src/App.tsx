@@ -8,6 +8,7 @@ import PayrollComponentsPage from "./pages/PayrollComponentsPage";
 import PayrollReportsPage from "./pages/PayrollReportsPage";
 import ProvisionsPage from "./pages/ProvisionsPage";
 import ProvisionRulesPage from "./pages/ProvisionRulesPage";
+import TicketsPage from "./pages/TicketsPage";
 import DayZeroPage from "./pages/DayZeroPage";
 import PayrollRunsPage from "./pages/PayrollRunsPage";
 import PayrollRulesPage from "./pages/PayrollRulesPage";
@@ -63,6 +64,7 @@ export default function App() {
         <Route path="/payroll-reports" element={<PayrollReportsPage />} />
         <Route path="/provisions" element={<ProvisionsPage />} />
         <Route path="/provision-rules" element={<ProvisionRulesPage />} />
+        <Route path="/tickets" element={<TicketsPage />} />
         <Route path="/day-zero" element={<DayZeroPage />} />
         <Route path="/payroll-rules" element={<PayrollRulesPage />} />
         <Route path="/payroll-runs" element={<PayrollRunsPage />} />

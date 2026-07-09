@@ -58,9 +58,9 @@ public class ProvisionRuleService {
                 BigDecimal.valueOf(365), BigDecimal.ZERO, BigDecimal.valueOf(21), BigDecimal.valueOf(21), 12,
                 "Default template. Qatar minimum is commonly configured as 21 basic-wage days per service year.");
         createIfMissing(companyId, "TICKET", "Ticket provision", "FIXED_AMOUNT",
-                null, null, "fixed_amount / ticket_cycle_months",
+                null, null, "ticket_amount / ticket_cycle_months",
                 BigDecimal.valueOf(365), BigDecimal.ZERO, BigDecimal.valueOf(21), BigDecimal.valueOf(28), 12,
-                "Default template. Enter fixed ticket amount and cycle months.");
+                "Default template. Ticket amount is read from the employee work/home airport fare table.");
         return list();
     }
 

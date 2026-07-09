@@ -94,6 +94,12 @@ public class Employee extends AuditableEntity {
     @Column(name = "photo_url")
     private String photoUrl;
 
+    @Column(name = "home_airport_code", length = 20)
+    private String homeAirportCode;
+
+    @Column(name = "work_airport_code", length = 20)
+    private String workAirportCode;
+
     public UUID getSupervisorEmployeeId() { return supervisorEmployeeId; }
     public void setSupervisorEmployeeId(UUID supervisorEmployeeId) { this.supervisorEmployeeId = supervisorEmployeeId; }
 
@@ -102,6 +108,12 @@ public class Employee extends AuditableEntity {
 
     public String getPhotoUrl() { return photoUrl; }
     public void setPhotoUrl(String photoUrl) { this.photoUrl = photoUrl; }
+
+    public String getHomeAirportCode() { return homeAirportCode; }
+    public void setHomeAirportCode(String homeAirportCode) { this.homeAirportCode = homeAirportCode; }
+
+    public String getWorkAirportCode() { return workAirportCode; }
+    public void setWorkAirportCode(String workAirportCode) { this.workAirportCode = workAirportCode; }
 
     public UUID getCompanyId() { return companyId; }
     public void setCompanyId(UUID companyId) { this.companyId = companyId; }

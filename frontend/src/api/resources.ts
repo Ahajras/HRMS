@@ -48,6 +48,9 @@ import type {
   TimesheetDay,
   TimesheetProjectSummary,
   TimesheetSummary,
+  TicketBalance,
+  TicketFare,
+  TicketLedger,
   BulkTimesheetJob,
   BulkStatusJob,
   CompanyProfile,
@@ -313,6 +316,19 @@ export const timeTypePayrollRuleApi = {
     api.post<import("./types").TimeTypePayrollRule[]>(`/time-types/${timeTypeId}/payroll-rules/initialize-defaults`).then((r) => r.data),
   remove: (timeTypeId: string, componentId: string) =>
     api.delete(`/time-types/${timeTypeId}/payroll-rules/${componentId}`).then(() => undefined),
+};
+
+export const ticketApi = {
+  fares: () => api.get<TicketFare[]>("/tickets/fares").then((r) => r.data),
+  saveFare: (payload: TicketFare) => payload.id
+    ? api.put<TicketFare>(`/tickets/fares/${payload.id}`, payload).then((r) => r.data)
+    : api.post<TicketFare>("/tickets/fares", payload).then((r) => r.data),
+  ledger: (employeeId: string) =>
+    api.get<TicketLedger[]>("/tickets/ledger", { params: { employeeId } }).then((r) => r.data),
+  saveLedger: (payload: TicketLedger) =>
+    api.post<TicketLedger>("/tickets/ledger", payload).then((r) => r.data),
+  balance: (employeeId: string, asOfDate?: string) =>
+    api.get<TicketBalance>("/tickets/balance", { params: { employeeId, ...(asOfDate ? { asOfDate } : {}) } }).then((r) => r.data),
 };
 
 // --- Timesheet: public holidays ---
