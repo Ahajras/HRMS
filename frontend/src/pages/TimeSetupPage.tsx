@@ -86,6 +86,10 @@ function TimeTypesSection() {
     mutationFn: (componentId: string) => timeTypePayrollRuleApi.remove(selectedTimeTypeId, componentId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["timeTypePayrollRules", selectedTimeTypeId] }),
   });
+  const initializeDefaults = useMutation({
+    mutationFn: () => timeTypePayrollRuleApi.initializeDefaults(selectedTimeTypeId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["timeTypePayrollRules", selectedTimeTypeId] }),
+  });
 
   return (
     <Box mb={4}>
@@ -132,6 +136,14 @@ function TimeTypesSection() {
           <Typography variant="body2" color="text.secondary" mb={1.5}>
             Tell the system which payroll component this time type pays, deducts, or ignores.
           </Typography>
+          <Stack direction="row" spacing={1} mb={1.5}>
+            <Button variant="outlined" disabled={initializeDefaults.isPending} onClick={() => initializeDefaults.mutate()}>
+              Initialize default rules
+            </Button>
+            <Typography variant="caption" color="text.secondary" sx={{ alignSelf: "center" }}>
+              Adds missing payroll components as DEFAULT, so current calculation behavior is preserved until you change a row.
+            </Typography>
+          </Stack>
           <Grid container spacing={1.5}>
             <Grid item xs={12} sm={4}>
               <TextField
@@ -151,6 +163,7 @@ function TimeTypesSection() {
             </Grid>
             <Grid item xs={6} sm={2}>
               <TextField select fullWidth size="small" label="Action" value={ruleForm.action} onChange={(e) => setRuleForm({ ...ruleForm, action: e.target.value })}>
+                <MenuItem value="DEFAULT">Default behavior</MenuItem>
                 <MenuItem value="PAY">Pay</MenuItem>
                 <MenuItem value="DEDUCT">Deduct</MenuItem>
                 <MenuItem value="SUSPEND">Suspend (stop)</MenuItem>

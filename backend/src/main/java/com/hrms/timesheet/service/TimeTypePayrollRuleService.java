@@ -63,6 +63,37 @@ public class TimeTypePayrollRuleService {
         return toDto(repository.save(entity));
     }
 
+    public List<TimeTypePayrollRuleDto> initializeDefaults(UUID timeTypeId) {
+        UUID companyId = TenantContext.requireCompanyId();
+        requireTimeType(companyId, timeTypeId);
+        for (PayrollComponent component : payrollComponentRepository.findByCompanyIdOrderByPriority(companyId)) {
+            if (!"ACTIVE".equalsIgnoreCase(component.getStatus())) {
+                continue;
+            }
+            TimeTypePayrollRule entity = repository
+                    .findByCompanyIdAndTimeTypeIdAndPayrollComponentId(companyId, timeTypeId, component.getId())
+                    .orElseGet(TimeTypePayrollRule::new);
+            if (entity.getId() != null) {
+                continue;
+            }
+            entity.setCompanyId(companyId);
+            entity.setTimeTypeId(timeTypeId);
+            entity.setPayrollComponentId(component.getId());
+            entity.setAction("DEFAULT");
+            entity.setPercent(new java.math.BigDecimal("100.00"));
+            entity.setBasis("HOURS");
+            entity.setThresholdDays(0);
+            entity.setThresholdScope("NONE");
+            entity.setYearBasis("CALENDAR");
+            entity.setAffectsOvertime(false);
+            entity.setProcessSeparately(false);
+            entity.setSortOrder(component.getPriority());
+            entity.setRemarks("Initialized default rule; follows standard time type behavior until changed.");
+            repository.save(entity);
+        }
+        return findByTimeType(timeTypeId);
+    }
+
     public void delete(UUID timeTypeId, UUID componentId) {
         UUID companyId = TenantContext.requireCompanyId();
         requireTimeType(companyId, timeTypeId);

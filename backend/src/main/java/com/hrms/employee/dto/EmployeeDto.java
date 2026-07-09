@@ -72,6 +72,7 @@ public class EmployeeDto {
     @Size(max = 20)
     private String jobTitleCode;
 
+    @NotBlank
     @Size(max = 30)
     private String payStatus;
 

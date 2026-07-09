@@ -123,10 +123,11 @@ function SelectField(props: {
   onChange: (v: string) => void;
   options: { value: string; label: string }[];
   allowEmpty?: boolean;
+  required?: boolean;
 }) {
-  const { label, value, onChange, options, allowEmpty = true } = props;
+  const { label, value, onChange, options, allowEmpty = true, required = false } = props;
   return (
-    <TextField select fullWidth label={label} value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
+    <TextField select fullWidth required={required} label={label} value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
       {allowEmpty && (
         <MenuItem value="">
           <em>—</em>
@@ -210,7 +211,7 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
         <SelectField label="Status" value={form.status} onChange={(v) => set("status", v)} options={lk(statuses)} allowEmpty={false} />
       </Grid>
       <Grid item xs={12} sm={4}>
-        <SelectField label="Pay Status" value={form.payStatus} onChange={(v) => set("payStatus", v)} options={lk(payStatuses)} />
+        <SelectField label="Pay Status" value={form.payStatus} onChange={(v) => set("payStatus", v)} options={lk(payStatuses)} allowEmpty={false} required />
       </Grid>
       <Grid item xs={12} sm={4}>
         <SelectField label="Band" value={form.band} onChange={(v) => set("band", v)} options={lk(bands)} />
@@ -235,9 +236,6 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
       </Grid>
       <Grid item xs={12} sm={4}>
         <TextField fullWidth label="Job Title Code" value={form.jobTitleCode ?? ""} onChange={(e) => set("jobTitleCode", e.target.value)} />
-      </Grid>
-      <Grid item xs={12} sm={4}>
-        <TextField fullWidth label="Pay Status" value={form.payStatus ?? ""} onChange={(e) => set("payStatus", e.target.value)} />
       </Grid>
       <Grid item xs={12} sm={4}>
         <TextField fullWidth label="Arabic Name" value={form.arabicName ?? ""} onChange={(e) => set("arabicName", e.target.value)} />
@@ -1530,7 +1528,7 @@ export default function EmployeesPage() {
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Close</Button>
           {tab === 0 && (
-            <Button variant="contained" onClick={() => save.mutate(form)} disabled={save.isPending}>
+            <Button variant="contained" onClick={() => save.mutate(form)} disabled={save.isPending || !form.payStatus}>
               {isSaved ? "Update" : "Save"}
             </Button>
           )}

@@ -805,6 +805,9 @@ public class PayrollRunService {
     }
 
     private DayEffect explicitEffect(TimeTypePayrollRule explicit, TimesheetDay day, TimeType type, PayrollRule rule, BigDecimal shiftHours) {
+        if ("DEFAULT".equalsIgnoreCase(explicit.getAction())) {
+            return legacyEffect(type, day, rule, shiftHours);
+        }
         BigDecimal baseQuantity = quantityForBasis(day, explicit.getBasis(), shiftHours);
         BigDecimal scaled = baseQuantity.multiply(z(explicit.getPercent()).divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP));
         if ("DEDUCT".equalsIgnoreCase(explicit.getAction())) {

@@ -306,6 +306,8 @@ export const timeTypePayrollRuleApi = {
     api.get<import("./types").TimeTypePayrollRule[]>(`/time-types/${timeTypeId}/payroll-rules`).then((r) => r.data),
   save: (timeTypeId: string, payload: import("./types").TimeTypePayrollRule) =>
     api.post<import("./types").TimeTypePayrollRule>(`/time-types/${timeTypeId}/payroll-rules`, payload).then((r) => r.data),
+  initializeDefaults: (timeTypeId: string) =>
+    api.post<import("./types").TimeTypePayrollRule[]>(`/time-types/${timeTypeId}/payroll-rules/initialize-defaults`).then((r) => r.data),
   remove: (timeTypeId: string, componentId: string) =>
     api.delete(`/time-types/${timeTypeId}/payroll-rules/${componentId}`).then(() => undefined),
 };

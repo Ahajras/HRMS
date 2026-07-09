@@ -37,6 +37,11 @@ public class TimeTypePayrollRuleController {
         return service.save(timeTypeId, dto);
     }
 
+    @PostMapping("/initialize-defaults")
+    public List<TimeTypePayrollRuleDto> initializeDefaults(@PathVariable UUID timeTypeId) {
+        return service.initializeDefaults(timeTypeId);
+    }
+
     @DeleteMapping("/{componentId}")
     public ResponseEntity<Void> delete(@PathVariable UUID timeTypeId, @PathVariable UUID componentId) {
         service.delete(timeTypeId, componentId);
