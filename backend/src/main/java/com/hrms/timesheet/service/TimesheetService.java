@@ -544,14 +544,7 @@ public class TimesheetService {
         if (payGroup == null || payGroup.isBlank()) {
             return "ALL";
         }
-        String p = payGroup.trim().toUpperCase();
-        if (p.contains("DAILY")) {
-            return "DAILY";
-        }
-        if (p.contains("MONTH")) {
-            return "MONTHLY";
-        }
-        return "ALL";
+        return payGroup.trim().toUpperCase();
     }
 
     /** Per-project lock status for a period (for the Calendar screen). */

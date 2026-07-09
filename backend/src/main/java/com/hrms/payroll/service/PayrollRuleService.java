@@ -1,5 +1,6 @@
 package com.hrms.payroll.service;
 
+import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
 import com.hrms.payroll.domain.PayrollCategoryRule;
@@ -34,7 +35,8 @@ public class PayrollRuleService {
 
     public PayrollRuleDto create(PayrollRuleDto dto) {
         UUID companyId = TenantContext.requireCompanyId();
-        String group = dto.getPayGroup() != null ? dto.getPayGroup() : "MONTHLY";
+        String group = normalizeRequired(dto.getPayGroup(), "Pay group is required.");
+        String payItemBasis = normalizeRequired(dto.getPayItemBasis(), "Pay item basis is required.");
         // If a rule already exists for this (company, project, pay group), reuse it
         // instead of creating a duplicate (avoids the unique-index violation).
         PayrollRule rule = repository
@@ -43,8 +45,7 @@ public class PayrollRuleService {
         rule.setCompanyId(companyId);
         rule.setPayGroup(group);
         rule.setProjectId(dto.getProjectId());
-        rule.setPayItemBasis(dto.getPayItemBasis() != null ? dto.getPayItemBasis()
-                : ("DAILY".equalsIgnoreCase(group) ? "DAILY_RATE" : "FIXED_AMOUNT"));
+        rule.setPayItemBasis(payItemBasis);
         rule.setOtMultiplier(dto.getOtMultiplier() != null ? dto.getOtMultiplier() : new java.math.BigDecimal("1.2500"));
         rule.setRestDayOtMultiplier(dto.getRestDayOtMultiplier() != null ? dto.getRestDayOtMultiplier() : new java.math.BigDecimal("1.5000"));
         rule.setStandardHoursPerDay(dto.getStandardHoursPerDay() != null ? dto.getStandardHoursPerDay() : new java.math.BigDecimal("8.00"));
@@ -57,6 +58,13 @@ public class PayrollRuleService {
         saveCategoryRules(companyId, rule.getId(), dto.getCategoryRules());
         ensureDefaultCategoryRules(companyId, rule.getId());
         return toDto(rule);
+    }
+
+    private static String normalizeRequired(String value, String message) {
+        if (value == null || value.isBlank()) {
+            throw new BusinessRuleException("payroll.rule.required", message);
+        }
+        return value.trim().toUpperCase();
     }
 
     public PayrollRuleDto update(UUID id, PayrollRuleDto dto) {

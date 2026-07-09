@@ -16,7 +16,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { calendarApi, periodApi, periodLockApi } from "../api/resources";
+import { calendarApi, lookupApi, periodApi, periodLockApi } from "../api/resources";
 
 const STATUS_COLOR: Record<string, "default" | "success" | "warning" | "error"> = {
   OPEN: "success",
@@ -125,6 +125,7 @@ export default function CalendarPage() {
 function ProjectLocksPanel({ periodId }: { periodId: string }) {
   const qc = useQueryClient();
   const [payGroup, setPayGroup] = useState("ALL");
+  const { data: payGroups = [] } = useQuery({ queryKey: ["lookup", "PAY_STATUS"], queryFn: () => lookupApi.byCategory("PAY_STATUS") });
   const { data: rows = [] } = useQuery({
     queryKey: ["periodLocks", periodId, payGroup],
     queryFn: () => periodLockApi.statuses(periodId, payGroup),
@@ -141,8 +142,9 @@ function ProjectLocksPanel({ periodId }: { periodId: string }) {
         <Typography variant="subtitle2">Lock per project (ready for payroll)</Typography>
         <TextField select size="small" label="Pay group" value={payGroup} onChange={(e) => setPayGroup(e.target.value)} sx={{ minWidth: 160 }}>
           <MenuItem value="ALL">All</MenuItem>
-          <MenuItem value="DAILY">Daily</MenuItem>
-          <MenuItem value="MONTHLY">Monthly</MenuItem>
+          {payGroups.map((g) => (
+            <MenuItem key={g.code} value={g.code}>{g.label || g.code}</MenuItem>
+          ))}
         </TextField>
       </Stack>
       <Table size="small">

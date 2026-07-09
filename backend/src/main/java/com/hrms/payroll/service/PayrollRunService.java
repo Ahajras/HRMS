@@ -899,7 +899,6 @@ public class PayrollRunService {
 
     private PayrollRule payrollRule(UUID companyId, UUID projectId, String payStatus) {
         String group = normalizePayGroup(payStatus);
-        // Project-specific rule first, then the company-wide default (project_id NULL).
         if (projectId != null) {
             Optional<PayrollRule> projectRule =
                     ruleRepo.findByCompanyIdAndProjectIdAndPayGroupAndStatus(companyId, projectId, group, "ACTIVE");
@@ -908,7 +907,8 @@ public class PayrollRunService {
             }
         }
         return ruleRepo.findDefaultByCompanyIdAndPayGroupAndStatus(companyId, group, "ACTIVE")
-                .orElseGet(() -> defaultRule(companyId, group));
+                .orElseThrow(() -> new BusinessRuleException("payroll.rule.missing",
+                        "No active payroll rule is configured for pay group " + group + "."));
     }
 
     private PayrollRule payrollRule(Map<PayrollRuleKey, PayrollRule> rules, UUID companyId, UUID projectId, String payStatus) {
@@ -918,19 +918,11 @@ public class PayrollRunService {
             return projectRule;
         }
         PayrollRule defaultRule = rules.get(new PayrollRuleKey(null, group));
-        return defaultRule != null ? defaultRule : defaultRule(companyId, group);
-    }
-
-    private PayrollRule defaultRule(UUID companyId, String group) {
-        PayrollRule rule = new PayrollRule();
-        rule.setCompanyId(companyId);
-        rule.setPayGroup(group);
-        rule.setPayItemBasis("DAILY".equals(group) ? "DAILY_RATE" : "FIXED_AMOUNT");
-        rule.setOtMultiplier(new BigDecimal("1.2500"));
-        rule.setRestDayOtMultiplier(new BigDecimal("1.5000"));
-        rule.setStandardHoursPerDay(new BigDecimal("8.00"));
-        rule.setWeeklyRestPaid(true);
-        return rule;
+        if (defaultRule != null) {
+            return defaultRule;
+        }
+        throw new BusinessRuleException("payroll.rule.missing",
+                "No active payroll rule is configured for pay group " + group + ".");
     }
 
     private PayableBreakdown payableBreakdown(Timesheet ts, PayrollRule rule, BigDecimal shiftHours) {
@@ -1444,10 +1436,7 @@ public class PayrollRunService {
         if (payGroup == null || payGroup.isBlank()) {
             return "ALL";
         }
-        String p = payGroup.trim().toUpperCase();
-        if (p.contains("DAILY")) return "DAILY";
-        if (p.contains("MONTH")) return "MONTHLY";
-        return "ALL";
+        return payGroup.trim().toUpperCase();
     }
 
     private static String currentUsername() {

@@ -19,7 +19,7 @@ import {
 } from "@mui/material";
 import PrintIcon from "@mui/icons-material/Print";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { payrollRunApi, periodApi, projectApi } from "../api/resources";
+import { lookupApi, payrollRunApi, periodApi, projectApi } from "../api/resources";
 import type { PayrollResult, PayrollResultLine, PayrollRun } from "../api/types";
 
 const STATUS_COLOR: Record<string, "default" | "info" | "success" | "warning"> = {
@@ -59,6 +59,7 @@ export default function PayrollRunsPage() {
 
   const { data: periods = [] } = useQuery({ queryKey: ["periods"], queryFn: () => periodApi.list() });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
+  const { data: payGroups = [] } = useQuery({ queryKey: ["lookup", "PAY_STATUS"], queryFn: () => lookupApi.byCategory("PAY_STATUS") });
   const { data: runs = [] } = useQuery({
     queryKey: ["payrollRuns", periodId],
     queryFn: () => payrollRunApi.list(periodId || undefined),
@@ -151,8 +152,9 @@ export default function PayrollRunsPage() {
           <Grid item xs={6} sm={2}>
             <TextField select fullWidth size="small" label="Pay group" value={payGroup} onChange={(e) => setPayGroup(e.target.value)}>
               <MenuItem value="ALL">All</MenuItem>
-              <MenuItem value="DAILY">Daily</MenuItem>
-              <MenuItem value="MONTHLY">Monthly</MenuItem>
+              {payGroups.map((g) => (
+                <MenuItem key={g.code} value={g.code}>{g.label || g.code}</MenuItem>
+              ))}
             </TextField>
           </Grid>
           <Grid item xs={6} sm={2}>

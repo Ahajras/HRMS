@@ -38,7 +38,7 @@ public interface TimesheetDayRepository extends JpaRepository<TimesheetDay, UUID
               and t.period_month = :month
               and t.status = 'APPROVED'
               and a.project_id = :projectId
-              and (:payGroup = 'ALL' or e.pay_status = :payGroup)
+              and (:payGroup = 'ALL' or upper(coalesce(e.pay_status, '')) = :payGroup)
               and extract(day from td.work_date)::int > coalesce(
                     (select r.day_zero_cutoff_day from payroll_rule r
                        where r.company_id = :companyId and r.project_id = :projectId

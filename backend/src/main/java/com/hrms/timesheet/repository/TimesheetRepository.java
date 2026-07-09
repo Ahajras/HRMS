@@ -41,9 +41,7 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
               and t.period_month = :month
               and t.status in ('APPROVED', 'LOCKED')
               and (:projectId is null or a.project_id = :projectId)
-              and (:payGroup = 'ALL'
-                   or (:payGroup = 'DAILY' and upper(coalesce(e.pay_status, '')) like '%DAILY%')
-                   or (:payGroup = 'MONTHLY' and upper(coalesce(e.pay_status, '')) like '%MONTH%'))
+              and (:payGroup = 'ALL' or upper(coalesce(e.pay_status, '')) = :payGroup)
             order by e.employee_number
             """, nativeQuery = true)
     List<Timesheet> findPayrollScope(@Param("companyId") UUID companyId,
@@ -389,7 +387,7 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
               and t.period_month = :month
               and t.status = 'APPROVED'
               and a.project_id = :projectId
-              and (:payGroup = 'ALL' or e.pay_status = :payGroup)
+              and (:payGroup = 'ALL' or upper(coalesce(e.pay_status, '')) = :payGroup)
             """, nativeQuery = true)
     int countApprovedForProjectLock(@Param("companyId") UUID companyId,
                                     @Param("year") int year,
@@ -413,7 +411,7 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
               and t.period_month = :month
               and t.status = 'APPROVED'
               and a.project_id = :projectId
-              and (:payGroup = 'ALL' or e.pay_status = :payGroup)
+              and (:payGroup = 'ALL' or upper(coalesce(e.pay_status, '')) = :payGroup)
             """, nativeQuery = true)
     int lockApprovedForProject(@Param("companyId") UUID companyId,
                                @Param("year") int year,

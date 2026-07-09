@@ -17,7 +17,7 @@ import {
   Typography,
 } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { payrollRuleApi, projectApi } from "../api/resources";
+import { lookupApi, payrollRuleApi, projectApi } from "../api/resources";
 import type { PayrollCategoryRule, PayrollRule } from "../api/types";
 
 const BASIS = [
@@ -46,7 +46,7 @@ function formulaFor(rule: PayrollRule) {
   if (rule.payItemBasis === "DAILY_RATE") {
     return "Daily pay = worked days x daily rate. Hourly rate = daily rate / employee shift hours. Overtime = hourly rate x OT hours x OT multiplier.";
   }
-  return "Monthly pay = fixed salary using the month divisor. Hourly rate = salary / (month divisor x employee shift hours). Base pay is reduced only by unpaid days. Overtime = hourly rate x OT hours x OT multiplier.";
+  return "Fixed pay = configured component amount using this rule's category/divisor settings. Hourly rate = amount / (divisor x employee shift hours). Unpaid days and overtime follow this rule and time type rules.";
 }
 
 function categoryRulesFor(rule: PayrollRule): PayrollCategoryRule[] {
@@ -63,6 +63,7 @@ export default function PayrollRulesPage() {
   const qc = useQueryClient();
   const { data: rules = [] } = useQuery({ queryKey: ["payrollRules"], queryFn: payrollRuleApi.list });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
+  const { data: payGroups = [] } = useQuery({ queryKey: ["lookup", "PAY_STATUS"], queryFn: () => lookupApi.byCategory("PAY_STATUS") });
   const [drafts, setDrafts] = useState<Record<string, PayrollRule>>({});
   const [projectId, setProjectId] = useState<string>("");
 
@@ -72,12 +73,28 @@ export default function PayrollRulesPage() {
   });
 
   const shownRules = projectId ? rules.filter((r) => r.projectId === projectId) : [];
+  const payGroupLabel = (code: string) => payGroups.find((g) => g.code === code)?.label || code;
   const missingGroups = projectId
-    ? ["MONTHLY", "DAILY"].filter((g) => !shownRules.some((r) => r.payGroup === g))
+    ? payGroups.map((g) => g.code).filter((g) => !shownRules.some((r) => r.payGroup === g))
     : [];
   const cloneForProject = (payGroup: string) => {
     const base = rules.find((r) => !r.projectId && r.payGroup === payGroup);
-    if (!base) return;
+    if (!base) {
+      createRule.mutate({
+        payGroup,
+        projectId,
+        payItemBasis: "FIXED_AMOUNT",
+        otMultiplier: 1.25,
+        restDayOtMultiplier: 1.5,
+        standardHoursPerDay: 8,
+        weeklyRestPaid: true,
+        monthDivisor: 30,
+        divisorMode: "FIXED",
+        status: "ACTIVE",
+        categoryRules: DEFAULT_CATEGORY_RULES,
+      });
+      return;
+    }
     const { id, ...rest } = base;
     createRule.mutate({ ...(rest as PayrollRule), projectId, payGroup });
   };
@@ -121,7 +138,7 @@ export default function PayrollRulesPage() {
         </TextField>
         {projectId && missingGroups.map((g) => (
           <Button key={g} variant="contained" disabled={createRule.isPending} onClick={() => cloneForProject(g)}>
-            Add {g === "DAILY" ? "Daily" : "Monthly"} structure for this project
+            Add {payGroupLabel(g)} rule
           </Button>
         ))}
       </Stack>

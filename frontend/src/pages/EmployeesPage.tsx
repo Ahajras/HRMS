@@ -1227,7 +1227,7 @@ export default function EmployeesPage() {
   const [pagination, setPagination] = useState<GridPaginationModel>({ page: 0, pageSize: 20 });
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
-  const [payFilter, setPayFilter] = useState(""); // "" = all, MONTHLY, DAILY
+  const [payFilter, setPayFilter] = useState("");
   const [projectId, setProjectId] = useState(""); // "" = all projects
   const [unassignedOnly, setUnassignedOnly] = useState(false);
   useEffect(() => {
@@ -1242,6 +1242,7 @@ export default function EmployeesPage() {
     queryFn: projectApi.list,
     staleTime: 5 * 60 * 1000,
   });
+  const payStatuses = useLookup("PAY_STATUS");
   const { data, isLoading } = useQuery({
     queryKey: ["employees", pagination.page, pagination.pageSize, debounced, payFilter, projectId, unassignedOnly],
     queryFn: () =>
@@ -1422,8 +1423,9 @@ export default function EmployeesPage() {
         sx={{ mb: 1, borderBottom: 1, borderColor: "divider" }}
       >
         <Tab label="All" value="" />
-        <Tab label="Monthly" value="MONTHLY" />
-        <Tab label="Daily" value="DAILY" />
+        {payStatuses.map((status) => (
+          <Tab key={status.code} label={status.label || status.code} value={status.code} />
+        ))}
       </Tabs>
 
       <TextField
