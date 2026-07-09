@@ -831,7 +831,12 @@ public class PayrollRunService {
         if ("PAY".equalsIgnoreCase(explicit.getAction())) {
             return new DayEffect(scaled, BigDecimal.ZERO, explicit.getBasis());
         }
-        return DayEffect.none();
+        if ("IGNORE".equalsIgnoreCase(explicit.getAction()) || "SUSPEND".equalsIgnoreCase(explicit.getAction())) {
+            return DayEffect.none();
+        }
+        throw new BusinessRuleException("payroll.time_type_rule.action",
+                "Unsupported payroll action " + explicit.getAction() + " for time type "
+                        + timeTypeLabel(type, day.getTimeTypeId()) + ".");
     }
 
     private static String timeTypeLabel(TimeType type, UUID timeTypeId) {

@@ -66,7 +66,8 @@ public class TimeTypePayrollRuleService {
     public List<TimeTypePayrollRuleDto> initializeDefaults(UUID timeTypeId) {
         UUID companyId = TenantContext.requireCompanyId();
         TimeType timeType = requireTimeType(companyId, timeTypeId);
-        String defaultAction = "U".equalsIgnoreCase(timeType.getCode()) ? "DEDUCT" : "PAY";
+        boolean unpaid = "U".equalsIgnoreCase(timeType.getCode());
+        String defaultAction = unpaid ? "DEDUCT" : "PAY";
         for (PayrollComponent component : payrollComponentRepository.findByCompanyIdOrderByPriority(companyId)) {
             if (!"ACTIVE".equalsIgnoreCase(component.getStatus())) {
                 continue;
@@ -74,7 +75,7 @@ public class TimeTypePayrollRuleService {
             TimeTypePayrollRule entity = repository
                     .findByCompanyIdAndTimeTypeIdAndPayrollComponentId(companyId, timeTypeId, component.getId())
                     .orElseGet(TimeTypePayrollRule::new);
-            if (entity.getId() != null) {
+            if (entity.getId() != null && !shouldResetInitializedRule(entity, unpaid)) {
                 continue;
             }
             entity.setCompanyId(companyId);
@@ -93,6 +94,16 @@ public class TimeTypePayrollRuleService {
             repository.save(entity);
         }
         return findByTimeType(timeTypeId);
+    }
+
+    private static boolean shouldResetInitializedRule(TimeTypePayrollRule entity, boolean unpaid) {
+        if (unpaid) {
+            return true;
+        }
+        String action = entity.getAction();
+        String remarks = entity.getRemarks();
+        return "DEFAULT".equalsIgnoreCase(action)
+                || (remarks != null && remarks.trim().toUpperCase().startsWith("INITIALIZED"));
     }
 
     public void delete(UUID timeTypeId, UUID componentId) {
