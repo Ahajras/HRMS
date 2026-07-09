@@ -530,6 +530,7 @@ public class PayrollRunService {
                                                PayrollPolicyContext policy, BigDecimal shiftHours, int periodDays,
                                                Map<UUID, Map<String, CategoryPolicy>> categoryPolicies) {
         CategoryPolicy categoryPolicy = categoryPolicy(rule, component, categoryPolicies);
+        ComponentPolicyBreakdown policyBreakdown = componentPolicyBreakdown(component, item, rule, policy, categoryPolicy, periodDays);
         if ("FIXED_AMOUNT".equals(categoryPolicy.basis()) && isPayItemEarning(component) && !isDailyRule(rule)) {
             BigDecimal amount = z(item.getAmount());
             if (isSalaryComponent(component) && result.getDailyRate().compareTo(BigDecimal.ZERO) == 0) {
@@ -538,10 +539,19 @@ public class PayrollRunService {
                 result.setHourlyRate(hourly);
                 result.setDailyRate(hourly.multiply(shiftHours));
             }
-            return List.of(payItemLine(companyId, resultId, component, component.getName(),
+            List<PayrollResultLine> lines = new java.util.ArrayList<>();
+            lines.add(payItemLine(companyId, resultId, component, component.getName(),
                     BigDecimal.ONE, amount, amount, "FIXED_AMOUNT", component.getPriority()));
+            BigDecimal deductQty = z(policyBreakdown.deductQuantity());
+            if (deductQty.compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal deductionRate = unitRate(amount, rule, policyBreakdown.basis(), shiftHours, categoryPolicy, periodDays);
+                lines.add(manualLine(companyId, resultId, component.getCode(),
+                        component.getName() + " - Time type deduction", "DEDUCTION", component.getCategory(),
+                        deductQty, deductionRate, round(deductionRate.multiply(deductQty)),
+                        "TIME_TYPE_RULE_DEDUCT", component.getPriority() + 1));
+            }
+            return lines;
         }
-        ComponentPolicyBreakdown policyBreakdown = componentPolicyBreakdown(component, item, rule, policy, categoryPolicy, periodDays);
         // Monthly base salary is always paid as the fixed full amount (paid leave counts
         // like a normal day). Time-type rules apply only as DEDUCTIONS on top of it,
         // instead of replacing the whole base calculation.
