@@ -822,7 +822,7 @@ public class PayrollRunService {
         if (explicit == null) {
             return legacyEffect(type, day, rule, shiftHours);
         }
-        BigDecimal baseQuantity = quantityForBasis(day, explicit.getBasis(), shiftHours);
+        BigDecimal baseQuantity = quantityForBasis(day, explicit.getBasis(), shiftHours, isDailyRule(rule));
         BigDecimal scaled = baseQuantity.multiply(z(explicit.getPercent()).divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP));
         if ("DEDUCT".equalsIgnoreCase(explicit.getAction())) {
             DayEffect legacy = legacyEffect(type, day, rule, shiftHours);
@@ -882,17 +882,17 @@ public class PayrollRunService {
         return DayEffect.none();
     }
 
-    private BigDecimal quantityForBasis(TimesheetDay day, String basis, BigDecimal shiftHours) {
+    private BigDecimal quantityForBasis(TimesheetDay day, String basis, BigDecimal shiftHours, boolean daily) {
         String normalized = basis == null ? "HOURS" : basis.toUpperCase();
         BigDecimal standardHours = shiftHours;
         if ("DAYS".equals(normalized) || "FIXED".equals(normalized)) {
-            BigDecimal hours = payrollHours(day, standardHours);
+            BigDecimal hours = daily ? actualPayHours(day) : payrollHours(day, standardHours);
             if (hours.compareTo(BigDecimal.ZERO) <= 0) {
                 return BigDecimal.ZERO;
             }
             return hours.divide(standardHours, 4, RoundingMode.HALF_UP);
         }
-        return payrollHours(day, standardHours);
+        return daily ? actualPayHours(day) : payrollHours(day, standardHours);
     }
 
     private BigDecimal unitRate(BigDecimal amount, PayrollRule rule, String basis, BigDecimal shiftHours,
@@ -1035,6 +1035,12 @@ public class PayrollRunService {
         BigDecimal worked = z(day.getWorkedHours()).subtract(z(day.getOtHours())).max(BigDecimal.ZERO);
         if (worked.compareTo(BigDecimal.ZERO) > 0) return worked;
         return z(standardHours);
+    }
+
+    private static BigDecimal actualPayHours(TimesheetDay day) {
+        BigDecimal normal = z(day.getNormalHours());
+        if (normal.compareTo(BigDecimal.ZERO) > 0) return normal;
+        return z(day.getWorkedHours()).subtract(z(day.getOtHours())).max(BigDecimal.ZERO);
     }
 
     private static boolean isUnpaidCategory(String category) {
