@@ -596,6 +596,9 @@ export interface TimesheetDay {
   projectId?: string;
   costCodeId?: string;
   remarks?: string;
+  estimated?: boolean;
+  dayZeroAdjustmentAmount?: number | null;
+  dayZeroAdjustmentReason?: string | null;
   costs?: TimesheetDayCost[];
 }
 

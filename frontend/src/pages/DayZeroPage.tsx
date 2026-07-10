@@ -42,12 +42,15 @@ export default function DayZeroPage() {
 
   const { data: timeTypes = [] } = useQuery({ queryKey: ["timeTypes"], queryFn: () => timeTypeApi.list() });
 
+  const [lastLines, setLastLines] = useState<{ workDate: string; amount: number }[]>([]);
+
   const apply = useMutation({
     mutationFn: () => dayZeroApi.correct(employee!.id!, selected, note || undefined),
     onSuccess: (r) => {
+      setLastLines(r.lines ?? []);
       setMessage(
         r.adjustmentsCreated > 0
-          ? `Created ${r.adjustmentsCreated} pending adjustment(s). They will appear on the employee's next payroll run.`
+          ? `Created ${r.adjustmentsCreated} pending adjustment(s) — see the per-day breakdown below. They will appear on the employee's next payroll run.`
           : "No pay difference — nothing to adjust (the new type pays the same as what was already assumed)."
       );
       setSelected({});
@@ -102,6 +105,29 @@ export default function DayZeroPage() {
       {employee && (
         <>
           {message && <Alert severity="info" sx={{ mb: 2 }} onClose={() => setMessage(null)}>{message}</Alert>}
+          {lastLines.length > 0 && (
+            <Paper variant="outlined" sx={{ mb: 2, p: 1.5, borderRadius: 2 }}>
+              <Typography variant="subtitle2" mb={1}>Per-day amount (this is what to tell the employee)</Typography>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Date</TableCell>
+                    <TableCell align="right">Amount</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {lastLines.map((l) => (
+                    <TableRow key={l.workDate}>
+                      <TableCell>{l.workDate}</TableCell>
+                      <TableCell align="right" sx={{ color: l.amount < 0 ? "error.main" : "success.main" }}>
+                        {l.amount < 0 ? "-" : "+"}{Math.abs(l.amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Paper>
+          )}
           <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "auto", mb: 2 }}>
             <Table size="small">
               <TableHead>

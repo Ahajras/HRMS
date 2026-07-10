@@ -17,4 +17,9 @@ public interface PayrollAdjustmentRepository extends JpaRepository<PayrollAdjust
             UUID companyId, Collection<UUID> employeeIds, String status);
 
     List<PayrollAdjustment> findByCompanyIdAndStatusOrderByWorkDateDesc(UUID companyId, String status);
+
+    /** All Day Zero corrections (any status) tied to one employee's
+     * timesheet period — used to show a read-only marker on the original
+     * (locked) timesheet card, without touching the timesheet itself. */
+    List<PayrollAdjustment> findByEmployeeIdAndOriginalPeriodIdOrderByWorkDate(UUID employeeId, UUID originalPeriodId);
 }

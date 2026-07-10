@@ -15,6 +15,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
 } from "@mui/material";
 import PrintIcon from "@mui/icons-material/Print";
@@ -828,6 +829,7 @@ function TimesheetDetail({
           <TableHead>
             <TableRow>
               <TableCell>Date</TableCell>
+              <TableCell>Day Zero</TableCell>
               <TableCell>Type</TableCell>
               <TableCell>In</TableCell>
               <TableCell>Out</TableCell>
@@ -849,6 +851,21 @@ function TimesheetDetail({
               <Fragment key={d.id ?? d.workDate}>
               <TableRow>
                 <TableCell>{fmtDay(d.workDate)}</TableCell>
+                <TableCell>
+                  {d.dayZeroAdjustmentAmount != null ? (
+                    <Tooltip title={d.dayZeroAdjustmentReason ?? "Corrected via Day Zero"}>
+                      <Chip
+                        size="small"
+                        color={d.dayZeroAdjustmentAmount < 0 ? "error" : "success"}
+                        label={`${d.dayZeroAdjustmentAmount < 0 ? "-" : "+"}${Math.abs(d.dayZeroAdjustmentAmount).toFixed(2)}`}
+                      />
+                    </Tooltip>
+                  ) : d.estimated ? (
+                    <Tooltip title="Estimated — paid on a default assumption because the period closed early">
+                      <Chip size="small" variant="outlined" label="Est." />
+                    </Tooltip>
+                  ) : null}
+                </TableCell>
                 <TableCell>
                   {dayEditable(d) ? (
                     <TextField select size="small" value={d.timeTypeId ?? ""} onChange={(e) => setDay(idx, { timeTypeId: e.target.value })} sx={{ minWidth: 220 }}>
@@ -915,7 +932,7 @@ function TimesheetDetail({
               </TableRow>
               {costOpen === idx && (
                 <TableRow>
-                  <TableCell colSpan={15} sx={{ bgcolor: "action.hover" }}>
+                  <TableCell colSpan={16} sx={{ bgcolor: "action.hover" }}>
                     <Typography variant="caption" color="text.secondary">Split {d.workDate} hours across cost codes</Typography>
                     {(d.costs ?? []).map((c, ci) => (
                       <Stack key={ci} direction="row" spacing={1} alignItems="center" mt={0.5}>

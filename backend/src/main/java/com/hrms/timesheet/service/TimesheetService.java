@@ -1692,15 +1692,17 @@ public class TimesheetService {
                 throw new BusinessRuleException("leave.timesheet.not.draft",
                         "Leave changes can sync only to DRAFT timesheets. Reopen the employee timesheet first.");
             }
-            Map<UUID, UUID> overrides = new HashMap<>();
+            // One adjustment PER DAY, not one lump sum for the whole leave
+            // date range — so each day's own amount is separately visible
+            // for audit and for telling the employee exactly what changed.
             for (TimesheetDay day : affected) {
-                overrides.put(day.getId(), type.getTimeTypeId());
+                TimeType oldType = day.getTimeTypeId() != null ? timeTypeRepo.findById(day.getTimeTypeId()).orElse(null) : null;
+                String oldLabel = oldType != null ? oldType.getCode() + " - " + oldType.getName() : "(none)";
+                String newLabel = type.getName();
+                String reason = "Day Zero: " + day.getWorkDate() + " (" + oldLabel + " -> " + newLabel
+                        + ") reclassified after the period was already locked (recomputed against the original month)";
+                createDayZeroAdjustment(ts, Map.of(day.getId(), type.getTimeTypeId()), reason);
             }
-            String dates = affected.size() == 1
-                    ? affected.get(0).getWorkDate().toString()
-                    : affected.get(0).getWorkDate() + " to " + affected.get(affected.size() - 1).getWorkDate();
-            createDayZeroAdjustment(ts, overrides, "Day Zero: " + dates + " reclassified as " + type.getName()
-                    + " after the period was already locked (recomputed against the original month)");
             return;
         }
 
@@ -1820,44 +1822,45 @@ public class TimesheetService {
      * leave module. Every affected day must already be marked estimated —
      * this never touches an ordinary locked day. */
     @Transactional
+    @Transactional
     public Map<String, Object> applyDayZeroCorrection(UUID employeeId, Map<UUID, UUID> dayTimeTypeOverrides, String note) {
         if (dayTimeTypeOverrides == null || dayTimeTypeOverrides.isEmpty()) {
             throw new BusinessRuleException("day_zero.no_days", "Select at least one day to correct.");
         }
-        Map<UUID, List<UUID>> dayIdsByTimesheet = new HashMap<>();
-        for (UUID dayId : dayTimeTypeOverrides.keySet()) {
+        int created = 0;
+        List<Map<String, Object>> lines = new ArrayList<>();
+        for (Map.Entry<UUID, UUID> entry : dayTimeTypeOverrides.entrySet()) {
+            UUID dayId = entry.getKey();
+            UUID newTypeId = entry.getValue();
             TimesheetDay day = dayRepo.findById(dayId)
                     .orElseThrow(() -> new ResourceNotFoundException("Timesheet day not found: " + dayId));
             if (!day.isEstimated()) {
                 throw new BusinessRuleException("day_zero.not_estimated",
                         "Day " + day.getWorkDate() + " is not an estimated Day Zero day.");
             }
-            dayIdsByTimesheet.computeIfAbsent(day.getTimesheetId(), k -> new ArrayList<>()).add(dayId);
-        }
-        int created = 0;
-        for (Map.Entry<UUID, List<UUID>> entry : dayIdsByTimesheet.entrySet()) {
-            Timesheet ts = timesheetRepo.findById(entry.getKey())
-                    .orElseThrow(() -> new ResourceNotFoundException("Timesheet not found: " + entry.getKey()));
+            Timesheet ts = timesheetRepo.findById(day.getTimesheetId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Timesheet not found: " + day.getTimesheetId()));
             if (!employeeId.equals(ts.getEmployeeId())) {
                 throw new BusinessRuleException("day_zero.employee_mismatch", "That day does not belong to this employee.");
             }
-            Map<UUID, UUID> overridesForTimesheet = new HashMap<>();
-            for (UUID dayId : entry.getValue()) {
-                overridesForTimesheet.put(dayId, dayTimeTypeOverrides.get(dayId));
-            }
-            List<LocalDate> dates = entry.getValue().stream()
-                    .map(id -> dayRepo.findById(id).map(TimesheetDay::getWorkDate).orElse(null))
-                    .filter(java.util.Objects::nonNull).sorted().toList();
-            String datesLabel = dates.isEmpty() ? "" : dates.size() == 1 ? dates.get(0).toString()
-                    : dates.get(0) + " to " + dates.get(dates.size() - 1);
+            // One adjustment PER DAY (not one lump sum for the whole batch) —
+            // so each day's own before/after and amount is separately
+            // visible later, for both audit and for telling the employee
+            // exactly what changed on which date.
+            TimeType oldType = day.getTimeTypeId() != null ? timeTypeRepo.findById(day.getTimeTypeId()).orElse(null) : null;
+            TimeType newType = timeTypeRepo.findById(newTypeId).orElse(null);
+            String oldLabel = oldType != null ? oldType.getCode() + " - " + oldType.getName() : "(none)";
+            String newLabel = newType != null ? newType.getCode() + " - " + newType.getName() : String.valueOf(newTypeId);
             String reason = (note != null && !note.isBlank() ? note + " — " : "")
-                    + "Day Zero manual correction: " + datesLabel;
-            com.hrms.payroll.domain.PayrollAdjustment adj = createDayZeroAdjustment(ts, overridesForTimesheet, reason);
+                    + "Day Zero manual correction: " + day.getWorkDate() + " (" + oldLabel + " -> " + newLabel + ")";
+            com.hrms.payroll.domain.PayrollAdjustment adj =
+                    createDayZeroAdjustment(ts, Map.of(dayId, newTypeId), reason);
             if (adj != null) {
                 created++;
+                lines.add(Map.of("workDate", day.getWorkDate().toString(), "amount", adj.getAmount()));
             }
         }
-        return Map.of("adjustmentsCreated", created);
+        return Map.of("adjustmentsCreated", created, "lines", lines);
     }
 
     private com.hrms.payroll.domain.PayrollRun findOriginalPayrollRun(UUID companyId, UUID periodId, UUID projectId) {
@@ -2099,8 +2102,17 @@ public class TimesheetService {
         for (TimeType tt : timeTypeRepo.findByCompanyIdOrderBySortOrderAscNameAsc(t.getCompanyId())) {
             typeCodes.put(tt.getId(), tt.getCode());
         }
+        // Day Zero — batch-fetch any corrections tied to this employee's
+        // period, so the (read-only) timesheet card can show which days
+        // were later corrected, without ever touching the timesheet data
+        // itself. One query for the whole card, not one per day.
+        Map<LocalDate, com.hrms.payroll.domain.PayrollAdjustment> adjustmentsByDate = t.getPeriodId() != null
+                ? payrollAdjustmentRepo.findByEmployeeIdAndOriginalPeriodIdOrderByWorkDate(t.getEmployeeId(), t.getPeriodId())
+                        .stream().collect(java.util.stream.Collectors.toMap(
+                                com.hrms.payroll.domain.PayrollAdjustment::getWorkDate, a -> a, (a, b) -> a))
+                : Map.of();
         for (TimesheetDay d : dayRepo.findByTimesheetIdOrderByWorkDate(t.getId())) {
-            dto.getDays().add(toDayDto(d, typeCodes));
+            dto.getDays().add(toDayDto(d, typeCodes, adjustmentsByDate));
         }
         return dto;
     }
@@ -2124,7 +2136,8 @@ public class TimesheetService {
         return dto;
     }
 
-    private TimesheetDayDto toDayDto(TimesheetDay d, Map<UUID, String> typeCodes) {
+    private TimesheetDayDto toDayDto(TimesheetDay d, Map<UUID, String> typeCodes,
+                                     Map<LocalDate, com.hrms.payroll.domain.PayrollAdjustment> adjustmentsByDate) {
         TimesheetDayDto dto = new TimesheetDayDto();
         dto.setId(d.getId());
         dto.setTimesheetId(d.getTimesheetId());
@@ -2145,6 +2158,12 @@ public class TimesheetService {
         dto.setProjectId(d.getProjectId());
         dto.setCostCodeId(d.getCostCodeId());
         dto.setRemarks(d.getRemarks());
+        dto.setEstimated(d.isEstimated());
+        com.hrms.payroll.domain.PayrollAdjustment adjustment = adjustmentsByDate.get(d.getWorkDate());
+        if (adjustment != null) {
+            dto.setDayZeroAdjustmentAmount(adjustment.getAmount());
+            dto.setDayZeroAdjustmentReason(adjustment.getReason());
+        }
         for (TimesheetDayCost c : dayCostRepo.findByTimesheetDayId(d.getId())) {
             TimesheetDayCostDto cd = new TimesheetDayCostDto();
             cd.setId(c.getId());

@@ -28,6 +28,9 @@ public class TimesheetDayDto {
     private UUID projectId;
     private UUID costCodeId;
     private String remarks;
+    private boolean estimated;
+    private java.math.BigDecimal dayZeroAdjustmentAmount;
+    private String dayZeroAdjustmentReason;
     /** Optional split of worked hours across cost codes. */
     private List<TimesheetDayCostDto> costs = new ArrayList<>();
 
@@ -90,4 +93,13 @@ public class TimesheetDayDto {
 
     public String getRemarks() { return remarks; }
     public void setRemarks(String remarks) { this.remarks = remarks; }
+
+    public boolean isEstimated() { return estimated; }
+    public void setEstimated(boolean estimated) { this.estimated = estimated; }
+
+    public java.math.BigDecimal getDayZeroAdjustmentAmount() { return dayZeroAdjustmentAmount; }
+    public void setDayZeroAdjustmentAmount(java.math.BigDecimal dayZeroAdjustmentAmount) { this.dayZeroAdjustmentAmount = dayZeroAdjustmentAmount; }
+
+    public String getDayZeroAdjustmentReason() { return dayZeroAdjustmentReason; }
+    public void setDayZeroAdjustmentReason(String dayZeroAdjustmentReason) { this.dayZeroAdjustmentReason = dayZeroAdjustmentReason; }
 }
