@@ -1822,7 +1822,6 @@ public class TimesheetService {
      * leave module. Every affected day must already be marked estimated —
      * this never touches an ordinary locked day. */
     @Transactional
-    @Transactional
     public Map<String, Object> applyDayZeroCorrection(UUID employeeId, Map<UUID, UUID> dayTimeTypeOverrides, String note) {
         if (dayTimeTypeOverrides == null || dayTimeTypeOverrides.isEmpty()) {
             throw new BusinessRuleException("day_zero.no_days", "Select at least one day to correct.");
