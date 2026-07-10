@@ -1751,19 +1751,19 @@ public class TimesheetService {
      * or if the recomputed amount doesn't actually change. */
     private com.hrms.payroll.domain.PayrollAdjustment createDayZeroAdjustment(
             Timesheet ts, Map<UUID, UUID> dayOverrides, String reason) {
-        UUID projectId = employeeProject(ts.getEmployeeId());
-        com.hrms.payroll.domain.PayrollRun originalRun = findOriginalPayrollRun(ts.getCompanyId(), ts.getPeriodId(), projectId);
-        if (originalRun == null) {
-            return null;
-        }
         Optional<com.hrms.payroll.domain.PayrollResult> original =
-                payrollRunService.findResultForEmployee(originalRun.getId(), ts.getEmployeeId());
+                payrollRunService.findLatestResultForEmployee(ts.getPeriodId(), ts.getEmployeeId());
         if (original.isEmpty() || original.get().getNet() == null) {
             return null;
         }
+        // Simulate against the SAME run whose result we're comparing
+        // against — not just "any run matching this project" — so the two
+        // sides of the diff are always apples-to-apples, even when more
+        // than one run legitimately exists for this period.
+        UUID originalRunId = original.get().getRunId();
         BigDecimal actualNet = original.get().getNet();
         com.hrms.payroll.service.PayrollRunService.DayZeroSimulation simulation =
-                payrollRunService.simulateNetWithOverride(originalRun.getId(), ts.getEmployeeId(), dayOverrides);
+                payrollRunService.simulateNetWithOverride(originalRunId, ts.getEmployeeId(), dayOverrides);
         if (simulation == null || simulation.net() == null) {
             return null;
         }

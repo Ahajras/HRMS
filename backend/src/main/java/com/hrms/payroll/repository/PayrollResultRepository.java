@@ -1,6 +1,7 @@
 package com.hrms.payroll.repository;
 
 import com.hrms.payroll.domain.PayrollResult;
+import com.hrms.payroll.domain.PayrollRun;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,6 +19,24 @@ public interface PayrollResultRepository extends JpaRepository<PayrollResult, UU
     /** Used by Day Zero to find what an employee was actually paid for a
      * prior, already-locked/calculated period. */
     java.util.Optional<PayrollResult> findByRunIdAndEmployeeId(UUID runId, UUID employeeId);
+
+    /** Day Zero — the single most-recently-CALCULATED result for this
+     * employee within a period, regardless of which run scope (e.g. an
+     * "ALL employees" run and a "MONTHLY only" run can both legitimately
+     * exist for the same period/project and both include this employee).
+     * Ordering by the RUN's creation date is not enough — a run created
+     * earlier can have been recalculated more recently than one created
+     * later. This orders by the RESULT's own timestamp instead, so we
+     * always compare against the freshest actual number. */
+    @Query("""
+            select r from PayrollResult r, PayrollRun run
+            where run.id = r.runId
+              and run.periodId = :periodId
+              and r.employeeId = :employeeId
+            order by r.createdAt desc
+            """)
+    List<PayrollResult> findByPeriodIdAndEmployeeIdOrderByCreatedAtDesc(
+            @Param("periodId") UUID periodId, @Param("employeeId") UUID employeeId);
 
     /** Paginated — used by the run detail screen so opening a large run
      * (thousands of employees) stays fast. */

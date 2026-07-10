@@ -26,4 +26,18 @@ public interface PayrollRunRepository extends JpaRepository<PayrollRun, UUID> {
                                        @Param("periodId") UUID periodId,
                                        @Param("projectId") UUID projectId,
                                        @Param("payGroup") String payGroup);
+
+    /** Every run for this period/project, any pay group — used to guard
+     * against creating an overlapping scope (e.g. an "ALL" run alongside a
+     * "MONTHLY only" run for the same period/project), which would let the
+     * same employees be paid through two different runs. */
+    @Query("""
+            select r from PayrollRun r
+            where r.companyId = :companyId
+              and r.periodId = :periodId
+              and ((:projectId is null and r.projectId is null) or r.projectId = :projectId)
+            """)
+    List<PayrollRun> findAllForScope(@Param("companyId") UUID companyId,
+                                     @Param("periodId") UUID periodId,
+                                     @Param("projectId") UUID projectId);
 }

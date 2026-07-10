@@ -269,6 +269,27 @@ public class PayrollRunService {
         if (!existing.isEmpty()) {
             return toDto(existing.get(0), false);
         }
+        // Guard against an overlapping scope. An "ALL employees" run and a
+        // pay-group-specific run (e.g. "MONTHLY only") for the SAME
+        // period/project would both include the same employees — if both
+        // ever get approved and disbursed, that employee gets paid twice.
+        List<PayrollRun> sameScope = runRepo.findAllForScope(companyId, periodId, projectId);
+        if ("ALL".equalsIgnoreCase(normalizedPayGroup)) {
+            boolean hasSpecificRun = sameScope.stream().anyMatch(r -> !"ALL".equalsIgnoreCase(r.getPayGroup()));
+            if (hasSpecificRun) {
+                throw new BusinessRuleException("payroll.run.overlapping_scope",
+                        "A pay-group-specific run already exists for this period/project. Creating an 'ALL' run too "
+                                + "would let those employees be paid through two different runs. Use the existing "
+                                + "run(s) instead, or remove them first if they should not exist.");
+            }
+        } else {
+            boolean hasAllRun = sameScope.stream().anyMatch(r -> "ALL".equalsIgnoreCase(r.getPayGroup()));
+            if (hasAllRun) {
+                throw new BusinessRuleException("payroll.run.overlapping_scope",
+                        "An 'ALL employees' run already exists for this period/project and already includes " + normalizedPayGroup
+                                + " employees. Creating a separate " + normalizedPayGroup + " run would let them be paid twice.");
+            }
+        }
         PayrollRun run = new PayrollRun();
         run.setCompanyId(companyId);
         run.setPeriodId(periodId);
@@ -292,11 +313,18 @@ public class PayrollRunService {
      * used only to compute the size of a prior-period correction. Returns
      * null if there is nothing to compare against (no original run, or no
      * timesheet for that period). */
-    /** Day Zero — the actual, already-paid result for an employee in a
-     * prior run, used as the "before" side of the correction diff. */
+    /** Day Zero — the actual, most-recently-CALCULATED result for an
+     * employee within a period, regardless of which run (scope) it came
+     * from. Two runs can legitimately cover the same period/project (e.g.
+     * an "ALL employees" run and a "MONTHLY only" run) and both include
+     * this employee — picking "the run created most recently" is not
+     * reliable, since an EARLIER-created run can have been recalculated
+     * LATER than a run created after it. We compare against whichever
+     * result was actually computed most recently. */
     @Transactional(readOnly = true)
-    public Optional<PayrollResult> findResultForEmployee(UUID runId, UUID employeeId) {
-        return resultRepo.findByRunIdAndEmployeeId(runId, employeeId);
+    public Optional<PayrollResult> findLatestResultForEmployee(UUID periodId, UUID employeeId) {
+        List<PayrollResult> results = resultRepo.findByPeriodIdAndEmployeeIdOrderByCreatedAtDesc(periodId, employeeId);
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
     /** Result of a Day Zero simulation — the net difference, plus every
