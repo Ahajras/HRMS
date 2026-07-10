@@ -299,7 +299,14 @@ public class PayrollRunService {
         return resultRepo.findByRunIdAndEmployeeId(runId, employeeId);
     }
 
-    public BigDecimal simulateNetWithOverride(UUID originalRunId, UUID employeeId, Map<UUID, UUID> dayTimeTypeOverrides) {
+    /** Result of a Day Zero simulation — the net difference, plus every
+     * line that went into it, so a correction is always self-explanatory
+     * (and so we can verify it against the rules directly, rather than
+     * trusting a single opaque number). */
+    public record DayZeroSimulation(BigDecimal net, List<String> lines) {
+    }
+
+    public DayZeroSimulation simulateNetWithOverride(UUID originalRunId, UUID employeeId, Map<UUID, UUID> dayTimeTypeOverrides) {
         PayrollRun run = runRepo.findById(originalRunId).orElse(null);
         if (run == null) {
             return null;
@@ -364,6 +371,7 @@ public class PayrollRunService {
         PayrollResult simResult = buildResult(run, ts, emp, rule, breakdown);
         UUID dummyResultId = UUID.randomUUID();
 
+        List<String> lines = new ArrayList<>();
         BigDecimal earnings = BigDecimal.ZERO;
         BigDecimal deductions = BigDecimal.ZERO;
         for (ContractPayItem item : activePayItems(ctx.payItemsByEmployee().getOrDefault(emp.getId(), List.of()), period.getEndDate())) {
@@ -372,6 +380,8 @@ public class PayrollRunService {
                 continue;
             }
             for (PayrollResultLine line : buildLines(run.getCompanyId(), dummyResultId, item, component, simResult, rule, breakdown, policy, shiftHours, periodDays, ctx.categoryPolicies())) {
+                lines.add(line.getComponentName() + " [" + line.getComponentType() + "] qty=" + line.getQuantity()
+                        + " rate=" + line.getRate() + " amount=" + line.getAmount() + " source=" + line.getSource());
                 if ("DEDUCTION".equalsIgnoreCase(line.getComponentType())) {
                     deductions = deductions.add(line.getAmount());
                 } else {
@@ -380,13 +390,15 @@ public class PayrollRunService {
             }
         }
         for (PayrollResultLine otLine : buildOvertimeLines(run.getCompanyId(), dummyResultId, simResult, rule, breakdown)) {
+            lines.add(otLine.getComponentName() + " [OT] amount=" + otLine.getAmount());
             earnings = earnings.add(otLine.getAmount());
         }
         PayrollResultLine unpaidDeduction = buildMonthlyUnpaidDeductionLine(run.getCompanyId(), dummyResultId, earnings, rule, breakdown, policy);
         if (unpaidDeduction != null) {
+            lines.add(unpaidDeduction.getComponentName() + " [FALLBACK DEDUCTION] amount=" + unpaidDeduction.getAmount());
             deductions = deductions.add(unpaidDeduction.getAmount());
         }
-        return earnings.subtract(deductions);
+        return new DayZeroSimulation(earnings.subtract(deductions), lines);
     }
 
     public Map<String, Object> calculate(UUID id, TimesheetService.BulkStatusProgressListener progress) {

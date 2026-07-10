@@ -32,7 +32,7 @@ public class PayrollAdjustment extends AuditableEntity {
     @Column(name = "original_period_id", nullable = false)
     private UUID originalPeriodId;
 
-    @Column(name = "reason", nullable = false, length = 255)
+    @Column(name = "reason", nullable = false, columnDefinition = "TEXT")
     private String reason;
 
     /** Positive = extra pay owed to the employee next run; negative = to be deducted. */

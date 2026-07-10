@@ -1762,11 +1762,12 @@ public class TimesheetService {
             return null;
         }
         BigDecimal actualNet = original.get().getNet();
-        BigDecimal simulatedNet = payrollRunService.simulateNetWithOverride(originalRun.getId(), ts.getEmployeeId(), dayOverrides);
-        if (simulatedNet == null) {
+        com.hrms.payroll.service.PayrollRunService.DayZeroSimulation simulation =
+                payrollRunService.simulateNetWithOverride(originalRun.getId(), ts.getEmployeeId(), dayOverrides);
+        if (simulation == null || simulation.net() == null) {
             return null;
         }
-        BigDecimal amount = simulatedNet.subtract(actualNet);
+        BigDecimal amount = simulation.net().subtract(actualNet);
         if (amount.compareTo(BigDecimal.ZERO) == 0) {
             return null;
         }
@@ -1777,12 +1778,13 @@ public class TimesheetService {
                 .sorted()
                 .toList();
 
+        String fullReason = reason + "\n\n-- Component breakdown --\n" + String.join("\n", simulation.lines());
         com.hrms.payroll.domain.PayrollAdjustment adj = new com.hrms.payroll.domain.PayrollAdjustment();
         adj.setCompanyId(ts.getCompanyId());
         adj.setEmployeeId(ts.getEmployeeId());
         adj.setWorkDate(dates.isEmpty() ? LocalDate.now() : dates.get(0));
         adj.setOriginalPeriodId(ts.getPeriodId());
-        adj.setReason(reason);
+        adj.setReason(fullReason);
         adj.setAmount(amount);
         adj.setSource("SYSTEM");
         adj.setStatus("PENDING");
