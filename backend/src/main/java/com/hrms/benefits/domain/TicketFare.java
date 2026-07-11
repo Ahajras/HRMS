@@ -8,6 +8,7 @@ import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.util.UUID;
 
 @Entity
@@ -29,6 +30,14 @@ public class TicketFare extends AuditableEntity implements EffectiveDated {
     private LocalDate effectiveTo;
     @Column(name = "status", nullable = false, length = 20)
     private String status = "ACTIVE";
+    @Column(name = "source", nullable = false, length = 20)
+    private String source = "MANUAL";
+    @Column(name = "provider", length = 50)
+    private String provider;
+    @Column(name = "provider_offer_id", length = 120)
+    private String providerOfferId;
+    @Column(name = "fetched_at")
+    private OffsetDateTime fetchedAt;
     @Column(name = "remarks", length = 500)
     private String remarks;
 
@@ -50,6 +59,14 @@ public class TicketFare extends AuditableEntity implements EffectiveDated {
     public void setEffectiveTo(LocalDate effectiveTo) { this.effectiveTo = effectiveTo; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+    public String getSource() { return source; }
+    public void setSource(String source) { this.source = source; }
+    public String getProvider() { return provider; }
+    public void setProvider(String provider) { this.provider = provider; }
+    public String getProviderOfferId() { return providerOfferId; }
+    public void setProviderOfferId(String providerOfferId) { this.providerOfferId = providerOfferId; }
+    public OffsetDateTime getFetchedAt() { return fetchedAt; }
+    public void setFetchedAt(OffsetDateTime fetchedAt) { this.fetchedAt = fetchedAt; }
     public String getRemarks() { return remarks; }
     public void setRemarks(String remarks) { this.remarks = remarks; }
 }

@@ -21,7 +21,7 @@ public interface TicketFareRepository extends JpaRepository<TicketFare, UUID> {
               and upper(coalesce(f.status, '')) = 'ACTIVE'
               and f.effectiveFrom <= :asOf
               and (f.effectiveTo is null or f.effectiveTo >= :asOf)
-            order by f.effectiveFrom desc
+            order by f.effectiveFrom desc, f.createdAt desc
             """)
     List<TicketFare> findActiveRoute(@Param("companyId") UUID companyId,
                                      @Param("fromAirportCode") String fromAirportCode,

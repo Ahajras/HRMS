@@ -1052,7 +1052,21 @@ export interface TicketFare {
   effectiveFrom: string;
   effectiveTo?: string;
   status?: string;
+  source?: string;
+  provider?: string;
+  providerOfferId?: string;
+  fetchedAt?: string;
   remarks?: string;
+}
+
+export interface TicketFareLookupRequest {
+  fromAirportCode: string;
+  toAirportCode: string;
+  departureDate?: string;
+  effectiveFrom?: string;
+  currencyCode?: string;
+  provider?: string;
+  save?: boolean;
 }
 
 export interface TicketLedger {

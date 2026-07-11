@@ -16,6 +16,7 @@ import {
   Typography,
 } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
+import SyncIcon from "@mui/icons-material/Sync";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { employeeApi, ticketApi } from "../api/resources";
 import type { TicketFare, TicketLedger } from "../api/types";
@@ -37,6 +38,8 @@ export default function TicketsPage() {
   const [q, setQ] = useState("");
   const [employeeId, setEmployeeId] = useState("");
   const [asOfDate, setAsOfDate] = useState(new Date().toISOString().slice(0, 10));
+  const [departureDate, setDepartureDate] = useState(new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
+  const [provider, setProvider] = useState("AMADEUS");
   const [ledger, setLedger] = useState<Partial<TicketLedger>>({
     entryType: "OPENING_USED",
     entryDate: new Date().toISOString().slice(0, 10),
@@ -66,6 +69,14 @@ export default function TicketsPage() {
       qc.invalidateQueries({ queryKey: ["ticketFares"] });
       qc.invalidateQueries({ queryKey: ["ticketBalance"] });
       setFare(emptyFare());
+    },
+  });
+  const lookupFare = useMutation({
+    mutationFn: ticketApi.lookupFare,
+    onSuccess: (saved) => {
+      qc.invalidateQueries({ queryKey: ["ticketFares"] });
+      qc.invalidateQueries({ queryKey: ["ticketBalance"] });
+      setFare(saved);
     },
   });
   const saveLedger = useMutation({
@@ -106,14 +117,36 @@ export default function TicketsPage() {
               Save fare
             </Button>
           </Grid>
+          <Grid item xs={12} md={2}>
+            <TextField select fullWidth size="small" label="Provider" value={provider} onChange={(e) => setProvider(e.target.value)}>
+              <MenuItem value="AMADEUS">Amadeus</MenuItem>
+            </TextField>
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <TextField fullWidth size="small" type="date" label="Travel date" InputLabelProps={{ shrink: true }} value={departureDate} onChange={(e) => setDepartureDate(e.target.value)} />
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <Button fullWidth variant="outlined" startIcon={<SyncIcon />} disabled={!fare.fromAirportCode || !fare.toAirportCode || lookupFare.isPending} onClick={() => lookupFare.mutate({
+              fromAirportCode: fare.fromAirportCode,
+              toAirportCode: fare.toAirportCode,
+              departureDate,
+              effectiveFrom: fare.effectiveFrom,
+              currencyCode: fare.currencyCode || "QAR",
+              provider,
+              save: true,
+            })}>
+              Fetch API fare
+            </Button>
+          </Grid>
         </Grid>
+        {lookupFare.error && <Alert severity="error" sx={{ mt: 2 }}>{(lookupFare.error as Error).message}</Alert>}
         <Box sx={{ overflow: "auto", mt: 2 }}>
           <Table size="small">
-            <TableHead><TableRow><TableCell>From</TableCell><TableCell>To</TableCell><TableCell align="right">Amount</TableCell><TableCell>Currency</TableCell><TableCell>Effective</TableCell><TableCell>Status</TableCell></TableRow></TableHead>
+            <TableHead><TableRow><TableCell>From</TableCell><TableCell>To</TableCell><TableCell align="right">Amount</TableCell><TableCell>Currency</TableCell><TableCell>Effective</TableCell><TableCell>Source</TableCell><TableCell>Provider</TableCell><TableCell>Status</TableCell></TableRow></TableHead>
             <TableBody>
               {fares.map((f) => (
                 <TableRow key={f.id} hover onClick={() => setFare(f)} sx={{ cursor: "pointer" }}>
-                  <TableCell>{f.fromAirportCode}</TableCell><TableCell>{f.toAirportCode}</TableCell><TableCell align="right">{money(f.amount)}</TableCell><TableCell>{f.currencyCode}</TableCell><TableCell>{f.effectiveFrom}</TableCell><TableCell>{f.status}</TableCell>
+                  <TableCell>{f.fromAirportCode}</TableCell><TableCell>{f.toAirportCode}</TableCell><TableCell align="right">{money(f.amount)}</TableCell><TableCell>{f.currencyCode}</TableCell><TableCell>{f.effectiveFrom}</TableCell><TableCell>{f.source ?? "MANUAL"}</TableCell><TableCell>{f.provider ?? ""}</TableCell><TableCell>{f.status}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

@@ -17,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.UUID;
@@ -29,11 +30,14 @@ public class TicketService {
     private final TicketFareRepository fareRepo;
     private final TicketLedgerRepository ledgerRepo;
     private final EmployeeRepository employeeRepo;
+    private final TicketFareProviderService providerService;
 
-    public TicketService(TicketFareRepository fareRepo, TicketLedgerRepository ledgerRepo, EmployeeRepository employeeRepo) {
+    public TicketService(TicketFareRepository fareRepo, TicketLedgerRepository ledgerRepo, EmployeeRepository employeeRepo,
+                         TicketFareProviderService providerService) {
         this.fareRepo = fareRepo;
         this.ledgerRepo = ledgerRepo;
         this.employeeRepo = employeeRepo;
+        this.providerService = providerService;
     }
 
     @Transactional(readOnly = true)
@@ -55,8 +59,36 @@ public class TicketService {
         fare.setEffectiveFrom(dto.getEffectiveFrom() == null ? LocalDate.now() : dto.getEffectiveFrom());
         fare.setEffectiveTo(dto.getEffectiveTo());
         fare.setStatus(dto.getStatus() == null ? "ACTIVE" : dto.getStatus().toUpperCase());
+        fare.setSource(dto.getSource() == null ? "MANUAL" : dto.getSource().trim().toUpperCase());
+        fare.setProvider(code(dto.getProvider()));
+        fare.setProviderOfferId(dto.getProviderOfferId());
+        fare.setFetchedAt(dto.getFetchedAt());
         fare.setRemarks(dto.getRemarks());
         return toDto(fareRepo.save(fare));
+    }
+
+    public TicketDtos.FareDto lookupFare(TicketDtos.FareLookupRequest request) {
+        UUID companyId = TenantContext.requireCompanyId();
+        String from = requiredCode(request.getFromAirportCode(), "fromAirportCode");
+        String to = requiredCode(request.getToAirportCode(), "toAirportCode");
+        request.setFromAirportCode(from);
+        request.setToAirportCode(to);
+        TicketFareProviderService.ProviderFare providerFare = providerService.lookup(request);
+        TicketFare fare = new TicketFare();
+        fare.setCompanyId(companyId);
+        fare.setFromAirportCode(from);
+        fare.setToAirportCode(to);
+        fare.setAmount(providerFare.amount());
+        fare.setCurrencyCode(providerFare.currencyCode());
+        fare.setEffectiveFrom(request.getEffectiveFrom() == null ? LocalDate.now() : request.getEffectiveFrom());
+        fare.setStatus("ACTIVE");
+        fare.setSource("API");
+        fare.setProvider(providerFare.provider());
+        fare.setProviderOfferId(providerFare.providerOfferId());
+        fare.setFetchedAt(OffsetDateTime.now());
+        fare.setRemarks("Fetched from " + providerFare.provider() + " for departure " +
+                (request.getDepartureDate() == null ? LocalDate.now().plusMonths(1) : request.getDepartureDate()) + ".");
+        return request.isSave() ? toDto(fareRepo.save(fare)) : toDto(fare);
     }
 
     @Transactional(readOnly = true)
@@ -208,6 +240,10 @@ public class TicketService {
         dto.setEffectiveFrom(fare.getEffectiveFrom());
         dto.setEffectiveTo(fare.getEffectiveTo());
         dto.setStatus(fare.getStatus());
+        dto.setSource(fare.getSource());
+        dto.setProvider(fare.getProvider());
+        dto.setProviderOfferId(fare.getProviderOfferId());
+        dto.setFetchedAt(fare.getFetchedAt());
         dto.setRemarks(fare.getRemarks());
         return dto;
     }

@@ -82,6 +82,9 @@ services:
       SPRING_MAIL_SMTP_AUTH: ${SPRING_MAIL_SMTP_AUTH:-true}
       SPRING_MAIL_SMTP_STARTTLS_ENABLE: ${SPRING_MAIL_SMTP_STARTTLS_ENABLE:-true}
       HRMS_BULK_JOB_EMAIL_TO: ${HRMS_BULK_JOB_EMAIL_TO:-}
+      AMADEUS_API_BASE_URL: ${AMADEUS_API_BASE_URL:-https://test.api.amadeus.com}
+      AMADEUS_CLIENT_ID: ${AMADEUS_CLIENT_ID:-}
+      AMADEUS_CLIENT_SECRET: ${AMADEUS_CLIENT_SECRET:-}
     # No host port needed; the frontend reaches it over the internal network.
     expose:
       - "8080"

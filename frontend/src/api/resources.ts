@@ -50,6 +50,7 @@ import type {
   TimesheetSummary,
   TicketBalance,
   TicketFare,
+  TicketFareLookupRequest,
   TicketLedger,
   BulkTimesheetJob,
   BulkStatusJob,
@@ -323,6 +324,8 @@ export const ticketApi = {
   saveFare: (payload: TicketFare) => payload.id
     ? api.put<TicketFare>(`/tickets/fares/${payload.id}`, payload).then((r) => r.data)
     : api.post<TicketFare>("/tickets/fares", payload).then((r) => r.data),
+  lookupFare: (payload: TicketFareLookupRequest) =>
+    api.post<TicketFare>("/tickets/fares/lookup", payload).then((r) => r.data),
   ledger: (employeeId: string) =>
     api.get<TicketLedger[]>("/tickets/ledger", { params: { employeeId } }).then((r) => r.data),
   saveLedger: (payload: TicketLedger) =>

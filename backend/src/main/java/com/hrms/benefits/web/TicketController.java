@@ -40,6 +40,11 @@ public class TicketController {
         return service.saveFare(dto);
     }
 
+    @PostMapping("/fares/lookup")
+    public TicketDtos.FareDto lookupFare(@RequestBody TicketDtos.FareLookupRequest dto) {
+        return service.lookupFare(dto);
+    }
+
     @GetMapping("/ledger")
     public List<TicketDtos.LedgerDto> ledger(@RequestParam UUID employeeId) {
         return service.ledger(employeeId);
