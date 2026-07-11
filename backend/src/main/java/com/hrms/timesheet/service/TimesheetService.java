@@ -598,6 +598,18 @@ public class TimesheetService {
         return toFullDto(t);
     }
 
+    /** Self-service — my own timesheet for one period. Only ever called
+     * with the CALLER's own employeeId (from the security context), never
+     * a client-supplied one — see SelfServiceController. Returns null if
+     * no timesheet exists yet for that period (e.g. not generated yet). */
+    @Transactional(readOnly = true)
+    public TimesheetDto findMyTimesheet(UUID employeeId, int year, int month) {
+        UUID companyId = TenantContext.requireCompanyId();
+        return timesheetRepo.findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(companyId, employeeId, year, month)
+                .map(this::toFullDto)
+                .orElse(null);
+    }
+
     @Transactional(readOnly = true)
     public List<Map<String, Object>> eligibleEmployees(UUID periodId) {
         UUID companyId = TenantContext.requireCompanyId();

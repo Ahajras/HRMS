@@ -11,6 +11,7 @@ import ProvisionRulesPage from "./pages/ProvisionRulesPage";
 import TicketsPage from "./pages/TicketsPage";
 import DayZeroPage from "./pages/DayZeroPage";
 import AuditToolsPage from "./pages/AuditToolsPage";
+import MyPortalPage from "./pages/MyPortalPage";
 import PayrollRunsPage from "./pages/PayrollRunsPage";
 import PayrollRulesPage from "./pages/PayrollRulesPage";
 import CountriesPage from "./pages/CountriesPage";
@@ -68,6 +69,7 @@ export default function App() {
         <Route path="/tickets" element={<TicketsPage />} />
         <Route path="/day-zero" element={<DayZeroPage />} />
         <Route path="/audit-tools" element={<AuditToolsPage />} />
+        <Route path="/my-portal" element={<MyPortalPage />} />
         <Route path="/payroll-rules" element={<PayrollRulesPage />} />
         <Route path="/payroll-runs" element={<PayrollRunsPage />} />
         <Route path="/countries" element={<CountriesPage />} />

@@ -582,3 +582,15 @@ export const auditApi = {
   recalculateLeaveRequest: (leaveRequestId: string, newTotalDays: number) =>
     api.post(`/audit/leave-requests/${leaveRequestId}/recalculate`, { newTotalDays }).then(() => undefined),
 };
+
+export const selfApi = {
+  payslips: () => api.get<import("./types").PayrollResult[]>("/me/payslips").then((r) => r.data),
+  payslipDetail: (resultId: string) => api.get<import("./types").PayrollResult>(`/me/payslips/${resultId}`).then((r) => r.data),
+  timesheet: (year: number, month: number) =>
+    api.get<import("./types").Timesheet>("/me/timesheet", { params: { year, month } }).then((r) => r.data),
+  leaveTypes: () => api.get<import("./types").LeaveType[]>("/me/leave-types").then((r) => r.data),
+  leaveRequests: () => api.get<import("./types").LeaveRequest[]>("/me/leave-requests").then((r) => r.data),
+  leaveBalance: () => api.get<import("./types").LeaveBalance[]>("/me/leave-balance").then((r) => r.data),
+  submitLeaveRequest: (dto: Partial<import("./types").LeaveRequest>) =>
+    api.post<import("./types").LeaveRequest>("/me/leave-requests", dto).then((r) => r.data),
+};

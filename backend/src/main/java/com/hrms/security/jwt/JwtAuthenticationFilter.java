@@ -64,13 +64,15 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         UUID userId = UUID.fromString(claims.get("uid", String.class));
         String cid = claims.get("cid", String.class);
         UUID companyId = StringUtils.hasText(cid) ? UUID.fromString(cid) : null;
+        String eid = claims.get("eid", String.class);
+        UUID employeeId = StringUtils.hasText(eid) ? UUID.fromString(eid) : null;
 
         @SuppressWarnings("unchecked")
         List<String> authorities = claims.get("authorities", List.class);
         List<SimpleGrantedAuthority> grantedAuthorities = authorities == null ? List.of()
                 : authorities.stream().map(SimpleGrantedAuthority::new).toList();
 
-        AuthenticatedUser principal = new AuthenticatedUser(userId, claims.getSubject(), companyId);
+        AuthenticatedUser principal = new AuthenticatedUser(userId, claims.getSubject(), companyId, employeeId);
         UsernamePasswordAuthenticationToken authentication =
                 new UsernamePasswordAuthenticationToken(principal, null, grantedAuthorities);
         authentication.setDetails(new WebAuthenticationDetailsSource().buildDetails(request));
@@ -78,6 +80,9 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         if (companyId != null) {
             TenantContext.setCompanyId(companyId);
+        }
+        if (employeeId != null) {
+            com.hrms.common.tenant.EmployeeContext.setEmployeeId(employeeId);
         }
     }
 }

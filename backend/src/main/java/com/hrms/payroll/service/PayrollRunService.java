@@ -264,6 +264,43 @@ public class PayrollRunService {
                 resultsPage.getTotalElements(), resultsPage.getTotalPages(), resultsPage.isFirst(), resultsPage.isLast());
     }
 
+    /** Self-service — every payslip an employee has ever had, most recent
+     * first. Only ever called with the CALLER's own employeeId (from the
+     * security context), never a client-supplied one — see
+     * SelfServiceController. */
+    @Transactional(readOnly = true)
+    public List<PayrollResultDto> findMyPayslips(UUID employeeId) {
+        Employee employee = employeeRepo.findById(employeeId).orElse(null);
+        Map<UUID, PayrollPeriod> periodCache = new HashMap<>();
+        return resultRepo.findByEmployeeIdOrderByCreatedAtDesc(employeeId).stream()
+                .map(r -> withPeriod(toDto(r, employee), r, periodCache))
+                .toList();
+    }
+
+    /** Self-service — full detail (component breakdown) for one of MY OWN
+     * payslips. Returns empty if the result doesn't belong to this
+     * employee — this is the actual ownership check, not just a courtesy;
+     * never trust the resultId alone. */
+    @Transactional(readOnly = true)
+    public Optional<PayrollResultDto> findMyPayslipDetail(UUID employeeId, UUID resultId) {
+        return resultRepo.findById(resultId)
+                .filter(r -> employeeId.equals(r.getEmployeeId()))
+                .map(r -> withPeriod(toDto(r, employeeRepo.findById(employeeId).orElse(null)), r, new HashMap<>()));
+    }
+
+    private PayrollResultDto withPeriod(PayrollResultDto dto, PayrollResult r, Map<UUID, PayrollPeriod> periodCache) {
+        PayrollRun run = runRepo.findById(r.getRunId()).orElse(null);
+        if (run == null) {
+            return dto;
+        }
+        PayrollPeriod period = periodCache.computeIfAbsent(run.getPeriodId(), id -> periodRepo.findById(id).orElse(null));
+        if (period != null) {
+            dto.setPeriodYear(period.getPeriodYear());
+            dto.setPeriodMonth(period.getPeriodMonth());
+        }
+        return dto;
+    }
+
     public PayrollRunDto create(UUID periodId, UUID projectId, String payGroup) {
         UUID companyId = TenantContext.requireCompanyId();
         periodRepo.findById(periodId).orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));

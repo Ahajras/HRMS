@@ -53,6 +53,7 @@ public class JwtService {
                 .issuer(issuer)
                 .claim("uid", principal.getUserId().toString())
                 .claim("cid", principal.getCompanyId() == null ? null : principal.getCompanyId().toString())
+                .claim("eid", principal.getEmployeeId() == null ? null : principal.getEmployeeId().toString())
                 .claim("authorities", authorities)
                 .issuedAt(Date.from(now))
                 .expiration(Date.from(expiry))

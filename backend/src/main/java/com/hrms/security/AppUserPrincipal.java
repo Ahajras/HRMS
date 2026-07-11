@@ -23,6 +23,7 @@ public class AppUserPrincipal implements UserDetails {
 
     private final UUID userId;
     private final UUID companyId;
+    private final UUID employeeId;
     private final String username;
     private final String passwordHash;
     private final boolean enabled;
@@ -31,6 +32,7 @@ public class AppUserPrincipal implements UserDetails {
     public AppUserPrincipal(AppUser user) {
         this.userId = user.getId();
         this.companyId = user.getCompanyId();
+        this.employeeId = user.getEmployeeId();
         this.username = user.getUsername();
         this.passwordHash = user.getPasswordHash();
         this.enabled = "ACTIVE".equalsIgnoreCase(user.getStatus());
@@ -46,6 +48,11 @@ public class AppUserPrincipal implements UserDetails {
     public UUID getUserId() { return userId; }
 
     public UUID getCompanyId() { return companyId; }
+
+    /** The employee record this login account represents, if any (e.g. a
+     * regular employee's self-service account). Null for admin/manager
+     * accounts with no personal employee record. */
+    public UUID getEmployeeId() { return employeeId; }
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() { return authorities; }

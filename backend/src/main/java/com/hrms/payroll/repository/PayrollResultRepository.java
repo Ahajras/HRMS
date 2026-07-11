@@ -56,6 +56,17 @@ public interface PayrollResultRepository extends JpaRepository<PayrollResult, UU
 
     void deleteByRunId(UUID runId);
 
+    /** Self-service — every payslip an employee has ever had, most recent
+     * first. Used only by /api/v1/me endpoints, which always pass the
+     * caller's OWN employeeId from the security context. */
+    @Query("""
+            select r from PayrollResult r, PayrollRun run
+            where run.id = r.runId
+              and r.employeeId = :employeeId
+            order by r.createdAt desc
+            """)
+    List<PayrollResult> findByEmployeeIdOrderByCreatedAtDesc(@Param("employeeId") UUID employeeId);
+
     @Query("""
             select count(r), coalesce(sum(r.gross), 0), coalesce(sum(r.net), 0)
             from PayrollResult r

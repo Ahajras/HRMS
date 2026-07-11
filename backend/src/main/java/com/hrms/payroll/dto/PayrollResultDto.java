@@ -20,6 +20,8 @@ public class PayrollResultDto {
     private BigDecimal net = BigDecimal.ZERO;
     private String status;
     private String message;
+    private Integer periodYear;
+    private Integer periodMonth;
     private List<PayrollResultLineDto> lines = new ArrayList<>();
 
     public UUID getId() { return id; }
@@ -50,6 +52,10 @@ public class PayrollResultDto {
     public void setStatus(String status) { this.status = status; }
     public String getMessage() { return message; }
     public void setMessage(String message) { this.message = message; }
+    public Integer getPeriodYear() { return periodYear; }
+    public void setPeriodYear(Integer periodYear) { this.periodYear = periodYear; }
+    public Integer getPeriodMonth() { return periodMonth; }
+    public void setPeriodMonth(Integer periodMonth) { this.periodMonth = periodMonth; }
     public List<PayrollResultLineDto> getLines() { return lines; }
     public void setLines(List<PayrollResultLineDto> lines) { this.lines = lines; }
 }

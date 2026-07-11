@@ -11,7 +11,7 @@ import java.util.UUID;
  * the username (e.g. "manager") rather than the record's verbose {@code toString()}
  * - the latter overflowed the 100-char audit columns (created_by/updated_by).
  */
-public record AuthenticatedUser(UUID userId, String username, UUID companyId) implements Principal {
+public record AuthenticatedUser(UUID userId, String username, UUID companyId, UUID employeeId) implements Principal {
 
     @Override
     public String getName() {

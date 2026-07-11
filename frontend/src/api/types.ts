@@ -800,6 +800,8 @@ export interface PayrollResult {
   net: number;
   status?: string;
   message?: string;
+  periodYear?: number;
+  periodMonth?: number;
   lines: PayrollResultLine[];
 }
 

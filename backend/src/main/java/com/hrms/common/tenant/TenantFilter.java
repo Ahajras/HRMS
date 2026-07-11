@@ -53,6 +53,7 @@ public class TenantFilter extends OncePerRequestFilter {
             filterChain.doFilter(request, response);
         } finally {
             TenantContext.clear();
+            com.hrms.common.tenant.EmployeeContext.clear();
         }
     }
 }
