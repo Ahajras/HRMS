@@ -1790,6 +1790,15 @@ public class TimesheetService {
         adj.setAmount(amount);
         adj.setSource("SYSTEM");
         adj.setStatus("PENDING");
+        // Each Day Zero adjustment always covers exactly one day (both the
+        // leave-sync path and the direct correction screen create one
+        // adjustment per day) — record it as structured columns, not just
+        // free text, so usage counting can find and use it automatically.
+        if (overrideDays.size() == 1) {
+            Map.Entry<UUID, TimesheetDay> only = overrideDays.entrySet().iterator().next();
+            adj.setTimesheetDayId(only.getKey());
+            adj.setNewTimeTypeId(only.getValue().getTimeTypeId());
+        }
         return payrollAdjustmentRepo.save(adj);
     }
 
@@ -1812,6 +1821,24 @@ public class TimesheetService {
         copy.setWorkedHours(workedHours != null ? workedHours : BigDecimal.ZERO);
         recomputeDay(copy, ts, new HashMap<>(), new HashMap<>(), new HashMap<>(), isMonthlyPaid(ts), isOtEligible(ts));
         return copy;
+    }
+
+    /** Public reuse point — given a Day Zero adjustment's stored
+     * (timesheetDayId, newTimeTypeId), rebuilds the corrected day exactly
+     * the same way it was computed when the adjustment was created. Used
+     * by annual/consecutive usage counting (both the Time Usage tab and
+     * the payroll threshold engine) so a Day Zero correction is reflected
+     * automatically, without ever touching the original locked day. */
+    public TimesheetDay rebuildDayZeroOverrideDay(UUID timesheetDayId, UUID newTimeTypeId) {
+        TimesheetDay original = dayRepo.findById(timesheetDayId).orElse(null);
+        if (original == null) {
+            return null;
+        }
+        Timesheet ts = timesheetRepo.findById(original.getTimesheetId()).orElse(null);
+        if (ts == null) {
+            return null;
+        }
+        return buildOverrideDay(original, ts, newTimeTypeId, null);
     }
 
     /** Day Zero screen — every estimated day available for direct correction. */

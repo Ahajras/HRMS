@@ -83,6 +83,7 @@ public class PayrollRunService {
     private final PayrollComponentRepository componentRepo;
     private final PayrollCategoryRuleRepository categoryRuleRepo;
     private final PayrollRuleRepository ruleRepo;
+    private final com.hrms.payroll.repository.PayrollAdjustmentRepository adjustmentRepo;
 
     public PayrollRunService(PayrollRunRepository runRepo,
                              PayrollResultRepository resultRepo,
@@ -99,7 +100,8 @@ public class PayrollRunService {
                              ContractPayItemRepository payItemRepo,
                              PayrollComponentRepository componentRepo,
                              PayrollCategoryRuleRepository categoryRuleRepo,
-                             PayrollRuleRepository ruleRepo) {
+                             PayrollRuleRepository ruleRepo,
+                             com.hrms.payroll.repository.PayrollAdjustmentRepository adjustmentRepo) {
         this.runRepo = runRepo;
         this.resultRepo = resultRepo;
         this.lineRepo = lineRepo;
@@ -116,6 +118,7 @@ public class PayrollRunService {
         this.componentRepo = componentRepo;
         this.categoryRuleRepo = categoryRuleRepo;
         this.ruleRepo = ruleRepo;
+        this.adjustmentRepo = adjustmentRepo;
     }
 
     private PayrollCalculationContext payrollCalculationContext(PayrollRun run, PayrollPeriod period, List<Timesheet> timesheets) {
@@ -438,6 +441,15 @@ public class PayrollRunService {
         List<PayrollResultLine> lines = new ArrayList<>();
         int processed = 0;
 
+        // Day Zero — one batch query for every employee in this run, not
+        // one per employee, matching the same discipline as everything
+        // else in this loop.
+        List<UUID> runEmployeeIds = timesheets.stream().map(Timesheet::getEmployeeId).distinct().toList();
+        Map<UUID, List<com.hrms.payroll.domain.PayrollAdjustment>> pendingAdjustmentsByEmployee = runEmployeeIds.isEmpty()
+                ? Map.of()
+                : adjustmentRepo.findByCompanyIdAndEmployeeIdInAndStatus(run.getCompanyId(), runEmployeeIds, "PENDING")
+                        .stream().collect(java.util.stream.Collectors.groupingBy(com.hrms.payroll.domain.PayrollAdjustment::getEmployeeId));
+
         for (Timesheet ts : timesheets) {
             Employee emp = ctx.employees().get(ts.getEmployeeId());
             if (emp == null) {
@@ -476,6 +488,34 @@ public class PayrollRunService {
             if (unpaidDeduction != null) {
                 lines.add(unpaidDeduction);
                 deductions = deductions.add(unpaidDeduction.getAmount());
+            }
+            // Day Zero — fold in any pending prior-period correction as an
+            // explicit, labeled line, then mark it applied so it is never
+            // picked up again on a later run.
+            for (com.hrms.payroll.domain.PayrollAdjustment adj : pendingAdjustmentsByEmployee.getOrDefault(emp.getId(), List.of())) {
+                PayrollResultLine adjLine = new PayrollResultLine();
+                adjLine.setCompanyId(run.getCompanyId());
+                adjLine.setResultId(result.getId());
+                adjLine.setComponentCode("DAY_ZERO");
+                adjLine.setComponentName("Prior period adjustment (" + adj.getWorkDate() + ")");
+                boolean isDeduction = adj.getAmount().signum() < 0;
+                adjLine.setComponentType(isDeduction ? "DEDUCTION" : "EARNING");
+                adjLine.setCategory("ADJUSTMENT");
+                adjLine.setQuantity(BigDecimal.ONE);
+                adjLine.setRate(adj.getAmount().abs());
+                adjLine.setAmount(isDeduction ? adj.getAmount().abs() : adj.getAmount());
+                adjLine.setSource("DAY_ZERO_ADJUSTMENT");
+                adjLine.setSortOrder(999);
+                lines.add(adjLine);
+                if (isDeduction) {
+                    deductions = deductions.add(adj.getAmount().abs());
+                } else {
+                    earnings = earnings.add(adj.getAmount());
+                }
+                adj.setStatus("APPLIED");
+                adj.setAppliedRunId(run.getId());
+                adj.setAppliedAt(java.time.Instant.now());
+                adjustmentRepo.save(adj);
             }
             result.setTotalEarnings(earnings);
             result.setTotalDeductions(deductions);
@@ -1344,15 +1384,40 @@ public class PayrollRunService {
         if (!historyTimesheetIds.isEmpty()) {
             timesheetRepo.findAllById(historyTimesheetIds).forEach(ts -> employeeByTimesheet.put(ts.getId(), ts.getEmployeeId()));
         }
+
+        // Day Zero — a day that was reclassified after its period was
+        // already locked (e.g. Normal -> Sick, discovered later) must count
+        // under its CORRECTED type here too, not the original one it still
+        // shows in the raw timesheet — otherwise a threshold like "50% pay
+        // after 14 sick days" would silently ignore every Day Zero sick day.
+        List<com.hrms.payroll.domain.PayrollAdjustment> corrections =
+                adjustmentRepo.findByCompanyIdAndEmployeeIdInAndWorkDateBetweenAndNewTimeTypeIdIsNotNull(
+                        companyId, employees.keySet(), earliest, period.getStartDate());
+        Map<UUID, UUID> correctedTypeByDayId = new HashMap<>();
+        for (com.hrms.payroll.domain.PayrollAdjustment adj : corrections) {
+            if (adj.getTimesheetDayId() != null) {
+                correctedTypeByDayId.put(adj.getTimesheetDayId(), adj.getNewTimeTypeId());
+            }
+        }
+
         Map<AnnualUsageKey, Integer> counts = new HashMap<>();
         for (TimesheetDay day : history) {
             UUID employeeId = employeeByTimesheet.get(day.getTimesheetId());
-            if (employeeId == null || day.getTimeTypeId() == null) {
+            if (employeeId == null) {
                 continue;
             }
             Employee employee = employees.get(employeeId);
-            Map<UUID, TimeTypePayrollRule> rules = rulesByTimeType.get(day.getTimeTypeId());
-            if (employee == null || rules == null || rules.isEmpty()) {
+            if (employee == null) {
+                continue;
+            }
+            // Use the corrected type if this day was later reclassified via
+            // Day Zero; otherwise its own (unmodified) type as usual.
+            UUID effectiveTypeId = correctedTypeByDayId.getOrDefault(day.getId(), day.getTimeTypeId());
+            if (effectiveTypeId == null) {
+                continue;
+            }
+            Map<UUID, TimeTypePayrollRule> rules = rulesByTimeType.get(effectiveTypeId);
+            if (rules == null || rules.isEmpty()) {
                 continue;
             }
             for (TimeTypePayrollRule rule : rules.values()) {
@@ -1361,7 +1426,7 @@ public class PayrollRunService {
                 }
                 LocalDate from = annualWindowStart(employee, period.getStartDate(), rule);
                 if (!day.getWorkDate().isBefore(from)) {
-                    counts.merge(new AnnualUsageKey(employeeId, day.getTimeTypeId(), annualBasisKey(rule)), 1, Integer::sum);
+                    counts.merge(new AnnualUsageKey(employeeId, effectiveTypeId, annualBasisKey(rule)), 1, Integer::sum);
                 }
             }
         }

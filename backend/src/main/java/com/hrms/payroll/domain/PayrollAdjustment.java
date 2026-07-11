@@ -51,6 +51,20 @@ public class PayrollAdjustment extends AuditableEntity {
     @Column(name = "applied_at")
     private Instant appliedAt;
 
+    /** The corrected time type for this specific day, if the correction
+     * changed the type (e.g. Normal -> Sick). Null when the correction was
+     * only about worked hours on an otherwise-unchanged rest day. Stored
+     * as a structured column (not just inside the free-text reason) so
+     * annual/consecutive usage counting can pick it up automatically. */
+    @Column(name = "new_time_type_id")
+    private UUID newTimeTypeId;
+
+    /** The original timesheet day this correction applies to — lets usage
+     * counting find and "replace" that day's contribution with the
+     * corrected type, instead of double counting or missing it entirely. */
+    @Column(name = "timesheet_day_id")
+    private UUID timesheetDayId;
+
     public UUID getCompanyId() { return companyId; }
     public void setCompanyId(UUID companyId) { this.companyId = companyId; }
     public UUID getEmployeeId() { return employeeId; }
@@ -71,4 +85,8 @@ public class PayrollAdjustment extends AuditableEntity {
     public void setAppliedRunId(UUID appliedRunId) { this.appliedRunId = appliedRunId; }
     public Instant getAppliedAt() { return appliedAt; }
     public void setAppliedAt(Instant appliedAt) { this.appliedAt = appliedAt; }
+    public UUID getNewTimeTypeId() { return newTimeTypeId; }
+    public void setNewTimeTypeId(UUID newTimeTypeId) { this.newTimeTypeId = newTimeTypeId; }
+    public UUID getTimesheetDayId() { return timesheetDayId; }
+    public void setTimesheetDayId(UUID timesheetDayId) { this.timesheetDayId = timesheetDayId; }
 }

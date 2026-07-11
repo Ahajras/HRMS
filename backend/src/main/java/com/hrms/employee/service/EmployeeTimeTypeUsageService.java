@@ -5,6 +5,8 @@ import com.hrms.common.tenant.TenantContext;
 import com.hrms.employee.domain.Employee;
 import com.hrms.employee.dto.EmployeeTimeTypeUsageDto;
 import com.hrms.employee.repository.EmployeeRepository;
+import com.hrms.payroll.domain.PayrollAdjustment;
+import com.hrms.payroll.repository.PayrollAdjustmentRepository;
 import com.hrms.timesheet.domain.TimeType;
 import com.hrms.timesheet.domain.TimeTypePayrollRule;
 import com.hrms.timesheet.domain.Timesheet;
@@ -13,6 +15,7 @@ import com.hrms.timesheet.repository.TimeTypePayrollRuleRepository;
 import com.hrms.timesheet.repository.TimeTypeRepository;
 import com.hrms.timesheet.repository.TimesheetDayRepository;
 import com.hrms.timesheet.repository.TimesheetRepository;
+import com.hrms.timesheet.service.TimesheetService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +25,7 @@ import java.time.LocalDate;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -35,17 +39,23 @@ public class EmployeeTimeTypeUsageService {
     private final TimesheetDayRepository dayRepository;
     private final TimeTypeRepository timeTypeRepository;
     private final TimeTypePayrollRuleRepository payrollRuleRepository;
+    private final PayrollAdjustmentRepository adjustmentRepository;
+    private final TimesheetService timesheetService;
 
     public EmployeeTimeTypeUsageService(EmployeeRepository employeeRepository,
                                         TimesheetRepository timesheetRepository,
                                         TimesheetDayRepository dayRepository,
                                         TimeTypeRepository timeTypeRepository,
-                                        TimeTypePayrollRuleRepository payrollRuleRepository) {
+                                        TimeTypePayrollRuleRepository payrollRuleRepository,
+                                        PayrollAdjustmentRepository adjustmentRepository,
+                                        TimesheetService timesheetService) {
         this.employeeRepository = employeeRepository;
         this.timesheetRepository = timesheetRepository;
         this.dayRepository = dayRepository;
         this.timeTypeRepository = timeTypeRepository;
         this.payrollRuleRepository = payrollRuleRepository;
+        this.adjustmentRepository = adjustmentRepository;
+        this.timesheetService = timesheetService;
     }
 
     public EmployeeTimeTypeUsageDto usage(UUID employeeId, int year) {
@@ -62,9 +72,28 @@ public class EmployeeTimeTypeUsageService {
         Map<UUID, EmployeeTimeTypeUsageDto.Row> rows = new LinkedHashMap<>();
         Set<UUID> usedTypeIds = new HashSet<>();
 
+        // Day Zero — any day that was later reclassified (e.g. Normal ->
+        // Sick, discovered after the period was already locked) must be
+        // counted under its CORRECTED type here, not its original one —
+        // otherwise this screen (and the payroll threshold engine) would
+        // silently miss every Day Zero correction.
+        List<PayrollAdjustment> dayZeroCorrections = adjustmentRepository
+                .findByCompanyIdAndEmployeeIdAndWorkDateBetweenAndNewTimeTypeIdIsNotNull(
+                        companyId, employeeId, LocalDate.of(year, 1, 1), LocalDate.of(year, 12, 31));
+        Map<UUID, UUID> correctedTypeByDayId = new HashMap<>();
+        for (PayrollAdjustment adj : dayZeroCorrections) {
+            if (adj.getTimesheetDayId() != null) {
+                correctedTypeByDayId.put(adj.getTimesheetDayId(), adj.getNewTimeTypeId());
+            }
+        }
+
         for (Timesheet ts : timesheetRepository.findByCompanyIdAndEmployeeIdAndPeriodYearOrderByPeriodMonth(companyId, employeeId, year)) {
             for (TimesheetDay day : dayRepository.findByTimesheetIdOrderByWorkDate(ts.getId())) {
                 if (day.getTimeTypeId() == null) {
+                    continue;
+                }
+                if (correctedTypeByDayId.containsKey(day.getId())) {
+                    // Handled separately below, under its corrected type.
                     continue;
                 }
                 TimeType type = types.computeIfAbsent(day.getTimeTypeId(), id -> timeTypeRepository.findById(id).orElse(null));
@@ -80,6 +109,25 @@ public class EmployeeTimeTypeUsageService {
                 row.setFirstDate(min(row.getFirstDate(), day.getWorkDate()));
                 row.setLastDate(max(row.getLastDate(), day.getWorkDate()));
             }
+        }
+
+        for (Map.Entry<UUID, UUID> entry : correctedTypeByDayId.entrySet()) {
+            TimesheetDay overrideDay = timesheetService.rebuildDayZeroOverrideDay(entry.getKey(), entry.getValue());
+            if (overrideDay == null || overrideDay.getTimeTypeId() == null) {
+                continue;
+            }
+            TimeType type = types.computeIfAbsent(overrideDay.getTimeTypeId(), id -> timeTypeRepository.findById(id).orElse(null));
+            if (type == null || excluded(type)) {
+                continue;
+            }
+            usedTypeIds.add(type.getId());
+            EmployeeTimeTypeUsageDto.Row row = rows.computeIfAbsent(type.getId(), ignored -> newRow(type));
+            BigDecimal hours = usageHours(overrideDay);
+            row.setUsedHours(row.getUsedHours().add(hours));
+            row.setUsedDays(row.getUsedDays().add(usageDays(overrideDay, hours)));
+            row.setOccurrences(row.getOccurrences() + 1);
+            row.setFirstDate(min(row.getFirstDate(), overrideDay.getWorkDate()));
+            row.setLastDate(max(row.getLastDate(), overrideDay.getWorkDate()));
         }
 
         applyThresholds(companyId, usedTypeIds, rows);
