@@ -334,7 +334,7 @@ public class PayrollRunService {
     public record DayZeroSimulation(BigDecimal net, List<String> lines) {
     }
 
-    public DayZeroSimulation simulateNetWithOverride(UUID originalRunId, UUID employeeId, Map<UUID, UUID> dayTimeTypeOverrides) {
+    public DayZeroSimulation simulateNetWithOverride(UUID originalRunId, UUID employeeId, Map<UUID, TimesheetDay> overrideDays) {
         PayrollRun run = runRepo.findById(originalRunId).orElse(null);
         if (run == null) {
             return null;
@@ -356,34 +356,20 @@ public class PayrollRunService {
         List<TimesheetDay> realDays = dayRepo.findByTimesheetIdOrderByWorkDate(ts.getId());
         List<TimesheetDay> simulatedDays = new ArrayList<>();
         for (TimesheetDay d : realDays) {
-            UUID overrideType = dayTimeTypeOverrides.get(d.getId());
-            if (overrideType == null) {
-                simulatedDays.add(d);
-                continue;
-            }
-            TimesheetDay copy = new TimesheetDay();
-            copy.setTimesheetId(d.getTimesheetId());
-            copy.setWorkDate(d.getWorkDate());
-            copy.setShiftId(d.getShiftId());
-            copy.setTimeTypeId(overrideType);
-            copy.setPlannedHours(d.getPlannedHours());
-            copy.setWorkedHours(BigDecimal.ZERO);
-            copy.setOtHours(BigDecimal.ZERO);
-            copy.setNormalHours(BigDecimal.ZERO);
-            copy.setProjectId(d.getProjectId());
-            copy.setCostCodeId(d.getCostCodeId());
-            simulatedDays.add(copy);
+            TimesheetDay override = overrideDays.get(d.getId());
+            simulatedDays.add(override != null ? override : d);
         }
 
         PayrollCalculationContext ctx = payrollCalculationContext(run, period, List.of(ts));
         // The context's time-type lookup only contains types that actually
-        // appeared in the ORIGINAL month's real days. If we're overriding a
-        // day to a type that was never used that month (e.g. the employee
+        // appeared in the ORIGINAL month's real days. If an override day
+        // uses a type that was never used that month (e.g. the employee
         // never had a sick day, and we're now testing "what if this was
         // sick"), that type would be missing here — and a missing type
         // silently falls back to "paid/normal", making every override look
         // like it changed nothing. Fetch and add any missing override types.
-        java.util.Set<UUID> missingTypeIds = dayTimeTypeOverrides.values().stream()
+        java.util.Set<UUID> missingTypeIds = overrideDays.values().stream()
+                .map(TimesheetDay::getTimeTypeId)
                 .filter(typeId -> typeId != null && !ctx.timeTypes().containsKey(typeId))
                 .collect(java.util.stream.Collectors.toSet());
         if (!missingTypeIds.isEmpty()) {

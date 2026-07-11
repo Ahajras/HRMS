@@ -1701,7 +1701,7 @@ public class TimesheetService {
                 String newLabel = type.getName();
                 String reason = "Day Zero: " + day.getWorkDate() + " (" + oldLabel + " -> " + newLabel
                         + ") reclassified after the period was already locked (recomputed against the original month)";
-                createDayZeroAdjustment(ts, Map.of(day.getId(), type.getTimeTypeId()), reason);
+                createDayZeroAdjustment(ts, Map.of(day.getId(), buildOverrideDay(day, ts, type.getTimeTypeId(), null)), reason);
             }
             return;
         }
@@ -1742,15 +1742,17 @@ public class TimesheetService {
         }
     }
 
-    /** Day Zero — shared core. Given day -> new-time-type overrides (all
-     * belonging to the SAME timesheet/period), re-runs the real payroll
-     * engine on that month with the overrides applied and diffs the result
-     * against what was actually paid. Used by both the leave-approval sync
-     * and the direct Day Zero correction screen. Returns null (and creates
-     * nothing) if there is no prior calculated result to compare against,
-     * or if the recomputed amount doesn't actually change. */
+    /** Day Zero — shared core. Given fully-built override days (all
+     * belonging to the SAME timesheet/period, with hours/OT already
+     * correctly computed the same way a normal saved day would be), re-runs
+     * the real payroll engine on that month with the overrides applied and
+     * diffs the result against what was actually paid. Used by both the
+     * leave-approval sync and the direct Day Zero correction screen.
+     * Returns null (and creates nothing) if there is no prior calculated
+     * result to compare against, or if the recomputed amount doesn't
+     * actually change. */
     private com.hrms.payroll.domain.PayrollAdjustment createDayZeroAdjustment(
-            Timesheet ts, Map<UUID, UUID> dayOverrides, String reason) {
+            Timesheet ts, Map<UUID, TimesheetDay> overrideDays, String reason) {
         Optional<com.hrms.payroll.domain.PayrollResult> original =
                 payrollRunService.findLatestResultForEmployee(ts.getPeriodId(), ts.getEmployeeId());
         if (original.isEmpty() || original.get().getNet() == null) {
@@ -1763,7 +1765,7 @@ public class TimesheetService {
         UUID originalRunId = original.get().getRunId();
         BigDecimal actualNet = original.get().getNet();
         com.hrms.payroll.service.PayrollRunService.DayZeroSimulation simulation =
-                payrollRunService.simulateNetWithOverride(originalRunId, ts.getEmployeeId(), dayOverrides);
+                payrollRunService.simulateNetWithOverride(originalRunId, ts.getEmployeeId(), overrideDays);
         if (simulation == null || simulation.net() == null) {
             return null;
         }
@@ -1772,8 +1774,8 @@ public class TimesheetService {
             return null;
         }
 
-        List<LocalDate> dates = dayOverrides.keySet().stream()
-                .map(id -> dayRepo.findById(id).map(TimesheetDay::getWorkDate).orElse(null))
+        List<LocalDate> dates = overrideDays.values().stream()
+                .map(TimesheetDay::getWorkDate)
                 .filter(java.util.Objects::nonNull)
                 .sorted()
                 .toList();
@@ -1789,6 +1791,27 @@ public class TimesheetService {
         adj.setSource("SYSTEM");
         adj.setStatus("PENDING");
         return payrollAdjustmentRepo.save(adj);
+    }
+
+    /** Day Zero — builds a fully-computed "what if" version of one day: the
+     * new time type (if changed) and/or actual worked hours (if the
+     * employee showed up on what was assumed to be a day off, e.g. worked
+     * overtime on a Friday), then runs it through the SAME normal/overtime
+     * split logic ({@link #recomputeDay}) a normally-saved day goes
+     * through — so rest-day overtime, ineligible-OT gating, etc. all work
+     * exactly as they would if this had been entered on time. */
+    private TimesheetDay buildOverrideDay(TimesheetDay original, Timesheet ts, UUID newTimeTypeId, BigDecimal workedHours) {
+        TimesheetDay copy = new TimesheetDay();
+        copy.setTimesheetId(original.getTimesheetId());
+        copy.setWorkDate(original.getWorkDate());
+        copy.setShiftId(original.getShiftId());
+        copy.setTimeTypeId(newTimeTypeId != null ? newTimeTypeId : original.getTimeTypeId());
+        copy.setPlannedHours(original.getPlannedHours());
+        copy.setProjectId(original.getProjectId());
+        copy.setCostCodeId(original.getCostCodeId());
+        copy.setWorkedHours(workedHours != null ? workedHours : BigDecimal.ZERO);
+        recomputeDay(copy, ts, new HashMap<>(), new HashMap<>(), new HashMap<>(), isMonthlyPaid(ts), isOtEligible(ts));
+        return copy;
     }
 
     /** Day Zero screen — every estimated day available for direct correction. */
@@ -1819,20 +1842,30 @@ public class TimesheetService {
         return result;
     }
 
+    /** One day's requested correction — a new time type, actual worked
+     * hours (e.g. showed up and worked overtime on what was assumed to be
+     * a day off), or both. At least one of the two should be set. */
+    public record DayCorrectionRequest(UUID newTimeTypeId, BigDecimal workedHours) {
+    }
+
     /** Day Zero screen — apply a direct correction to one or more estimated
      * days (grouped by period automatically), without going through the
      * leave module. Every affected day must already be marked estimated —
      * this never touches an ordinary locked day. */
     @Transactional
-    public Map<String, Object> applyDayZeroCorrection(UUID employeeId, Map<UUID, UUID> dayTimeTypeOverrides, String note) {
-        if (dayTimeTypeOverrides == null || dayTimeTypeOverrides.isEmpty()) {
+    public Map<String, Object> applyDayZeroCorrection(UUID employeeId, Map<UUID, DayCorrectionRequest> corrections, String note) {
+        if (corrections == null || corrections.isEmpty()) {
             throw new BusinessRuleException("day_zero.no_days", "Select at least one day to correct.");
         }
         int created = 0;
         List<Map<String, Object>> lines = new ArrayList<>();
-        for (Map.Entry<UUID, UUID> entry : dayTimeTypeOverrides.entrySet()) {
+        for (Map.Entry<UUID, DayCorrectionRequest> entry : corrections.entrySet()) {
             UUID dayId = entry.getKey();
-            UUID newTypeId = entry.getValue();
+            DayCorrectionRequest correction = entry.getValue();
+            if (correction.newTimeTypeId() == null && correction.workedHours() == null) {
+                throw new BusinessRuleException("day_zero.no_change",
+                        "Provide a new time type, worked hours, or both for day " + dayId + ".");
+            }
             TimesheetDay day = dayRepo.findById(dayId)
                     .orElseThrow(() -> new ResourceNotFoundException("Timesheet day not found: " + dayId));
             if (!day.isEstimated()) {
@@ -1849,13 +1882,16 @@ public class TimesheetService {
             // visible later, for both audit and for telling the employee
             // exactly what changed on which date.
             TimeType oldType = day.getTimeTypeId() != null ? timeTypeRepo.findById(day.getTimeTypeId()).orElse(null) : null;
-            TimeType newType = timeTypeRepo.findById(newTypeId).orElse(null);
+            TimeType newType = correction.newTimeTypeId() != null ? timeTypeRepo.findById(correction.newTimeTypeId()).orElse(null) : oldType;
             String oldLabel = oldType != null ? oldType.getCode() + " - " + oldType.getName() : "(none)";
-            String newLabel = newType != null ? newType.getCode() + " - " + newType.getName() : String.valueOf(newTypeId);
+            String newLabel = newType != null ? newType.getCode() + " - " + newType.getName()
+                    : (correction.newTimeTypeId() != null ? String.valueOf(correction.newTimeTypeId()) : oldLabel);
+            String hoursNote = correction.workedHours() != null ? ", worked " + correction.workedHours() + "h" : "";
             String reason = (note != null && !note.isBlank() ? note + " — " : "")
-                    + "Day Zero manual correction: " + day.getWorkDate() + " (" + oldLabel + " -> " + newLabel + ")";
+                    + "Day Zero manual correction: " + day.getWorkDate() + " (" + oldLabel + " -> " + newLabel + hoursNote + ")";
+            TimesheetDay overrideDay = buildOverrideDay(day, ts, correction.newTimeTypeId(), correction.workedHours());
             com.hrms.payroll.domain.PayrollAdjustment adj =
-                    createDayZeroAdjustment(ts, Map.of(dayId, newTypeId), reason);
+                    createDayZeroAdjustment(ts, Map.of(dayId, overrideDay), reason);
             if (adj != null) {
                 created++;
                 lines.add(Map.of("workDate", day.getWorkDate().toString(), "amount", adj.getAmount()));

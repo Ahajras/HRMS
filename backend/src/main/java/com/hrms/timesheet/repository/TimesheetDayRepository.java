@@ -22,10 +22,9 @@ public interface TimesheetDayRepository extends JpaRepository<TimesheetDay, UUID
      * cutoff day as "estimated" right before its timesheet gets locked. A
      * rule with no cutoff configured (day_zero_cutoff_day is null) leaves
      * every day alone — the feature is opt-in per project/pay-group.
-     * Rest/holiday days are excluded — the weekly schedule is known in
-     * advance, so there is nothing uncertain to "estimate" about them; only
-     * days that could plausibly turn out to be attendance/leave (worked,
-     * sick, unpaid, etc.) need this flag. */
+     * Rest/holiday days ARE included — the day TYPE is known in advance,
+     * but whether the employee actually showed up and worked overtime on
+     * that rest day is not, so it still needs to be correctable later. */
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query(value = """
             update timesheet_day td
@@ -43,11 +42,6 @@ public interface TimesheetDayRepository extends JpaRepository<TimesheetDay, UUID
               and t.status = 'APPROVED'
               and a.project_id = :projectId
               and (:payGroup = 'ALL' or upper(coalesce(e.pay_status, '')) = :payGroup)
-              and not exists (
-                    select 1 from time_type tt
-                    where tt.id = td.time_type_id
-                      and upper(coalesce(tt.category, '')) in ('REST', 'HOLIDAY')
-              )
               and extract(day from td.work_date)::int > coalesce(
                     (select r.day_zero_cutoff_day from payroll_rule r
                        where r.company_id = :companyId and r.project_id = :projectId

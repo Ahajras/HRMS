@@ -31,11 +31,17 @@ public class DayZeroController {
         return service.findEstimatedDaysForEmployee(employeeId);
     }
 
-    public record CorrectionRequest(Map<UUID, UUID> dayTimeTypeOverrides, String note) {
+    public record DayCorrection(UUID newTimeTypeId, java.math.BigDecimal workedHours) {
+    }
+
+    public record CorrectionRequest(Map<UUID, DayCorrection> corrections, String note) {
     }
 
     @PostMapping("/employees/{employeeId}/correct")
     public Map<String, Object> correct(@PathVariable UUID employeeId, @RequestBody CorrectionRequest request) {
-        return service.applyDayZeroCorrection(employeeId, request.dayTimeTypeOverrides(), request.note());
+        Map<UUID, TimesheetService.DayCorrectionRequest> mapped = new java.util.HashMap<>();
+        request.corrections().forEach((dayId, c) ->
+                mapped.put(dayId, new TimesheetService.DayCorrectionRequest(c.newTimeTypeId(), c.workedHours())));
+        return service.applyDayZeroCorrection(employeeId, mapped, request.note());
     }
 }

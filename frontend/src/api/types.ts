@@ -1094,3 +1094,8 @@ export interface DayZeroDay {
   timeTypeCode?: string;
   timeTypeName?: string;
 }
+
+export interface DayZeroCorrection {
+  newTimeTypeId?: string;
+  workedHours?: number;
+}

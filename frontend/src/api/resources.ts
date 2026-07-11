@@ -550,8 +550,8 @@ export const payrollReportApi = {
 export const dayZeroApi = {
   days: (employeeId: string) =>
     api.get<import("./types").DayZeroDay[]>(`/day-zero/employees/${employeeId}/days`).then((r) => r.data),
-  correct: (employeeId: string, dayTimeTypeOverrides: Record<string, string>, note?: string) =>
+  correct: (employeeId: string, corrections: Record<string, import("./types").DayZeroCorrection>, note?: string) =>
     api.post<{ adjustmentsCreated: number; lines: { workDate: string; amount: number }[] }>(
-      `/day-zero/employees/${employeeId}/correct`, { dayTimeTypeOverrides, note }
+      `/day-zero/employees/${employeeId}/correct`, { corrections, note }
     ).then((r) => r.data),
 };
