@@ -3,6 +3,8 @@ package com.hrms.benefits.dto;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public final class TicketDtos {
@@ -132,5 +134,42 @@ public final class TicketDtos {
         public void setBalance(BigDecimal balance) { this.balance = balance; }
         public String getMessage() { return message; }
         public void setMessage(String message) { this.message = message; }
+    }
+
+    public static class AccrualReportDto {
+        private LocalDate asOfDate;
+        private UUID projectId;
+        private String payGroup;
+        private int employeeCount;
+        private int missingSetupCount;
+        private BigDecimal totalTicketAmount = BigDecimal.ZERO;
+        private BigDecimal totalAccruedAmount = BigDecimal.ZERO;
+        private BigDecimal totalAdjustmentCredit = BigDecimal.ZERO;
+        private BigDecimal totalUsedAmount = BigDecimal.ZERO;
+        private BigDecimal totalBalance = BigDecimal.ZERO;
+        private List<BalanceDto> rows = new ArrayList<>();
+
+        public LocalDate getAsOfDate() { return asOfDate; }
+        public void setAsOfDate(LocalDate asOfDate) { this.asOfDate = asOfDate; }
+        public UUID getProjectId() { return projectId; }
+        public void setProjectId(UUID projectId) { this.projectId = projectId; }
+        public String getPayGroup() { return payGroup; }
+        public void setPayGroup(String payGroup) { this.payGroup = payGroup; }
+        public int getEmployeeCount() { return employeeCount; }
+        public void setEmployeeCount(int employeeCount) { this.employeeCount = employeeCount; }
+        public int getMissingSetupCount() { return missingSetupCount; }
+        public void setMissingSetupCount(int missingSetupCount) { this.missingSetupCount = missingSetupCount; }
+        public BigDecimal getTotalTicketAmount() { return totalTicketAmount; }
+        public void setTotalTicketAmount(BigDecimal totalTicketAmount) { this.totalTicketAmount = totalTicketAmount; }
+        public BigDecimal getTotalAccruedAmount() { return totalAccruedAmount; }
+        public void setTotalAccruedAmount(BigDecimal totalAccruedAmount) { this.totalAccruedAmount = totalAccruedAmount; }
+        public BigDecimal getTotalAdjustmentCredit() { return totalAdjustmentCredit; }
+        public void setTotalAdjustmentCredit(BigDecimal totalAdjustmentCredit) { this.totalAdjustmentCredit = totalAdjustmentCredit; }
+        public BigDecimal getTotalUsedAmount() { return totalUsedAmount; }
+        public void setTotalUsedAmount(BigDecimal totalUsedAmount) { this.totalUsedAmount = totalUsedAmount; }
+        public BigDecimal getTotalBalance() { return totalBalance; }
+        public void setTotalBalance(BigDecimal totalBalance) { this.totalBalance = totalBalance; }
+        public List<BalanceDto> getRows() { return rows; }
+        public void setRows(List<BalanceDto> rows) { this.rows = rows; }
     }
 }

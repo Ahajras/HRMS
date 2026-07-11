@@ -1090,6 +1090,20 @@ export interface TicketBalance {
   message?: string;
 }
 
+export interface TicketAccrualReport {
+  asOfDate: string;
+  projectId?: string;
+  payGroup?: string;
+  employeeCount: number;
+  missingSetupCount: number;
+  totalTicketAmount: number;
+  totalAccruedAmount: number;
+  totalAdjustmentCredit: number;
+  totalUsedAmount: number;
+  totalBalance: number;
+  rows: TicketBalance[];
+}
+
 export interface DayZeroDay {
   id: string;
   workDate: string;

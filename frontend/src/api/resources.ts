@@ -48,6 +48,7 @@ import type {
   TimesheetDay,
   TimesheetProjectSummary,
   TimesheetSummary,
+  TicketAccrualReport,
   TicketBalance,
   TicketFare,
   TicketLedger,
@@ -334,6 +335,8 @@ export const ticketApi = {
     api.post<TicketLedger>("/tickets/ledger", payload).then((r) => r.data),
   balance: (employeeId: string, asOfDate?: string) =>
     api.get<TicketBalance>("/tickets/balance", { params: { employeeId, ...(asOfDate ? { asOfDate } : {}) } }).then((r) => r.data),
+  accrualReport: (params?: { projectId?: string; payGroup?: string; asOfDate?: string }) =>
+    api.get<TicketAccrualReport>("/tickets/accrual-report", { params }).then((r) => r.data),
 };
 
 // --- Timesheet: public holidays ---

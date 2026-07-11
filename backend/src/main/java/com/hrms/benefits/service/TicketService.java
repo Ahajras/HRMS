@@ -166,6 +166,56 @@ public class TicketService {
         UUID companyId = TenantContext.requireCompanyId();
         Employee employee = requireEmployee(companyId, employeeId);
         LocalDate asOf = asOfDate == null ? LocalDate.now() : asOfDate;
+        List<TicketLedger> ledgerRows = ledgerRepo.findByCompanyIdAndEmployeeIdAndStatusAndEntryDateLessThanEqual(companyId, employeeId, "ACTIVE", asOf);
+        return balanceForEmployee(companyId, employee, asOf, ledgerRows);
+    }
+
+    @Transactional(readOnly = true)
+    public TicketDtos.AccrualReportDto accrualReport(UUID projectId, String payGroup, LocalDate asOfDate) {
+        UUID companyId = TenantContext.requireCompanyId();
+        LocalDate asOf = asOfDate == null ? LocalDate.now() : asOfDate;
+        LocalDate periodStart = asOf.withDayOfMonth(1);
+        String normalizedPayGroup = payGroup == null || payGroup.isBlank() ? "ALL" : payGroup.trim().toUpperCase();
+        List<Employee> employees = employeeRepo.findProvisionScope(companyId, periodStart, asOf, projectId, normalizedPayGroup);
+        List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
+        Map<UUID, List<TicketLedger>> ledgerByEmployee = employeeIds.isEmpty()
+                ? Map.of()
+                : ledgerRepo.findByCompanyIdAndEmployeeIdInAndStatusAndEntryDateLessThanEqual(companyId, employeeIds, "ACTIVE", asOf)
+                    .stream().collect(java.util.stream.Collectors.groupingBy(TicketLedger::getEmployeeId));
+
+        TicketDtos.AccrualReportDto report = new TicketDtos.AccrualReportDto();
+        report.setAsOfDate(asOf);
+        report.setProjectId(projectId);
+        report.setPayGroup(normalizedPayGroup);
+        report.setEmployeeCount(employees.size());
+        List<TicketDtos.BalanceDto> rows = new ArrayList<>();
+        BigDecimal totalTicket = BigDecimal.ZERO;
+        BigDecimal totalAccrued = BigDecimal.ZERO;
+        BigDecimal totalCredit = BigDecimal.ZERO;
+        BigDecimal totalUsed = BigDecimal.ZERO;
+        BigDecimal totalBalance = BigDecimal.ZERO;
+        int missing = 0;
+        for (Employee employee : employees) {
+            TicketDtos.BalanceDto row = balanceForEmployee(companyId, employee, asOf, ledgerByEmployee.getOrDefault(employee.getId(), List.of()));
+            rows.add(row);
+            if (!blank(row.getMessage())) missing++;
+            totalTicket = totalTicket.add(nz(row.getTicketAmount()));
+            totalAccrued = totalAccrued.add(nz(row.getAccruedAmount()));
+            totalCredit = totalCredit.add(nz(row.getAdjustmentCredit()));
+            totalUsed = totalUsed.add(nz(row.getUsedAmount()));
+            totalBalance = totalBalance.add(nz(row.getBalance()));
+        }
+        report.setRows(rows);
+        report.setMissingSetupCount(missing);
+        report.setTotalTicketAmount(scale(totalTicket));
+        report.setTotalAccruedAmount(scale(totalAccrued));
+        report.setTotalAdjustmentCredit(scale(totalCredit));
+        report.setTotalUsedAmount(scale(totalUsed));
+        report.setTotalBalance(scale(totalBalance));
+        return report;
+    }
+
+    private TicketDtos.BalanceDto balanceForEmployee(UUID companyId, Employee employee, LocalDate asOf, List<TicketLedger> ledgerRows) {
         TicketDtos.BalanceDto dto = new TicketDtos.BalanceDto();
         dto.setEmployeeId(employee.getId());
         dto.setEmployeeNumber(employee.getEmployeeNumber());
@@ -192,7 +242,7 @@ public class TicketService {
                 .multiply(months);
         BigDecimal used = BigDecimal.ZERO;
         BigDecimal credit = BigDecimal.ZERO;
-        for (TicketLedger row : ledgerRepo.findByCompanyIdAndEmployeeIdAndStatusAndEntryDateLessThanEqual(companyId, employeeId, "ACTIVE", asOf)) {
+        for (TicketLedger row : ledgerRows) {
             BigDecimal amount = row.getAmount() == null ? BigDecimal.ZERO : row.getAmount();
             String type = row.getEntryType() == null ? "" : row.getEntryType().toUpperCase();
             if (type.contains("CREDIT") || "OPENING_ACCRUED".equals(type)) credit = credit.add(amount);
@@ -386,5 +436,9 @@ public class TicketService {
 
     private BigDecimal scale(BigDecimal value) {
         return (value == null ? BigDecimal.ZERO : value).setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal nz(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 }

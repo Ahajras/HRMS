@@ -249,7 +249,13 @@ public class ProvisionService {
         vars.put("period_days", BigDecimal.valueOf(ChronoUnit.DAYS.between(period.getStartDate(), period.getEndDate()) + 1));
         vars.put("month_days", BigDecimal.valueOf(period.getEndDate().lengthOfMonth()));
         vars.put("ticket_cycle_months", BigDecimal.valueOf(Math.max(1, rule.getTicketCycleMonths())));
-        vars.put("ticket_amount", scale4(ticketService.ticketAmountForEmployee(employee, period.getEndDate())));
+        BigDecimal ticketAmount = ticketService.ticketAmountForEmployee(employee, period.getEndDate());
+        if ("TICKET".equalsIgnoreCase(rule.getProvisionType()) && ticketAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new BusinessRuleException("provision.ticket_fare.required",
+                    "Ticket fare is missing for employee " + employee.getEmployeeNumber() + " route "
+                            + employee.getWorkAirportCode() + " -> " + employee.getHomeAirportCode() + ".");
+        }
+        vars.put("ticket_amount", scale4(ticketAmount));
         return vars;
     }
 

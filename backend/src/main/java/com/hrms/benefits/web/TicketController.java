@@ -62,4 +62,11 @@ public class TicketController {
                                          @RequestParam(required = false) LocalDate asOfDate) {
         return service.balance(employeeId, asOfDate);
     }
+
+    @GetMapping("/accrual-report")
+    public TicketDtos.AccrualReportDto accrualReport(@RequestParam(required = false) UUID projectId,
+                                                     @RequestParam(required = false) String payGroup,
+                                                     @RequestParam(required = false) LocalDate asOfDate) {
+        return service.accrualReport(projectId, payGroup, asOfDate);
+    }
 }

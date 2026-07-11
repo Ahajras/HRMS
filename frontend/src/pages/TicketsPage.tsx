@@ -18,7 +18,7 @@ import {
 import SaveIcon from "@mui/icons-material/Save";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { employeeApi, ticketApi } from "../api/resources";
+import { employeeApi, lookupApi, projectApi, ticketApi } from "../api/resources";
 import type { ImportSummary, TicketFare, TicketLedger } from "../api/types";
 
 const money = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -38,6 +38,8 @@ export default function TicketsPage() {
   const [q, setQ] = useState("");
   const [employeeId, setEmployeeId] = useState("");
   const [asOfDate, setAsOfDate] = useState(new Date().toISOString().slice(0, 10));
+  const [reportProjectId, setReportProjectId] = useState("");
+  const [reportPayGroup, setReportPayGroup] = useState("ALL");
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [ledger, setLedger] = useState<Partial<TicketLedger>>({
     entryType: "OPENING_USED",
@@ -47,6 +49,16 @@ export default function TicketsPage() {
   });
 
   const { data: fares = [] } = useQuery({ queryKey: ["ticketFares"], queryFn: ticketApi.fares });
+  const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
+  const { data: payGroups = [] } = useQuery({ queryKey: ["lookup", "PAY_STATUS"], queryFn: () => lookupApi.byCategory("PAY_STATUS") });
+  const { data: accrualReport } = useQuery({
+    queryKey: ["ticketAccrualReport", reportProjectId, reportPayGroup, asOfDate],
+    queryFn: () => ticketApi.accrualReport({
+      ...(reportProjectId ? { projectId: reportProjectId } : {}),
+      ...(reportPayGroup ? { payGroup: reportPayGroup } : {}),
+      asOfDate,
+    }),
+  });
   const { data: employees } = useQuery({
     queryKey: ["ticketEmployees", q],
     queryFn: () => employeeApi.list(0, 25, q || undefined),
@@ -154,12 +166,68 @@ export default function TicketsPage() {
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
         <Typography variant="subtitle1" fontWeight={800} mb={1}>Employee ticket accrual</Typography>
         <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} mb={2}>
+          <TextField select size="small" label="Project" value={reportProjectId} onChange={(e) => setReportProjectId(e.target.value)} sx={{ minWidth: 220 }}>
+            <MenuItem value="">Whole company</MenuItem>
+            {projects.map((p) => <MenuItem key={p.id} value={p.id}>{p.code} - {p.name}</MenuItem>)}
+          </TextField>
+          <TextField select size="small" label="Pay group" value={reportPayGroup} onChange={(e) => setReportPayGroup(e.target.value)} sx={{ minWidth: 160 }}>
+            <MenuItem value="ALL">All</MenuItem>
+            {payGroups.map((g) => <MenuItem key={g.code} value={g.code}>{g.label || g.code}</MenuItem>)}
+          </TextField>
+          <TextField size="small" type="date" label="As of" InputLabelProps={{ shrink: true }} value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} />
+        </Stack>
+
+        {accrualReport && (
+          <>
+            <Grid container spacing={1.5} mb={2}>
+              <Stat label="Employees" value={String(accrualReport.employeeCount)} />
+              <Stat label="Missing setup" value={String(accrualReport.missingSetupCount)} />
+              <Stat label="Ticket amount" value={money(accrualReport.totalTicketAmount)} />
+              <Stat label="Accrued" value={money(accrualReport.totalAccruedAmount)} />
+              <Stat label="Used" value={money(accrualReport.totalUsedAmount)} />
+              <Stat label="Balance" value={money(accrualReport.totalBalance)} />
+            </Grid>
+            <Box sx={{ overflow: "auto", mb: 2, maxHeight: 320 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Employee</TableCell>
+                    <TableCell>Route</TableCell>
+                    <TableCell align="right">Ticket</TableCell>
+                    <TableCell align="right">Accrued</TableCell>
+                    <TableCell align="right">Used</TableCell>
+                    <TableCell align="right">Balance</TableCell>
+                    <TableCell>Status</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {accrualReport.rows.slice(0, 200).map((row) => (
+                    <TableRow key={row.employeeId} hover>
+                      <TableCell>
+                        <Typography variant="body2" fontWeight={700}>{row.employeeNumber}</Typography>
+                        <Typography variant="caption" color="text.secondary">{row.employeeName}</Typography>
+                      </TableCell>
+                      <TableCell>{row.fromAirportCode ?? "-"} -&gt; {row.toAirportCode ?? "-"}</TableCell>
+                      <TableCell align="right">{money(row.ticketAmount)}</TableCell>
+                      <TableCell align="right">{money(row.accruedAmount)}</TableCell>
+                      <TableCell align="right">{money(row.usedAmount)}</TableCell>
+                      <TableCell align="right">{money(row.balance)}</TableCell>
+                      <TableCell>{row.message ? <Typography color="error" variant="caption">{row.message}</Typography> : "OK"}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </Box>
+          </>
+        )}
+
+        <Typography variant="subtitle2" fontWeight={800} mb={1}>Single employee check</Typography>
+        <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} mb={2}>
           <TextField size="small" label="Search employee" value={q} onChange={(e) => setQ(e.target.value)} sx={{ minWidth: 220 }} />
           <TextField select size="small" label="Employee" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} sx={{ minWidth: 320 }}>
             <MenuItem value="">Select employee</MenuItem>
             {employeesList.map((e) => <MenuItem key={e.id} value={e.id}>{e.employeeNumber} - {e.firstName} {e.lastName}</MenuItem>)}
           </TextField>
-          <TextField size="small" type="date" label="As of" InputLabelProps={{ shrink: true }} value={asOfDate} onChange={(e) => setAsOfDate(e.target.value)} />
         </Stack>
 
         {balance?.message && <Alert severity="warning" sx={{ mb: 2 }}>{balance.message}</Alert>}
