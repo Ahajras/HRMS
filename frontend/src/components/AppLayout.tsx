@@ -149,6 +149,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [rail, setRail] = useState(false);
 
+  // Do not carry the previous screen's scroll position into a new page. On
+  // shorter/zoomed viewports that could leave the page title and action
+  // buttons above the visible area.
+  useEffect(() => {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [location.pathname]);
+
   const isPlatformAdmin = !user?.companyId;
   const needsCompany = isPlatformAdmin && !company.trim();
   const companyQueryEnabled = !!user?.companyId || !!company.trim();

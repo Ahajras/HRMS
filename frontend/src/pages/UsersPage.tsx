@@ -85,7 +85,14 @@ export default function UsersPage() {
 
   return (
     <Box>
-      <Stack direction="row" justifyContent="space-between" alignItems="center" mb={2}>
+      <Stack
+        direction="row"
+        justifyContent="space-between"
+        alignItems="center"
+        gap={1}
+        flexWrap="wrap"
+        mb={2}
+      >
         <Typography variant="h5">Users</Typography>
         <Button startIcon={<AddIcon />} variant="contained" onClick={() => {
           setForm({ ...EMPTY, companyId: user?.companyId ?? (getCompanyId() || undefined) });
@@ -127,12 +134,21 @@ export default function UsersPage() {
               error={companyInvalid}
               helperText={companyInvalid ? "Company ID must be a UUID, not an employee/project number." : "For the default demo company use 00000000-0000-0000-0000-0000000000c1."}
               onChange={(e) => setForm({ ...form, companyId: e.target.value.trim() || undefined })} />
-            <TextField select label="Linked employee" value={form.employeeId ?? ""}
-              helperText="Required for TIMEKEEPER users so the system knows their employee identity."
-              onChange={(e) => setForm({ ...form, employeeId: e.target.value || undefined })}>
-              <MenuItem value="">None</MenuItem>
-              {empList.map((emp) => <MenuItem key={emp.id} value={emp.id}>{emp.employeeNumber} - {emp.firstName} {emp.lastName}</MenuItem>)}
-            </TextField>
+            <Autocomplete
+              options={empList}
+              value={empList.find((emp) => emp.id === form.employeeId) ?? null}
+              getOptionLabel={(emp) => `${emp.employeeNumber} - ${emp.firstName} ${emp.lastName}`}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              onChange={(_event, employee) => setForm({ ...form, employeeId: employee?.id })}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Linked employee"
+                  placeholder="Search by employee number or name"
+                  helperText="Type an employee number or name to search. Required for TIMEKEEPER users."
+                />
+              )}
+            />
             <Autocomplete
               multiple
               options={roleCodes}
