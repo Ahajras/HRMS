@@ -1127,3 +1127,34 @@ export interface DayZeroCorrection {
   newTimeTypeId?: string;
   workedHours?: number;
 }
+
+export interface AuditDayZeroAdjustment {
+  id: string;
+  workDate: string;
+  periodYear: number;
+  periodMonth: number;
+  amount: number;
+  status: string;
+  reason: string;
+  createdAt: string;
+}
+
+export interface AuditPayrollRun {
+  id: string;
+  periodYear: number;
+  periodMonth: number;
+  projectCode?: string;
+  payGroup: string;
+  status: string;
+  createdAt: string;
+  employeeCount: number;
+}
+
+export interface AuditLeaveDiscrepancy {
+  leaveRequestId: string;
+  leaveTypeCode: string;
+  startDate: string;
+  endDate: string;
+  recordedDays: number;
+  actualDays: number;
+}

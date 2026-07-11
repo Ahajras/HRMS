@@ -44,6 +44,7 @@ import GroupsIcon from "@mui/icons-material/Groups";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
 import SecurityIcon from "@mui/icons-material/Security";
+import BuildIcon from "@mui/icons-material/Build";
 import ImportExportIcon from "@mui/icons-material/ImportExport";
 import LogoutIcon from "@mui/icons-material/Logout";
 import MenuIcon from "@mui/icons-material/Menu";
@@ -125,6 +126,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/users", label: "Users", icon: <ManageAccountsIcon />, authority: "security.user.read" },
       { to: "/roles", label: "Roles", icon: <SecurityIcon />, authority: "security.role.read" },
       { to: "/legacy-import", label: "Legacy Import", icon: <ImportExportIcon />, authority: "employee.read" },
+      { to: "/audit-tools", label: "Audit Tools", icon: <BuildIcon />, authority: "audit.tools" },
     ],
   },
 ];

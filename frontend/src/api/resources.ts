@@ -567,3 +567,18 @@ export const dayZeroApi = {
       `/day-zero/employees/${employeeId}/correct`, { corrections, note }
     ).then((r) => r.data),
 };
+
+export const auditApi = {
+  dayZeroAdjustments: (employeeId: string) =>
+    api.get<import("./types").AuditDayZeroAdjustment[]>("/audit/day-zero-adjustments", { params: { employeeId } }).then((r) => r.data),
+  deleteDayZeroAdjustment: (id: string) => api.delete(`/audit/day-zero-adjustments/${id}`).then(() => undefined),
+  payrollRuns: (limit = 50) =>
+    api.get<import("./types").AuditPayrollRun[]>("/audit/payroll-runs", { params: { limit } }).then((r) => r.data),
+  deletePayrollRun: (id: string) => api.delete(`/audit/payroll-runs/${id}`).then(() => undefined),
+  timeUsage: (employeeId: string, year: number) =>
+    api.get<import("./types").EmployeeTimeTypeUsage>("/audit/time-usage", { params: { employeeId, year } }).then((r) => r.data),
+  leaveDiscrepancies: (employeeId: string) =>
+    api.get<import("./types").AuditLeaveDiscrepancy[]>("/audit/leave-discrepancies", { params: { employeeId } }).then((r) => r.data),
+  recalculateLeaveRequest: (leaveRequestId: string, newTotalDays: number) =>
+    api.post(`/audit/leave-requests/${leaveRequestId}/recalculate`, { newTotalDays }).then(() => undefined),
+};
