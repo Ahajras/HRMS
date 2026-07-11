@@ -40,6 +40,8 @@ const VARIABLES = [
   "period_days",
   "month_days",
   "ticket_cycle_months",
+  "ticket_quantity",
+  "ticket_expiry_months",
   "ticket_amount",
 ];
 
@@ -54,6 +56,9 @@ const emptyRule = (): ProvisionRule => ({
   entitlementDaysUnderFive: 21,
   entitlementDaysFiveOrMore: 28,
   ticketCycleMonths: 12,
+  ticketQuantity: 1,
+  ticketExpiryMonths: 0,
+  ticketEntitlementMode: "ON_CYCLE_DATE",
   effectiveFrom: new Date().toISOString().slice(0, 10),
   status: "ACTIVE",
 });
@@ -168,6 +173,18 @@ export default function ProvisionRulesPage() {
           </Grid>
           <Grid item xs={6} md={2}>
             <TextField fullWidth size="small" type="number" label="Ticket cycle months" value={form.ticketCycleMonths} onChange={(e) => set("ticketCycleMonths", Number(e.target.value))} />
+          </Grid>
+          <Grid item xs={6} md={2}>
+            <TextField fullWidth size="small" type="number" label="Tickets per cycle" value={form.ticketQuantity} onChange={(e) => set("ticketQuantity", Number(e.target.value))} />
+          </Grid>
+          <Grid item xs={6} md={2}>
+            <TextField fullWidth size="small" type="number" label="Ticket expiry months" value={form.ticketExpiryMonths} onChange={(e) => set("ticketExpiryMonths", Number(e.target.value))} />
+          </Grid>
+          <Grid item xs={6} md={2}>
+            <TextField select fullWidth size="small" label="Entitlement mode" value={form.ticketEntitlementMode} onChange={(e) => set("ticketEntitlementMode", e.target.value)}>
+              <MenuItem value="ON_CYCLE_DATE">On cycle date</MenuItem>
+              <MenuItem value="PRORATED_BALANCE">Prorated balance</MenuItem>
+            </TextField>
           </Grid>
           <Grid item xs={6} md={2}>
             <TextField fullWidth size="small" type="date" label="Effective from" value={form.effectiveFrom} onChange={(e) => set("effectiveFrom", e.target.value)} InputLabelProps={{ shrink: true }} />

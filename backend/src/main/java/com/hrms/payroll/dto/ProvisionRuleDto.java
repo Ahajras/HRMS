@@ -19,6 +19,9 @@ public class ProvisionRuleDto {
     private BigDecimal entitlementDaysUnderFive = BigDecimal.valueOf(21);
     private BigDecimal entitlementDaysFiveOrMore = BigDecimal.valueOf(28);
     private int ticketCycleMonths = 12;
+    private BigDecimal ticketQuantity = BigDecimal.ONE;
+    private int ticketExpiryMonths = 0;
+    private String ticketEntitlementMode = "ON_CYCLE_DATE";
     private LocalDate effectiveFrom;
     private LocalDate effectiveTo;
     private String status = "ACTIVE";
@@ -52,6 +55,12 @@ public class ProvisionRuleDto {
     public void setEntitlementDaysFiveOrMore(BigDecimal entitlementDaysFiveOrMore) { this.entitlementDaysFiveOrMore = entitlementDaysFiveOrMore; }
     public int getTicketCycleMonths() { return ticketCycleMonths; }
     public void setTicketCycleMonths(int ticketCycleMonths) { this.ticketCycleMonths = ticketCycleMonths; }
+    public BigDecimal getTicketQuantity() { return ticketQuantity; }
+    public void setTicketQuantity(BigDecimal ticketQuantity) { this.ticketQuantity = ticketQuantity; }
+    public int getTicketExpiryMonths() { return ticketExpiryMonths; }
+    public void setTicketExpiryMonths(int ticketExpiryMonths) { this.ticketExpiryMonths = ticketExpiryMonths; }
+    public String getTicketEntitlementMode() { return ticketEntitlementMode; }
+    public void setTicketEntitlementMode(String ticketEntitlementMode) { this.ticketEntitlementMode = ticketEntitlementMode; }
     public LocalDate getEffectiveFrom() { return effectiveFrom; }
     public void setEffectiveFrom(LocalDate effectiveFrom) { this.effectiveFrom = effectiveFrom; }
     public LocalDate getEffectiveTo() { return effectiveTo; }

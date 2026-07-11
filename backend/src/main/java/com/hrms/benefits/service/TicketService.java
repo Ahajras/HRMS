@@ -12,6 +12,8 @@ import com.hrms.employee.domain.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.leave.domain.LeaveRequest;
 import com.hrms.migration.dto.ImportSummary;
+import com.hrms.payroll.domain.ProvisionRule;
+import com.hrms.payroll.repository.ProvisionRuleRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -38,11 +40,14 @@ public class TicketService {
     private final TicketFareRepository fareRepo;
     private final TicketLedgerRepository ledgerRepo;
     private final EmployeeRepository employeeRepo;
+    private final ProvisionRuleRepository provisionRuleRepo;
 
-    public TicketService(TicketFareRepository fareRepo, TicketLedgerRepository ledgerRepo, EmployeeRepository employeeRepo) {
+    public TicketService(TicketFareRepository fareRepo, TicketLedgerRepository ledgerRepo, EmployeeRepository employeeRepo,
+                         ProvisionRuleRepository provisionRuleRepo) {
         this.fareRepo = fareRepo;
         this.ledgerRepo = ledgerRepo;
         this.employeeRepo = employeeRepo;
+        this.provisionRuleRepo = provisionRuleRepo;
     }
 
     @Transactional(readOnly = true)
@@ -167,7 +172,8 @@ public class TicketService {
         Employee employee = requireEmployee(companyId, employeeId);
         LocalDate asOf = asOfDate == null ? LocalDate.now() : asOfDate;
         List<TicketLedger> ledgerRows = ledgerRepo.findByCompanyIdAndEmployeeIdAndStatusAndEntryDateLessThanEqual(companyId, employeeId, "ACTIVE", asOf);
-        return balanceForEmployee(companyId, employee, asOf, ledgerRows);
+        ProvisionRule rule = ticketRule(companyId, null, employee.getPayStatus(), asOf);
+        return balanceForEmployee(companyId, employee, asOf, ledgerRows, rule);
     }
 
     @Transactional(readOnly = true)
@@ -196,7 +202,8 @@ public class TicketService {
         BigDecimal totalBalance = BigDecimal.ZERO;
         int missing = 0;
         for (Employee employee : employees) {
-            TicketDtos.BalanceDto row = balanceForEmployee(companyId, employee, asOf, ledgerByEmployee.getOrDefault(employee.getId(), List.of()));
+            ProvisionRule rule = ticketRule(companyId, projectId, employee.getPayStatus(), asOf);
+            TicketDtos.BalanceDto row = balanceForEmployee(companyId, employee, asOf, ledgerByEmployee.getOrDefault(employee.getId(), List.of()), rule);
             rows.add(row);
             if (!blank(row.getMessage())) missing++;
             totalTicket = totalTicket.add(nz(row.getTicketAmount()));
@@ -215,7 +222,7 @@ public class TicketService {
         return report;
     }
 
-    private TicketDtos.BalanceDto balanceForEmployee(UUID companyId, Employee employee, LocalDate asOf, List<TicketLedger> ledgerRows) {
+    private TicketDtos.BalanceDto balanceForEmployee(UUID companyId, Employee employee, LocalDate asOf, List<TicketLedger> ledgerRows, ProvisionRule rule) {
         TicketDtos.BalanceDto dto = new TicketDtos.BalanceDto();
         dto.setEmployeeId(employee.getId());
         dto.setEmployeeNumber(employee.getEmployeeNumber());
@@ -224,8 +231,17 @@ public class TicketService {
         dto.setAsOfDate(asOf);
         dto.setFromAirportCode(employee.getWorkAirportCode());
         dto.setToAirportCode(employee.getHomeAirportCode());
-        dto.setCycleMonths(DEFAULT_CYCLE_MONTHS);
+        int cycleMonths = rule == null ? DEFAULT_CYCLE_MONTHS : Math.max(1, rule.getTicketCycleMonths());
+        BigDecimal ticketQuantity = rule == null || rule.getTicketQuantity() == null ? BigDecimal.ONE : rule.getTicketQuantity();
+        int expiryMonths = rule == null ? 0 : Math.max(0, rule.getTicketExpiryMonths());
+        dto.setCycleMonths(cycleMonths);
+        dto.setTicketQuantity(ticketQuantity);
+        dto.setExpiryMonths(expiryMonths);
 
+        if (rule == null) {
+            dto.setMessage("No active ticket provision rule for pay group " + employee.getPayStatus() + ".");
+            return dto;
+        }
         if (blank(employee.getWorkAirportCode()) || blank(employee.getHomeAirportCode())) {
             dto.setMessage("Employee work/home airport is not configured.");
             return dto;
@@ -238,7 +254,8 @@ public class TicketService {
         dto.setTicketAmount(scale(fare.getAmount()));
         BigDecimal months = accruedMonths(employee.getHireDate(), asOf);
         BigDecimal accrued = fare.getAmount()
-                .divide(BigDecimal.valueOf(DEFAULT_CYCLE_MONTHS), 8, RoundingMode.HALF_UP)
+                .divide(BigDecimal.valueOf(cycleMonths), 8, RoundingMode.HALF_UP)
+                .multiply(ticketQuantity)
                 .multiply(months);
         BigDecimal used = BigDecimal.ZERO;
         BigDecimal credit = BigDecimal.ZERO;
@@ -252,8 +269,48 @@ public class TicketService {
         dto.setAccruedAmount(scale(accrued));
         dto.setAdjustmentCredit(scale(credit));
         dto.setUsedAmount(scale(used));
-        dto.setBalance(scale(accrued.add(credit).subtract(used)));
+        TicketEntitlement entitlement = entitlement(employee.getHireDate(), asOf, cycleMonths, ticketQuantity, expiryMonths);
+        BigDecimal usedTickets = ticketCount(used, fare.getAmount());
+        BigDecimal creditTickets = ticketCount(credit, fare.getAmount());
+        BigDecimal availableTickets = entitlement.accruedTickets().add(creditTickets).subtract(entitlement.expiredTickets()).subtract(usedTickets);
+        if (availableTickets.compareTo(BigDecimal.ZERO) < 0) availableTickets = BigDecimal.ZERO;
+        dto.setAccruedTicketCount(scale(entitlement.accruedTickets()));
+        dto.setExpiredTicketCount(scale(entitlement.expiredTickets()));
+        dto.setUsedTicketCount(scale(usedTickets));
+        dto.setAvailableTicketCount(scale(availableTickets));
+        dto.setNextDueDate(entitlement.nextDueDate());
+        dto.setBalance(scale(availableTickets.multiply(fare.getAmount())));
         return dto;
+    }
+
+    private TicketEntitlement entitlement(LocalDate hireDate, LocalDate asOf, int cycleMonths, BigDecimal ticketQuantity, int expiryMonths) {
+        if (hireDate == null || asOf.isBefore(hireDate)) {
+            return new TicketEntitlement(BigDecimal.ZERO, BigDecimal.ZERO, hireDate);
+        }
+        BigDecimal accruedTickets = BigDecimal.ZERO;
+        BigDecimal expiredTickets = BigDecimal.ZERO;
+        LocalDate dueDate = hireDate.plusMonths(cycleMonths);
+        while (!dueDate.isAfter(asOf)) {
+            accruedTickets = accruedTickets.add(ticketQuantity);
+            if (expiryMonths > 0 && dueDate.plusMonths(expiryMonths).isBefore(asOf)) {
+                expiredTickets = expiredTickets.add(ticketQuantity);
+            }
+            dueDate = dueDate.plusMonths(cycleMonths);
+        }
+        return new TicketEntitlement(accruedTickets, expiredTickets, dueDate);
+    }
+
+    private BigDecimal ticketCount(BigDecimal amount, BigDecimal ticketAmount) {
+        if (amount == null || ticketAmount == null || ticketAmount.compareTo(BigDecimal.ZERO) <= 0) return BigDecimal.ZERO;
+        return amount.divide(ticketAmount, 4, RoundingMode.HALF_UP);
+    }
+
+    private record TicketEntitlement(BigDecimal accruedTickets, BigDecimal expiredTickets, LocalDate nextDueDate) {}
+
+    private ProvisionRule ticketRule(UUID companyId, UUID projectId, String payGroup, LocalDate asOf) {
+        String group = blank(payGroup) ? "ALL" : payGroup.trim().toUpperCase();
+        return provisionRuleRepo.findMatching(companyId, "TICKET", projectId, group, asOf)
+                .stream().findFirst().orElse(null);
     }
 
     @Transactional(readOnly = true)

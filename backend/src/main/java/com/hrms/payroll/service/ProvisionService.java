@@ -249,6 +249,8 @@ public class ProvisionService {
         vars.put("period_days", BigDecimal.valueOf(ChronoUnit.DAYS.between(period.getStartDate(), period.getEndDate()) + 1));
         vars.put("month_days", BigDecimal.valueOf(period.getEndDate().lengthOfMonth()));
         vars.put("ticket_cycle_months", BigDecimal.valueOf(Math.max(1, rule.getTicketCycleMonths())));
+        vars.put("ticket_quantity", scale4(rule.getTicketQuantity()));
+        vars.put("ticket_expiry_months", scale4(BigDecimal.valueOf(Math.max(0, rule.getTicketExpiryMonths()))));
         BigDecimal ticketAmount = ticketService.ticketAmountForEmployee(employee, period.getEndDate());
         if ("TICKET".equalsIgnoreCase(rule.getProvisionType()) && ticketAmount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new BusinessRuleException("provision.ticket_fare.required",

@@ -879,6 +879,9 @@ export interface ProvisionRule {
   entitlementDaysUnderFive: number;
   entitlementDaysFiveOrMore: number;
   ticketCycleMonths: number;
+  ticketQuantity: number;
+  ticketExpiryMonths: number;
+  ticketEntitlementMode: string;
   effectiveFrom: string;
   effectiveTo?: string;
   status?: string;
@@ -1082,11 +1085,18 @@ export interface TicketBalance {
   toAirportCode?: string;
   ticketAmount: number;
   cycleMonths: number;
+  ticketQuantity: number;
+  expiryMonths: number;
   accruedMonths: number;
   accruedAmount: number;
+  accruedTicketCount: number;
+  usedTicketCount: number;
+  expiredTicketCount: number;
+  availableTicketCount: number;
   adjustmentCredit: number;
   usedAmount: number;
   balance: number;
+  nextDueDate?: string;
   message?: string;
 }
 

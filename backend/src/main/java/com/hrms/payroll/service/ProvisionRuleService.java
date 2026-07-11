@@ -50,16 +50,19 @@ public class ProvisionRuleService {
     public List<ProvisionRuleDto> initializeDefaults() {
         UUID companyId = TenantContext.requireCompanyId();
         createIfMissing(companyId, "LEAVE", "Annual leave provision", "COMPONENT_FLAGS",
-                null, null, "basis_amount / divisor * entitlement_days / 12",
-                BigDecimal.valueOf(365), BigDecimal.ZERO, BigDecimal.valueOf(21), BigDecimal.valueOf(28), 12,
+                null, null, null, "basis_amount / divisor * entitlement_days / 12",
+                BigDecimal.valueOf(365), BigDecimal.ZERO, BigDecimal.valueOf(21), BigDecimal.valueOf(28),
+                12, BigDecimal.ONE, 0, "ON_CYCLE_DATE",
                 "Default template. Edit the basis, divisor, days, or formula before relying on it.");
         createIfMissing(companyId, "EOS", "End of service provision", "COMPONENT_FLAGS",
-                null, null, "basis_amount / divisor * entitlement_days / 12",
-                BigDecimal.valueOf(365), BigDecimal.ZERO, BigDecimal.valueOf(21), BigDecimal.valueOf(21), 12,
+                null, null, null, "basis_amount / divisor * entitlement_days / 12",
+                BigDecimal.valueOf(365), BigDecimal.ZERO, BigDecimal.valueOf(21), BigDecimal.valueOf(21),
+                12, BigDecimal.ONE, 0, "ON_CYCLE_DATE",
                 "Default template. Qatar minimum is commonly configured as 21 basic-wage days per service year.");
-        createIfMissing(companyId, "TICKET", "Ticket provision", "FIXED_AMOUNT",
-                null, null, "ticket_amount / ticket_cycle_months",
-                BigDecimal.valueOf(365), BigDecimal.ZERO, BigDecimal.valueOf(21), BigDecimal.valueOf(28), 12,
+        createIfMissing(companyId, "TICKET", "Ticket provision", "FIXED_AMOUNT", "MONTHLY",
+                null, null, "ticket_amount * ticket_quantity / ticket_cycle_months",
+                BigDecimal.valueOf(365), BigDecimal.ZERO, BigDecimal.valueOf(21), BigDecimal.valueOf(28),
+                12, BigDecimal.ONE, 0, "ON_CYCLE_DATE",
                 "Default template. Ticket amount is read from the employee work/home airport fare table.");
         return list();
     }
@@ -71,16 +74,18 @@ public class ProvisionRuleService {
         repo.delete(rule);
     }
 
-    private void createIfMissing(UUID companyId, String type, String name, String basisMode, String categories, String componentCodes,
+    private void createIfMissing(UUID companyId, String type, String name, String basisMode, String payGroup, String categories, String componentCodes,
                                  String formula, BigDecimal divisor, BigDecimal fixedAmount, BigDecimal underFive,
-                                 BigDecimal fiveOrMore, int ticketCycleMonths, String notes) {
-        if (repo.findByCompanyIdAndProvisionTypeAndProjectIdIsNullAndPayGroup(companyId, type, "ALL").isPresent()) {
+                                 BigDecimal fiveOrMore, int ticketCycleMonths, BigDecimal ticketQuantity,
+                                 int ticketExpiryMonths, String ticketEntitlementMode, String notes) {
+        String group = blank(payGroup) ? "ALL" : payGroup.trim().toUpperCase();
+        if (repo.findByCompanyIdAndProvisionTypeAndProjectIdIsNullAndPayGroup(companyId, type, group).isPresent()) {
             return;
         }
         ProvisionRule rule = new ProvisionRule();
         rule.setCompanyId(companyId);
         rule.setProvisionType(type);
-        rule.setPayGroup("ALL");
+        rule.setPayGroup(group);
         rule.setName(name);
         rule.setBasisMode(basisMode);
         rule.setBasisCategories(categories);
@@ -91,6 +96,9 @@ public class ProvisionRuleService {
         rule.setEntitlementDaysUnderFive(underFive);
         rule.setEntitlementDaysFiveOrMore(fiveOrMore);
         rule.setTicketCycleMonths(ticketCycleMonths);
+        rule.setTicketQuantity(ticketQuantity == null ? BigDecimal.ONE : ticketQuantity);
+        rule.setTicketExpiryMonths(Math.max(0, ticketExpiryMonths));
+        rule.setTicketEntitlementMode(blank(ticketEntitlementMode) ? "ON_CYCLE_DATE" : ticketEntitlementMode.trim().toUpperCase());
         rule.setEffectiveFrom(LocalDate.of(2000, 1, 1));
         rule.setStatus("ACTIVE");
         rule.setNotes(notes);
@@ -113,6 +121,9 @@ public class ProvisionRuleService {
         rule.setEntitlementDaysUnderFive(nz(dto.getEntitlementDaysUnderFive(), BigDecimal.valueOf(21)));
         rule.setEntitlementDaysFiveOrMore(nz(dto.getEntitlementDaysFiveOrMore(), BigDecimal.valueOf(28)));
         rule.setTicketCycleMonths(dto.getTicketCycleMonths() <= 0 ? 12 : dto.getTicketCycleMonths());
+        rule.setTicketQuantity(nz(dto.getTicketQuantity(), BigDecimal.ONE));
+        rule.setTicketExpiryMonths(Math.max(0, dto.getTicketExpiryMonths()));
+        rule.setTicketEntitlementMode(blank(dto.getTicketEntitlementMode()) ? "ON_CYCLE_DATE" : dto.getTicketEntitlementMode().trim().toUpperCase());
         rule.setEffectiveFrom(dto.getEffectiveFrom() == null ? LocalDate.now() : dto.getEffectiveFrom());
         rule.setEffectiveTo(dto.getEffectiveTo());
         rule.setStatus(blank(dto.getStatus()) ? "ACTIVE" : dto.getStatus().trim().toUpperCase());
@@ -135,6 +146,9 @@ public class ProvisionRuleService {
         dto.setEntitlementDaysUnderFive(rule.getEntitlementDaysUnderFive());
         dto.setEntitlementDaysFiveOrMore(rule.getEntitlementDaysFiveOrMore());
         dto.setTicketCycleMonths(rule.getTicketCycleMonths());
+        dto.setTicketQuantity(rule.getTicketQuantity());
+        dto.setTicketExpiryMonths(rule.getTicketExpiryMonths());
+        dto.setTicketEntitlementMode(rule.getTicketEntitlementMode());
         dto.setEffectiveFrom(rule.getEffectiveFrom());
         dto.setEffectiveTo(rule.getEffectiveTo());
         dto.setStatus(rule.getStatus());

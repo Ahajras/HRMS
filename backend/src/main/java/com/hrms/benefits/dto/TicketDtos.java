@@ -97,11 +97,18 @@ public final class TicketDtos {
         private String toAirportCode;
         private BigDecimal ticketAmount = BigDecimal.ZERO;
         private int cycleMonths = 12;
+        private BigDecimal ticketQuantity = BigDecimal.ONE;
+        private int expiryMonths = 0;
         private BigDecimal accruedMonths = BigDecimal.ZERO;
         private BigDecimal accruedAmount = BigDecimal.ZERO;
+        private BigDecimal accruedTicketCount = BigDecimal.ZERO;
+        private BigDecimal usedTicketCount = BigDecimal.ZERO;
+        private BigDecimal expiredTicketCount = BigDecimal.ZERO;
+        private BigDecimal availableTicketCount = BigDecimal.ZERO;
         private BigDecimal adjustmentCredit = BigDecimal.ZERO;
         private BigDecimal usedAmount = BigDecimal.ZERO;
         private BigDecimal balance = BigDecimal.ZERO;
+        private LocalDate nextDueDate;
         private String message;
 
         public UUID getEmployeeId() { return employeeId; }
@@ -122,16 +129,30 @@ public final class TicketDtos {
         public void setTicketAmount(BigDecimal ticketAmount) { this.ticketAmount = ticketAmount; }
         public int getCycleMonths() { return cycleMonths; }
         public void setCycleMonths(int cycleMonths) { this.cycleMonths = cycleMonths; }
+        public BigDecimal getTicketQuantity() { return ticketQuantity; }
+        public void setTicketQuantity(BigDecimal ticketQuantity) { this.ticketQuantity = ticketQuantity; }
+        public int getExpiryMonths() { return expiryMonths; }
+        public void setExpiryMonths(int expiryMonths) { this.expiryMonths = expiryMonths; }
         public BigDecimal getAccruedMonths() { return accruedMonths; }
         public void setAccruedMonths(BigDecimal accruedMonths) { this.accruedMonths = accruedMonths; }
         public BigDecimal getAccruedAmount() { return accruedAmount; }
         public void setAccruedAmount(BigDecimal accruedAmount) { this.accruedAmount = accruedAmount; }
+        public BigDecimal getAccruedTicketCount() { return accruedTicketCount; }
+        public void setAccruedTicketCount(BigDecimal accruedTicketCount) { this.accruedTicketCount = accruedTicketCount; }
+        public BigDecimal getUsedTicketCount() { return usedTicketCount; }
+        public void setUsedTicketCount(BigDecimal usedTicketCount) { this.usedTicketCount = usedTicketCount; }
+        public BigDecimal getExpiredTicketCount() { return expiredTicketCount; }
+        public void setExpiredTicketCount(BigDecimal expiredTicketCount) { this.expiredTicketCount = expiredTicketCount; }
+        public BigDecimal getAvailableTicketCount() { return availableTicketCount; }
+        public void setAvailableTicketCount(BigDecimal availableTicketCount) { this.availableTicketCount = availableTicketCount; }
         public BigDecimal getAdjustmentCredit() { return adjustmentCredit; }
         public void setAdjustmentCredit(BigDecimal adjustmentCredit) { this.adjustmentCredit = adjustmentCredit; }
         public BigDecimal getUsedAmount() { return usedAmount; }
         public void setUsedAmount(BigDecimal usedAmount) { this.usedAmount = usedAmount; }
         public BigDecimal getBalance() { return balance; }
         public void setBalance(BigDecimal balance) { this.balance = balance; }
+        public LocalDate getNextDueDate() { return nextDueDate; }
+        public void setNextDueDate(LocalDate nextDueDate) { this.nextDueDate = nextDueDate; }
         public String getMessage() { return message; }
         public void setMessage(String message) { this.message = message; }
     }

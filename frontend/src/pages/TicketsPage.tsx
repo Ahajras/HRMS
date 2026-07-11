@@ -193,10 +193,14 @@ export default function TicketsPage() {
                   <TableRow>
                     <TableCell>Employee</TableCell>
                     <TableCell>Route</TableCell>
+                    <TableCell align="right">Cycle</TableCell>
+                    <TableCell align="right">Allowed</TableCell>
+                    <TableCell align="right">Available</TableCell>
                     <TableCell align="right">Ticket</TableCell>
                     <TableCell align="right">Accrued</TableCell>
                     <TableCell align="right">Used</TableCell>
                     <TableCell align="right">Balance</TableCell>
+                    <TableCell>Next due</TableCell>
                     <TableCell>Status</TableCell>
                   </TableRow>
                 </TableHead>
@@ -208,10 +212,14 @@ export default function TicketsPage() {
                         <Typography variant="caption" color="text.secondary">{row.employeeName}</Typography>
                       </TableCell>
                       <TableCell>{row.fromAirportCode ?? "-"} -&gt; {row.toAirportCode ?? "-"}</TableCell>
+                      <TableCell align="right">{row.cycleMonths}m</TableCell>
+                      <TableCell align="right">{money(row.ticketQuantity)}</TableCell>
+                      <TableCell align="right">{money(row.availableTicketCount)}</TableCell>
                       <TableCell align="right">{money(row.ticketAmount)}</TableCell>
                       <TableCell align="right">{money(row.accruedAmount)}</TableCell>
                       <TableCell align="right">{money(row.usedAmount)}</TableCell>
                       <TableCell align="right">{money(row.balance)}</TableCell>
+                      <TableCell>{row.nextDueDate ?? ""}</TableCell>
                       <TableCell>{row.message ? <Typography color="error" variant="caption">{row.message}</Typography> : "OK"}</TableCell>
                     </TableRow>
                   ))}
@@ -235,6 +243,7 @@ export default function TicketsPage() {
           <Grid container spacing={1.5} mb={2}>
             <Stat label="Route" value={`${balance.fromAirportCode ?? "-"} -> ${balance.toAirportCode ?? "-"}`} />
             <Stat label="Ticket amount" value={money(balance.ticketAmount)} />
+            <Stat label="Available tickets" value={money(balance.availableTicketCount)} />
             <Stat label="Accrued months" value={String(balance.accruedMonths)} />
             <Stat label="Accrued" value={money(balance.accruedAmount)} />
             <Stat label="Used" value={money(balance.usedAmount)} />

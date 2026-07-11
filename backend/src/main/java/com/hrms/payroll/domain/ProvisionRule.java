@@ -56,6 +56,15 @@ public class ProvisionRule extends AuditableEntity implements EffectiveDated {
     @Column(name = "ticket_cycle_months", nullable = false)
     private int ticketCycleMonths = 12;
 
+    @Column(name = "ticket_quantity", nullable = false, precision = 18, scale = 4)
+    private BigDecimal ticketQuantity = BigDecimal.ONE;
+
+    @Column(name = "ticket_expiry_months", nullable = false)
+    private int ticketExpiryMonths = 0;
+
+    @Column(name = "ticket_entitlement_mode", nullable = false, length = 30)
+    private String ticketEntitlementMode = "ON_CYCLE_DATE";
+
     @Column(name = "effective_from", nullable = false)
     private LocalDate effectiveFrom;
 
@@ -96,6 +105,12 @@ public class ProvisionRule extends AuditableEntity implements EffectiveDated {
     public void setEntitlementDaysFiveOrMore(BigDecimal entitlementDaysFiveOrMore) { this.entitlementDaysFiveOrMore = entitlementDaysFiveOrMore; }
     public int getTicketCycleMonths() { return ticketCycleMonths; }
     public void setTicketCycleMonths(int ticketCycleMonths) { this.ticketCycleMonths = ticketCycleMonths; }
+    public BigDecimal getTicketQuantity() { return ticketQuantity; }
+    public void setTicketQuantity(BigDecimal ticketQuantity) { this.ticketQuantity = ticketQuantity; }
+    public int getTicketExpiryMonths() { return ticketExpiryMonths; }
+    public void setTicketExpiryMonths(int ticketExpiryMonths) { this.ticketExpiryMonths = ticketExpiryMonths; }
+    public String getTicketEntitlementMode() { return ticketEntitlementMode; }
+    public void setTicketEntitlementMode(String ticketEntitlementMode) { this.ticketEntitlementMode = ticketEntitlementMode; }
     @Override
     public LocalDate getEffectiveFrom() { return effectiveFrom; }
     public void setEffectiveFrom(LocalDate effectiveFrom) { this.effectiveFrom = effectiveFrom; }
