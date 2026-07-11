@@ -300,8 +300,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <Box sx={{ minHeight: "100vh", display: "flex", bgcolor: "background.default" }}>
+      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
+        <Drawer
+          variant="temporary"
+          open={mobileOpen}
+          onClose={() => setMobileOpen(false)}
+          ModalProps={{ keepMounted: true }}
+          sx={{ display: { xs: "block", md: "none" }, "& .MuiDrawer-paper": { width: DRAWER_WIDTH, border: 0 } }}
+        >
+          {drawerContent}
+        </Drawer>
+        <Drawer
+          variant="permanent"
+          sx={{
+            display: { xs: "none", md: "block" },
+            "& .MuiDrawer-paper": {
+              width: drawerWidth,
+              boxSizing: "border-box",
+              border: 0,
+              transition: theme.transitions.create("width", { duration: theme.transitions.duration.shorter }),
+              overflowX: "hidden",
+            },
+          }}
+          open
+        >
+          {drawerContent}
+        </Drawer>
+      </Box>
+
+      <Box sx={{ flexGrow: 1, minWidth: 0 }}>
       <AppBar
-        position="fixed"
+        position="sticky"
         elevation={0}
         sx={{
           bgcolor: mode === "dark" ? "rgba(17,24,39,.94)" : "rgba(255,255,255,.94)",
@@ -309,9 +338,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           borderBottom: "1px solid",
           borderColor: "divider",
           backdropFilter: "blur(10px)",
-          width: { md: `calc(100% - ${drawerWidth}px)` },
-          ml: { md: `${drawerWidth}px` },
-          transition: theme.transitions.create(["width", "margin"], { duration: theme.transitions.duration.shorter }),
+          width: "100%",
+          top: 0,
         }}
       >
         <Toolbar sx={{ minHeight: { xs: 60, md: 64 }, gap: 1.5, px: { xs: 1.5, sm: 2.5 } }}>
@@ -356,41 +384,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </Button>
         </Toolbar>
       </AppBar>
-
-      <Box component="nav" sx={{ width: { md: drawerWidth }, flexShrink: { md: 0 } }}>
-        <Drawer
-          variant="temporary"
-          open={mobileOpen}
-          onClose={() => setMobileOpen(false)}
-          ModalProps={{ keepMounted: true }}
-          sx={{ display: { xs: "block", md: "none" }, "& .MuiDrawer-paper": { width: DRAWER_WIDTH, border: 0 } }}
-        >
-          {drawerContent}
-        </Drawer>
-        <Drawer
-          variant="permanent"
-          sx={{
-            display: { xs: "none", md: "block" },
-            "& .MuiDrawer-paper": {
-              width: drawerWidth,
-              boxSizing: "border-box",
-              border: 0,
-              transition: theme.transitions.create("width", { duration: theme.transitions.duration.shorter }),
-              overflowX: "hidden",
-            },
-          }}
-          open
-        >
-          {drawerContent}
-        </Drawer>
-      </Box>
-
-      <Box component="main" sx={{ flexGrow: 1, minWidth: 0, p: { xs: 1.25, sm: 2, lg: 2.5 }, pt: { xs: 8.75, md: 9.5 } }}>
+      <Box component="main" sx={{ p: { xs: 1.25, sm: 2, lg: 2.5 } }}>
         {needsCompany ? (
           <Alert severity="info" sx={{ maxWidth: 760 }}>
             Enter a Company ID in the top bar to open company-scoped screens.
           </Alert>
         ) : children}
+      </Box>
       </Box>
 
       <Snackbar
