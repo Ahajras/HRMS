@@ -16,10 +16,10 @@ import {
   Typography,
 } from "@mui/material";
 import SaveIcon from "@mui/icons-material/Save";
-import SyncIcon from "@mui/icons-material/Sync";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { employeeApi, ticketApi } from "../api/resources";
-import type { TicketFare, TicketLedger } from "../api/types";
+import type { ImportSummary, TicketFare, TicketLedger } from "../api/types";
 
 const money = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -38,8 +38,7 @@ export default function TicketsPage() {
   const [q, setQ] = useState("");
   const [employeeId, setEmployeeId] = useState("");
   const [asOfDate, setAsOfDate] = useState(new Date().toISOString().slice(0, 10));
-  const [departureDate, setDepartureDate] = useState(new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10));
-  const [provider, setProvider] = useState("AMADEUS");
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [ledger, setLedger] = useState<Partial<TicketLedger>>({
     entryType: "OPENING_USED",
     entryDate: new Date().toISOString().slice(0, 10),
@@ -71,12 +70,12 @@ export default function TicketsPage() {
       setFare(emptyFare());
     },
   });
-  const lookupFare = useMutation({
-    mutationFn: ticketApi.lookupFare,
-    onSuccess: (saved) => {
+  const importFares = useMutation({
+    mutationFn: ticketApi.importFares,
+    onSuccess: (summary) => {
       qc.invalidateQueries({ queryKey: ["ticketFares"] });
       qc.invalidateQueries({ queryKey: ["ticketBalance"] });
-      setFare(saved);
+      setImportSummary(summary);
     },
   });
   const saveLedger = useMutation({
@@ -117,29 +116,27 @@ export default function TicketsPage() {
               Save fare
             </Button>
           </Grid>
-          <Grid item xs={12} md={2}>
-            <TextField select fullWidth size="small" label="Provider" value={provider} onChange={(e) => setProvider(e.target.value)}>
-              <MenuItem value="AMADEUS">Amadeus</MenuItem>
-            </TextField>
-          </Grid>
-          <Grid item xs={12} md={2}>
-            <TextField fullWidth size="small" type="date" label="Travel date" InputLabelProps={{ shrink: true }} value={departureDate} onChange={(e) => setDepartureDate(e.target.value)} />
-          </Grid>
-          <Grid item xs={12} md={2}>
-            <Button fullWidth variant="outlined" startIcon={<SyncIcon />} disabled={!fare.fromAirportCode || !fare.toAirportCode || lookupFare.isPending} onClick={() => lookupFare.mutate({
-              fromAirportCode: fare.fromAirportCode,
-              toAirportCode: fare.toAirportCode,
-              departureDate,
-              effectiveFrom: fare.effectiveFrom,
-              currencyCode: fare.currencyCode || "QAR",
-              provider,
-              save: true,
-            })}>
-              Fetch API fare
+          <Grid item xs={12} md={4}>
+            <Button component="label" fullWidth variant="outlined" startIcon={<UploadFileIcon />} disabled={importFares.isPending}>
+              Import CSV fares
+              <input hidden type="file" accept=".csv,text/csv" onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) importFares.mutate(file);
+                e.currentTarget.value = "";
+              }} />
             </Button>
           </Grid>
         </Grid>
-        {lookupFare.error && <Alert severity="error" sx={{ mt: 2 }}>{(lookupFare.error as Error).message}</Alert>}
+        <Typography variant="caption" color="text.secondary" display="block" mt={1}>
+          CSV columns: from_airport_code, to_airport_code, amount, currency_code, effective_from, effective_to, status, remarks
+        </Typography>
+        {importFares.error && <Alert severity="error" sx={{ mt: 2 }}>{(importFares.error as Error).message}</Alert>}
+        {importSummary && (
+          <Alert severity="success" sx={{ mt: 2 }}>
+            Imported. Inserted: {importSummary.counts.ticket_fare_inserted ?? 0}, Updated: {importSummary.counts.ticket_fare_updated ?? 0}, Skipped: {importSummary.counts.ticket_fare_skipped ?? 0}
+            {importSummary.warnings.length ? `, Warnings: ${importSummary.warnings.slice(0, 3).join(" | ")}` : ""}
+          </Alert>
+        )}
         <Box sx={{ overflow: "auto", mt: 2 }}>
           <Table size="small">
             <TableHead><TableRow><TableCell>From</TableCell><TableCell>To</TableCell><TableCell align="right">Amount</TableCell><TableCell>Currency</TableCell><TableCell>Effective</TableCell><TableCell>Source</TableCell><TableCell>Provider</TableCell><TableCell>Status</TableCell></TableRow></TableHead>

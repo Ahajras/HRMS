@@ -1059,16 +1059,6 @@ export interface TicketFare {
   remarks?: string;
 }
 
-export interface TicketFareLookupRequest {
-  fromAirportCode: string;
-  toAirportCode: string;
-  departureDate?: string;
-  effectiveFrom?: string;
-  currencyCode?: string;
-  provider?: string;
-  save?: boolean;
-}
-
 export interface TicketLedger {
   id?: string;
   employeeId: string;

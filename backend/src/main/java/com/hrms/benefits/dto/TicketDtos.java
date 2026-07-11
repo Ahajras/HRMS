@@ -51,31 +51,6 @@ public final class TicketDtos {
         public void setRemarks(String remarks) { this.remarks = remarks; }
     }
 
-    public static class FareLookupRequest {
-        private String fromAirportCode;
-        private String toAirportCode;
-        private LocalDate departureDate;
-        private LocalDate effectiveFrom;
-        private String currencyCode = "QAR";
-        private String provider = "AMADEUS";
-        private boolean save = true;
-
-        public String getFromAirportCode() { return fromAirportCode; }
-        public void setFromAirportCode(String fromAirportCode) { this.fromAirportCode = fromAirportCode; }
-        public String getToAirportCode() { return toAirportCode; }
-        public void setToAirportCode(String toAirportCode) { this.toAirportCode = toAirportCode; }
-        public LocalDate getDepartureDate() { return departureDate; }
-        public void setDepartureDate(LocalDate departureDate) { this.departureDate = departureDate; }
-        public LocalDate getEffectiveFrom() { return effectiveFrom; }
-        public void setEffectiveFrom(LocalDate effectiveFrom) { this.effectiveFrom = effectiveFrom; }
-        public String getCurrencyCode() { return currencyCode; }
-        public void setCurrencyCode(String currencyCode) { this.currencyCode = currencyCode; }
-        public String getProvider() { return provider; }
-        public void setProvider(String provider) { this.provider = provider; }
-        public boolean isSave() { return save; }
-        public void setSave(boolean save) { this.save = save; }
-    }
-
     public static class LedgerDto {
         private UUID id;
         private UUID employeeId;

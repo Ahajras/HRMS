@@ -11,15 +11,23 @@ import com.hrms.common.tenant.TenantContext;
 import com.hrms.employee.domain.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.leave.domain.LeaveRequest;
+import com.hrms.migration.dto.ImportSummary;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
+import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.UUID;
 
 @Service
@@ -30,14 +38,11 @@ public class TicketService {
     private final TicketFareRepository fareRepo;
     private final TicketLedgerRepository ledgerRepo;
     private final EmployeeRepository employeeRepo;
-    private final TicketFareProviderService providerService;
 
-    public TicketService(TicketFareRepository fareRepo, TicketLedgerRepository ledgerRepo, EmployeeRepository employeeRepo,
-                         TicketFareProviderService providerService) {
+    public TicketService(TicketFareRepository fareRepo, TicketLedgerRepository ledgerRepo, EmployeeRepository employeeRepo) {
         this.fareRepo = fareRepo;
         this.ledgerRepo = ledgerRepo;
         this.employeeRepo = employeeRepo;
-        this.providerService = providerService;
     }
 
     @Transactional(readOnly = true)
@@ -67,28 +72,63 @@ public class TicketService {
         return toDto(fareRepo.save(fare));
     }
 
-    public TicketDtos.FareDto lookupFare(TicketDtos.FareLookupRequest request) {
+    public ImportSummary importFares(MultipartFile file) {
         UUID companyId = TenantContext.requireCompanyId();
-        String from = requiredCode(request.getFromAirportCode(), "fromAirportCode");
-        String to = requiredCode(request.getToAirportCode(), "toAirportCode");
-        request.setFromAirportCode(from);
-        request.setToAirportCode(to);
-        TicketFareProviderService.ProviderFare providerFare = providerService.lookup(request);
-        TicketFare fare = new TicketFare();
-        fare.setCompanyId(companyId);
-        fare.setFromAirportCode(from);
-        fare.setToAirportCode(to);
-        fare.setAmount(providerFare.amount());
-        fare.setCurrencyCode(providerFare.currencyCode());
-        fare.setEffectiveFrom(request.getEffectiveFrom() == null ? LocalDate.now() : request.getEffectiveFrom());
-        fare.setStatus("ACTIVE");
-        fare.setSource("API");
-        fare.setProvider(providerFare.provider());
-        fare.setProviderOfferId(providerFare.providerOfferId());
-        fare.setFetchedAt(OffsetDateTime.now());
-        fare.setRemarks("Fetched from " + providerFare.provider() + " for departure " +
-                (request.getDepartureDate() == null ? LocalDate.now().plusMonths(1) : request.getDepartureDate()) + ".");
-        return request.isSave() ? toDto(fareRepo.save(fare)) : toDto(fare);
+        ImportSummary summary = new ImportSummary();
+        summary.setCommitted(true);
+        if (file == null || file.isEmpty()) {
+            throw new BusinessRuleException("ticket.import.file_required", "Ticket fare import file is required.");
+        }
+        String name = file.getOriginalFilename() == null ? "" : file.getOriginalFilename().toLowerCase(Locale.ROOT);
+        if (!name.endsWith(".csv")) {
+            throw new BusinessRuleException("ticket.import.csv_required", "Upload a CSV file exported from Excel.");
+        }
+        List<String> lines;
+        try {
+            lines = new String(file.getBytes(), StandardCharsets.UTF_8).lines().toList();
+        } catch (IOException ex) {
+            throw new BusinessRuleException("ticket.import.read_failed", "Unable to read ticket fare import file.");
+        }
+        if (lines.isEmpty()) {
+            throw new BusinessRuleException("ticket.import.empty", "Ticket fare import file is empty.");
+        }
+        Map<String, Integer> header = headerMap(parseCsvLine(lines.get(0)));
+        for (int i = 1; i < lines.size(); i++) {
+            String line = lines.get(i);
+            if (line == null || line.isBlank()) continue;
+            summary.setSourceHeaderRows(summary.getSourceHeaderRows() + 1);
+            List<String> cells = parseCsvLine(line);
+            try {
+                String from = requiredCode(value(cells, header, "from_airport_code", "from_airport", "from"), "from_airport_code");
+                String to = requiredCode(value(cells, header, "to_airport_code", "to_airport", "to"), "to_airport_code");
+                BigDecimal amount = money(value(cells, header, "amount", "fare", "ticket_amount"));
+                String currency = firstNonBlank(value(cells, header, "currency_code", "currency"), "QAR");
+                LocalDate effectiveFrom = date(value(cells, header, "effective_from", "from_date"), "effective_from");
+                LocalDate effectiveTo = optionalDate(value(cells, header, "effective_to", "to_date"));
+                TicketFare fare = fareRepo
+                        .findByCompanyIdAndFromAirportCodeIgnoreCaseAndToAirportCodeIgnoreCaseAndEffectiveFrom(companyId, from, to, effectiveFrom)
+                        .orElseGet(TicketFare::new);
+                boolean inserted = fare.getId() == null;
+                fare.setCompanyId(companyId);
+                fare.setFromAirportCode(from);
+                fare.setToAirportCode(to);
+                fare.setAmount(amount);
+                fare.setCurrencyCode(code(currency));
+                fare.setEffectiveFrom(effectiveFrom);
+                fare.setEffectiveTo(effectiveTo);
+                fare.setStatus(firstNonBlank(value(cells, header, "status"), "ACTIVE").toUpperCase(Locale.ROOT));
+                fare.setSource("IMPORT");
+                fare.setProvider("CSV");
+                fare.setFetchedAt(OffsetDateTime.now());
+                fare.setRemarks(value(cells, header, "remarks", "note", "notes"));
+                fareRepo.save(fare);
+                summary.bump(inserted ? "ticket_fare_inserted" : "ticket_fare_updated");
+            } catch (RuntimeException ex) {
+                summary.bump("ticket_fare_skipped");
+                summary.getWarnings().add("Row " + (i + 1) + ": " + ex.getMessage());
+            }
+        }
+        return summary;
     }
 
     @Transactional(readOnly = true)
@@ -266,6 +306,65 @@ public class TicketService {
     private String requiredCode(String value, String field) {
         if (blank(value)) throw new BusinessRuleException("ticket.code.required", field + " is required.");
         return code(value);
+    }
+
+    private List<String> parseCsvLine(String line) {
+        List<String> values = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean quoted = false;
+        for (int i = 0; i < line.length(); i++) {
+            char ch = line.charAt(i);
+            if (ch == '"') {
+                if (quoted && i + 1 < line.length() && line.charAt(i + 1) == '"') {
+                    current.append('"');
+                    i++;
+                } else {
+                    quoted = !quoted;
+                }
+            } else if (ch == ',' && !quoted) {
+                values.add(current.toString().trim());
+                current.setLength(0);
+            } else {
+                current.append(ch);
+            }
+        }
+        values.add(current.toString().trim());
+        return values;
+    }
+
+    private Map<String, Integer> headerMap(List<String> headers) {
+        Map<String, Integer> map = new HashMap<>();
+        for (int i = 0; i < headers.size(); i++) {
+            String key = normalizeHeader(headers.get(i));
+            if (!key.isBlank()) map.put(key, i);
+        }
+        return map;
+    }
+
+    private String normalizeHeader(String value) {
+        return value == null ? "" : value.trim().toLowerCase(Locale.ROOT).replace("-", "_").replace(" ", "_");
+    }
+
+    private String value(List<String> cells, Map<String, Integer> header, String... keys) {
+        for (String key : keys) {
+            Integer index = header.get(normalizeHeader(key));
+            if (index != null && index >= 0 && index < cells.size()) return cells.get(index).trim();
+        }
+        return null;
+    }
+
+    private BigDecimal money(String value) {
+        if (blank(value)) throw new BusinessRuleException("ticket.import.amount_required", "amount is required.");
+        return new BigDecimal(value.replace(",", "").trim());
+    }
+
+    private LocalDate date(String value, String field) {
+        if (blank(value)) throw new BusinessRuleException("ticket.import.date_required", field + " is required.");
+        return LocalDate.parse(value.trim());
+    }
+
+    private LocalDate optionalDate(String value) {
+        return blank(value) ? null : LocalDate.parse(value.trim());
     }
 
     private String code(String value) {

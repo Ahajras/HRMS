@@ -1,0 +1,3 @@
+from_airport_code,to_airport_code,amount,currency_code,effective_from,effective_to,status,remarks
+DOH,DAC,2500,QAR,2026-01-01,,ACTIVE,Sample route
+DOH,AMM,1800,QAR,2026-01-01,,ACTIVE,Sample route

@@ -13,6 +13,9 @@ import java.util.UUID;
 public interface TicketFareRepository extends JpaRepository<TicketFare, UUID> {
     List<TicketFare> findByCompanyIdOrderByFromAirportCodeAscToAirportCodeAsc(UUID companyId);
 
+    Optional<TicketFare> findByCompanyIdAndFromAirportCodeIgnoreCaseAndToAirportCodeIgnoreCaseAndEffectiveFrom(
+            UUID companyId, String fromAirportCode, String toAirportCode, LocalDate effectiveFrom);
+
     @Query("""
             select f from TicketFare f
             where f.companyId = :companyId
