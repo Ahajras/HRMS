@@ -22,6 +22,7 @@ import com.hrms.payroll.repository.ProvisionRunRepository;
 import com.hrms.project.repository.ProjectRepository;
 import com.hrms.timesheet.domain.PayrollPeriod;
 import com.hrms.timesheet.repository.PayrollPeriodRepository;
+import com.hrms.timesheet.service.TimesheetService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -99,6 +100,10 @@ public class ProvisionService {
     }
 
     public ProvisionDtos.RunDto calculate(ProvisionDtos.CreateRequest request) {
+        return calculate(request, null);
+    }
+
+    public ProvisionDtos.RunDto calculate(ProvisionDtos.CreateRequest request, TimesheetService.BulkStatusProgressListener progress) {
         UUID companyId = TenantContext.requireCompanyId();
         if (request.getPeriodId() == null) {
             throw new BusinessRuleException("provision.period.required", "Period is required.");
@@ -123,6 +128,9 @@ public class ProvisionService {
 
         List<Employee> employees = employeeRepo.findProvisionScope(
                 companyId, period.getStartDate(), period.getEndDate(), request.getProjectId(), payGroup);
+        if (progress != null) {
+            progress.onProgress(0, employees.size());
+        }
         List<UUID> employeeIds = employees.stream().map(Employee::getId).toList();
         Map<UUID, List<ContractPayItem>> itemsByEmployee = employeeIds.isEmpty()
                 ? Map.of()
@@ -143,6 +151,8 @@ public class ProvisionService {
 
         BigDecimal totalEligible = BigDecimal.ZERO;
         BigDecimal totalProvision = BigDecimal.ZERO;
+        List<ProvisionResult> results = new java.util.ArrayList<>(employees.size());
+        int processed = 0;
         for (Employee employee : employees) {
             BigDecimal eligible = activeEligibleAmount(itemsByEmployee.getOrDefault(employee.getId(), List.of()),
                     componentsById, rule, provisionType, period.getEndDate());
@@ -166,14 +176,22 @@ public class ProvisionService {
             if (eligible.compareTo(BigDecimal.ZERO) == 0 && !"FIXED_AMOUNT".equalsIgnoreCase(rule.getBasisMode())) {
                 result.setMessage("No active eligible pay components found.");
             }
-            resultRepo.save(result);
+            results.add(result);
+            processed++;
+            if (progress != null && (processed % 250 == 0 || processed == employees.size())) {
+                progress.onProgress(processed, employees.size());
+            }
         }
+        resultRepo.saveAll(results);
 
         run.setEmployeeCount(employees.size());
         run.setTotalEligibleAmount(scale(totalEligible));
         run.setTotalProvisionAmount(scale(totalProvision));
         run = runRepo.save(run);
-        return get(run.getId());
+        if (progress != null) {
+            progress.onProgress(employees.size(), employees.size());
+        }
+        return toRunDto(run, period, List.of());
     }
 
     public void delete(UUID id) {

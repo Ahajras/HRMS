@@ -24,6 +24,13 @@ import { lookupApi, periodApi, projectApi, provisionApi, provisionRuleApi } from
 import type { ProvisionRun } from "../api/types";
 
 const money = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtDuration = (seconds?: number | null) => {
+  const s = Number(seconds ?? 0);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return `${m}m ${r}s`;
+};
 const PROVISION_TYPES = [
   { code: "LEAVE", label: "Leave provision" },
   { code: "EOS", label: "End of service" },
@@ -38,6 +45,9 @@ export default function ProvisionsPage() {
   const [payGroup, setPayGroup] = useState("ALL");
   const [provisionType, setProvisionType] = useState("LEAVE");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [calcJobId, setCalcJobId] = useState<string | null>(null);
+  const [calcMsg, setCalcMsg] = useState<string | null>(null);
+  const [calcError, setCalcError] = useState<string | null>(null);
 
   const { data: periods = [] } = useQuery({ queryKey: ["periods"], queryFn: () => periodApi.list() });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
@@ -57,17 +67,41 @@ export default function ProvisionsPage() {
   }, [periodId, periods]);
 
   const calculate = useMutation({
-    mutationFn: () => provisionApi.calculate({
+    mutationFn: () => provisionApi.startCalculate({
       periodId,
       provisionType,
       payGroup,
       ...(projectId ? { projectId } : {}),
     }),
-    onSuccess: (run) => {
-      qc.invalidateQueries({ queryKey: ["provisions"] });
-      setSelectedId(run.id ?? null);
+    onSuccess: (job) => {
+      setCalcError(null);
+      setCalcJobId(job.id);
+      setCalcMsg("Provision calculation is running in the background...");
     },
   });
+  const { data: calcJob } = useQuery({
+    queryKey: ["provisionCalculateJob", calcJobId],
+    queryFn: () => provisionApi.getCalculateJob(calcJobId!),
+    enabled: !!calcJobId,
+    refetchInterval: (q) => q.state.data?.status === "RUNNING" ? 2000 : false,
+  });
+  useEffect(() => {
+    if (!calcJob) return;
+    if (calcJob.status === "RUNNING") {
+      setCalcMsg(calcJob.message || `Calculating provisions... ${calcJob.done} / ${calcJob.total} in ${fmtDuration(calcJob.elapsedSeconds)}.`);
+      return;
+    }
+    if (calcJob.status === "COMPLETED") {
+      qc.invalidateQueries({ queryKey: ["provisions"] });
+      const runId = typeof calcJob.result?.runId === "string" ? calcJob.result.runId : null;
+      if (runId) setSelectedId(runId);
+      setCalcMsg(`Provision calculated for ${calcJob.done} employee(s) in ${fmtDuration(calcJob.durationSeconds ?? calcJob.elapsedSeconds)}.`);
+      setCalcError(null);
+    } else {
+      setCalcError(calcJob.message || "Provision calculation failed.");
+    }
+    setCalcJobId(null);
+  }, [calcJob, qc]);
 
   const initRules = useMutation({
     mutationFn: provisionRuleApi.initializeDefaults,
@@ -123,10 +157,10 @@ export default function ProvisionsPage() {
               fullWidth
               variant="contained"
               startIcon={<CalculateIcon />}
-              disabled={!periodId || calculate.isPending}
+              disabled={!periodId || calculate.isPending || calcJob?.status === "RUNNING"}
               onClick={() => calculate.mutate()}
             >
-              Calculate
+              {calculate.isPending || calcJob?.status === "RUNNING" ? "Calculating..." : "Calculate"}
             </Button>
           </Grid>
           <Grid item xs={12}>
@@ -143,9 +177,14 @@ export default function ProvisionsPage() {
         <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1.25 }}>
           Provision is an accounting accrual preview. It does not change payroll net pay.
         </Typography>
-        {(calculate.isError || initRules.isError) && (
+        {calcMsg && (
+          <Alert severity="info" sx={{ mt: 1.5 }} onClose={() => setCalcMsg(null)}>
+            {calcMsg}
+          </Alert>
+        )}
+        {(calculate.isError || initRules.isError || calcError) && (
           <Alert severity="error" sx={{ mt: 1.5 }}>
-            {((calculate.error || initRules.error) as any)?.response?.data?.message ?? "Provision action failed."}
+            {calcError ?? ((calculate.error || initRules.error) as any)?.response?.data?.message ?? "Provision action failed."}
           </Alert>
         )}
         {initRules.isSuccess && (

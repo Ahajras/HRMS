@@ -516,6 +516,10 @@ export const provisionApi = {
   get: (id: string) => api.get<ProvisionRun>(`/provisions/${id}`).then((r) => r.data),
   calculate: (payload: ProvisionCreateRequest) =>
     api.post<ProvisionRun>("/provisions", payload).then((r) => r.data),
+  startCalculate: (payload: ProvisionCreateRequest) =>
+    api.post<BulkStatusJob>("/provisions/calculate-jobs", payload).then((r) => r.data),
+  getCalculateJob: (id: string) =>
+    api.get<BulkStatusJob>(`/provisions/calculate-jobs/${id}`).then((r) => r.data),
   delete: (id: string) => api.delete(`/provisions/${id}`).then(() => undefined),
 };
 
