@@ -53,12 +53,16 @@ public class TicketService {
 
     public TicketDtos.FareDto saveFare(TicketDtos.FareDto dto) {
         UUID companyId = TenantContext.requireCompanyId();
-        TicketFare fare = dto.getId() == null ? new TicketFare()
+        String from = requiredCode(dto.getFromAirportCode(), "fromAirportCode");
+        String to = requiredCode(dto.getToAirportCode(), "toAirportCode");
+        TicketFare fare = dto.getId() == null
+                ? fareRepo.findFirstByCompanyIdAndFromAirportCodeIgnoreCaseAndToAirportCodeIgnoreCaseOrderByEffectiveFromDescCreatedAtDesc(companyId, from, to)
+                    .orElseGet(TicketFare::new)
                 : fareRepo.findById(dto.getId()).filter(f -> companyId.equals(f.getCompanyId()))
                     .orElseThrow(() -> new ResourceNotFoundException("Ticket fare", dto.getId()));
         fare.setCompanyId(companyId);
-        fare.setFromAirportCode(requiredCode(dto.getFromAirportCode(), "fromAirportCode"));
-        fare.setToAirportCode(requiredCode(dto.getToAirportCode(), "toAirportCode"));
+        fare.setFromAirportCode(from);
+        fare.setToAirportCode(to);
         fare.setAmount(dto.getAmount() == null ? BigDecimal.ZERO : dto.getAmount());
         fare.setCurrencyCode(dto.getCurrencyCode());
         fare.setEffectiveFrom(dto.getEffectiveFrom() == null ? LocalDate.now() : dto.getEffectiveFrom());
@@ -106,7 +110,7 @@ public class TicketService {
                 LocalDate effectiveFrom = date(value(cells, header, "effective_from", "from_date"), "effective_from");
                 LocalDate effectiveTo = optionalDate(value(cells, header, "effective_to", "to_date"));
                 TicketFare fare = fareRepo
-                        .findByCompanyIdAndFromAirportCodeIgnoreCaseAndToAirportCodeIgnoreCaseAndEffectiveFrom(companyId, from, to, effectiveFrom)
+                        .findFirstByCompanyIdAndFromAirportCodeIgnoreCaseAndToAirportCodeIgnoreCaseOrderByEffectiveFromDescCreatedAtDesc(companyId, from, to)
                         .orElseGet(TicketFare::new);
                 boolean inserted = fare.getId() == null;
                 fare.setCompanyId(companyId);

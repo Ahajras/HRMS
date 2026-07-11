@@ -13,8 +13,8 @@ import java.util.UUID;
 public interface TicketFareRepository extends JpaRepository<TicketFare, UUID> {
     List<TicketFare> findByCompanyIdOrderByFromAirportCodeAscToAirportCodeAsc(UUID companyId);
 
-    Optional<TicketFare> findByCompanyIdAndFromAirportCodeIgnoreCaseAndToAirportCodeIgnoreCaseAndEffectiveFrom(
-            UUID companyId, String fromAirportCode, String toAirportCode, LocalDate effectiveFrom);
+    Optional<TicketFare> findFirstByCompanyIdAndFromAirportCodeIgnoreCaseAndToAirportCodeIgnoreCaseOrderByEffectiveFromDescCreatedAtDesc(
+            UUID companyId, String fromAirportCode, String toAirportCode);
 
     @Query("""
             select f from TicketFare f
