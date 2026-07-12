@@ -648,12 +648,8 @@ public class PayrollRunService {
             BigDecimal deductQty = z(policyBreakdown.deductQuantity());
             if (deductQty.compareTo(BigDecimal.ZERO) > 0) {
                 BigDecimal deductionRate = unitRate(amount, rule, policyBreakdown.basis(), shiftHours, categoryPolicy, periodDays);
-                PayrollResultLine deductionLine = manualLine(companyId, resultId, component.getCode(),
-                        component.getName() + " - Time type deduction", "DEDUCTION", component.getCategory(),
-                        deductQty, deductionRate, round(deductionRate.multiply(deductQty)),
-                        "TIME_TYPE_RULE_DEDUCT", component.getPriority() + 1);
-                deductionLine.setDetails(policyBreakdown.details());
-                lines.add(deductionLine);
+                addTimeTypeDeductionLines(lines, companyId, resultId, component, component.getName(),
+                        deductQty, deductionRate, policyBreakdown.details(), component.getPriority() + 1);
             }
             return lines;
         }
@@ -693,12 +689,8 @@ public class PayrollRunService {
                     BigDecimal deductQty = z(policyBreakdown.deductQuantity());
                     if (deductQty.compareTo(BigDecimal.ZERO) > 0) {
                         BigDecimal deductionRate = unitRate(rate, rule, policyBreakdown.basis(), shiftHours, categoryPolicy, periodDays);
-                        PayrollResultLine deductionLine = manualLine(companyId, resultId, component.getCode(),
-                                component.getName() + " - Time type deduction", "DEDUCTION", component.getCategory(),
-                                deductQty, deductionRate, round(deductionRate.multiply(deductQty)),
-                                "TIME_TYPE_RULE_DEDUCT", component.getPriority() + 2);
-                        deductionLine.setDetails(policyBreakdown.details());
-                        lines.add(deductionLine);
+                        addTimeTypeDeductionLines(lines, companyId, resultId, component, component.getName(),
+                                deductQty, deductionRate, policyBreakdown.details(), component.getPriority() + 2);
                     }
                 }
                 return lines;
@@ -740,21 +732,78 @@ public class PayrollRunService {
         BigDecimal deductAmount = round(unitRate.multiply(deductQty));
         List<PayrollResultLine> lines = new java.util.ArrayList<>();
         if (payQty.compareTo(BigDecimal.ZERO) > 0) {
-            PayrollResultLine payLine = payItemLine(companyId, resultId, component,
-                    component.getName() + " - Time type pay",
-                    payQty, unitRate, payAmount, "TIME_TYPE_RULE_PAY", component.getPriority());
-            payLine.setDetails(breakdown.payDetails());
-            lines.add(payLine);
+            List<TimeTypeDetailGroup> groups = detailGroups(breakdown.payDetails());
+            if (groups.isEmpty()) {
+                PayrollResultLine payLine = payItemLine(companyId, resultId, component,
+                        component.getName() + " - Time type pay",
+                        payQty, unitRate, payAmount, "TIME_TYPE_RULE_PAY", component.getPriority());
+                payLine.setDetails(breakdown.payDetails());
+                lines.add(payLine);
+            } else {
+                int offset = 0;
+                for (TimeTypeDetailGroup group : groups) {
+                    PayrollResultLine payLine = payItemLine(companyId, resultId, component,
+                            component.getName() + " - " + group.label(),
+                            group.quantity(), unitRate, round(unitRate.multiply(group.quantity())),
+                            "TIME_TYPE_RULE_PAY", component.getPriority() + offset);
+                    payLine.setDetails(group.details());
+                    lines.add(payLine);
+                    offset++;
+                }
+            }
         }
         if (deductQty.compareTo(BigDecimal.ZERO) > 0) {
-            PayrollResultLine deductionLine = manualLine(companyId, resultId, component.getCode(),
-                    component.getName() + " - Time type deduction",
-                    "DEDUCTION", component.getCategory(),
-                    deductQty, unitRate, deductAmount, "TIME_TYPE_RULE_DEDUCT", component.getPriority() + 1);
-            deductionLine.setDetails(breakdown.details());
-            lines.add(deductionLine);
+            List<TimeTypeDetailGroup> groups = detailGroups(breakdown.details());
+            if (groups.isEmpty()) {
+                PayrollResultLine deductionLine = manualLine(companyId, resultId, component.getCode(),
+                        component.getName() + " - Time type deduction",
+                        "DEDUCTION", component.getCategory(),
+                        deductQty, unitRate, deductAmount, "TIME_TYPE_RULE_DEDUCT", component.getPriority() + 1);
+                deductionLine.setDetails(breakdown.details());
+                lines.add(deductionLine);
+            } else {
+                int offset = 50;
+                for (TimeTypeDetailGroup group : groups) {
+                    PayrollResultLine deductionLine = manualLine(companyId, resultId, component.getCode(),
+                            component.getName() + " - " + group.label(),
+                            "DEDUCTION", component.getCategory(),
+                            group.quantity(), unitRate, round(unitRate.multiply(group.quantity())),
+                            "TIME_TYPE_RULE_DEDUCT", component.getPriority() + offset);
+                    deductionLine.setDetails(group.details());
+                    lines.add(deductionLine);
+                    offset++;
+                }
+            }
         }
         return lines;
+    }
+
+    private void addTimeTypeDeductionLines(List<PayrollResultLine> lines, UUID companyId, UUID resultId,
+                                           PayrollComponent component, String baseName,
+                                           BigDecimal deductQty, BigDecimal unitRate, String details,
+                                           int sortOrder) {
+        List<TimeTypeDetailGroup> groups = detailGroups(details);
+        if (groups.isEmpty()) {
+            PayrollResultLine deductionLine = manualLine(companyId, resultId, component.getCode(),
+                    baseName + " - Time type deduction",
+                    "DEDUCTION", component.getCategory(),
+                    deductQty, unitRate, round(unitRate.multiply(deductQty)),
+                    "TIME_TYPE_RULE_DEDUCT", sortOrder);
+            deductionLine.setDetails(details);
+            lines.add(deductionLine);
+            return;
+        }
+        int offset = 0;
+        for (TimeTypeDetailGroup group : groups) {
+            PayrollResultLine deductionLine = manualLine(companyId, resultId, component.getCode(),
+                    baseName + " - " + group.label(),
+                    "DEDUCTION", component.getCategory(),
+                    group.quantity(), unitRate, round(unitRate.multiply(group.quantity())),
+                    "TIME_TYPE_RULE_DEDUCT", sortOrder + offset);
+            deductionLine.setDetails(group.details());
+            lines.add(deductionLine);
+            offset++;
+        }
     }
 
     private PayrollResultLine payItemLine(UUID companyId, UUID resultId, PayrollComponent component, String name,
@@ -985,6 +1034,62 @@ public class PayrollRunService {
         return day.getWorkDate() + " | " + code + (name == null || name.isBlank() ? "" : " - " + name)
                 + " | " + z(quantity).stripTrailingZeros().toPlainString() + " " + basis
                 + " | " + action + " " + percent.stripTrailingZeros().toPlainString() + "%";
+    }
+
+    private static List<TimeTypeDetailGroup> detailGroups(String details) {
+        if (details == null || details.isBlank()) {
+            return List.of();
+        }
+        Map<String, MutableTimeTypeDetailGroup> groups = new java.util.LinkedHashMap<>();
+        for (String row : details.split("\\R")) {
+            TimeTypeDetail detail = parseTimeTypeDetail(row);
+            if (detail == null) {
+                continue;
+            }
+            String key = detail.code() + "|" + detail.name() + "|" + detail.basis() + "|" + detail.action() + "|" + detail.percent();
+            MutableTimeTypeDetailGroup group = groups.computeIfAbsent(key,
+                    ignored -> new MutableTimeTypeDetailGroup(detail.code(), detail.name()));
+            group.quantity = group.quantity.add(detail.quantity());
+            group.rows.add(row);
+        }
+        return groups.values().stream()
+                .map(group -> new TimeTypeDetailGroup(group.label(), group.quantity, String.join("\n", group.rows)))
+                .toList();
+    }
+
+    private static TimeTypeDetail parseTimeTypeDetail(String row) {
+        if (row == null || row.isBlank()) {
+            return null;
+        }
+        String[] parts = row.split("\\|");
+        if (parts.length < 4) {
+            return null;
+        }
+        String typePart = parts[1].trim();
+        String qtyPart = parts[2].trim();
+        String effectPart = parts[3].trim();
+        String code = typePart;
+        String name = "";
+        int nameSep = typePart.indexOf(" - ");
+        if (nameSep >= 0) {
+            code = typePart.substring(0, nameSep).trim();
+            name = typePart.substring(nameSep + 3).trim();
+        }
+        String[] qtyParts = qtyPart.split("\\s+", 2);
+        if (qtyParts.length < 2) {
+            return null;
+        }
+        String[] effectParts = effectPart.split("\\s+", 2);
+        if (effectParts.length < 2) {
+            return null;
+        }
+        try {
+            BigDecimal quantity = new BigDecimal(qtyParts[0]);
+            BigDecimal percent = new BigDecimal(effectParts[1].replace("%", ""));
+            return new TimeTypeDetail(code, name, quantity, qtyParts[1].trim(), effectParts[0].trim(), percent);
+        } catch (NumberFormatException ex) {
+            return null;
+        }
     }
 
     private DayEffect legacyEffect(TimeType type, TimesheetDay day, PayrollRule rule, BigDecimal shiftHours) {
@@ -1354,6 +1459,22 @@ public class PayrollRunService {
                                             boolean touched, String payDetails, String details) {
         boolean hasAny() {
             return touched && (z(payQuantity).compareTo(BigDecimal.ZERO) > 0 || z(deductQuantity).compareTo(BigDecimal.ZERO) > 0);
+        }
+    }
+
+    private record TimeTypeDetail(String code, String name, BigDecimal quantity, String basis, String action, BigDecimal percent) {
+    }
+
+    private record TimeTypeDetailGroup(String label, BigDecimal quantity, String details) {
+    }
+
+    private static final class MutableTimeTypeDetailGroup {
+        private final String label;
+        private BigDecimal quantity = BigDecimal.ZERO;
+        private final List<String> rows = new ArrayList<>();
+
+        private MutableTimeTypeDetailGroup(String code, String name) {
+            this.label = code + (name == null || name.isBlank() ? "" : " - " + name);
         }
     }
 
