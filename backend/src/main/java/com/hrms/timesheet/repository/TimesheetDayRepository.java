@@ -87,6 +87,30 @@ public interface TimesheetDayRepository extends JpaRepository<TimesheetDay, UUID
                                                       @Param("fromDate") LocalDate fromDate,
                                                       @Param("beforeDate") LocalDate beforeDate);
 
+    @Query(value = """
+            select coalesce(sum(
+                case
+                    when coalesce(td.planned_hours, 0) > 0
+                         and greatest(coalesce(td.normal_hours, 0), coalesce(td.planned_hours, 0), coalesce(td.worked_hours, 0)) > 0
+                        then greatest(coalesce(td.normal_hours, 0), coalesce(td.planned_hours, 0), coalesce(td.worked_hours, 0)) / td.planned_hours
+                    else 1
+                end
+            ), 0)
+            from timesheet_day td
+            join timesheet t on t.id = td.timesheet_id
+            join time_type tt on tt.id = td.time_type_id
+            where t.company_id = :companyId
+              and t.employee_id = :employeeId
+              and td.time_type_id = :timeTypeId
+              and td.work_date <= :asOf
+              and td.leave_request_id is null
+              and tt.affects_leave = true
+            """, nativeQuery = true)
+    java.math.BigDecimal sumManualLeaveDays(@Param("companyId") UUID companyId,
+                                            @Param("employeeId") UUID employeeId,
+                                            @Param("timeTypeId") UUID timeTypeId,
+                                            @Param("asOf") LocalDate asOf);
+
     Optional<TimesheetDay> findByTimesheetIdAndWorkDate(UUID timesheetId, LocalDate workDate);
 
     void deleteByTimesheetId(UUID timesheetId);

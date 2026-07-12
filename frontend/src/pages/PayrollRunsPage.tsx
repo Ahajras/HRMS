@@ -354,6 +354,7 @@ function PayslipPanel({ run, result }: { run: PayrollRun; result: PayrollResult 
   const componentBreakdown = buildComponentBreakdown(result.lines);
   const regularDays = maxQty(result.lines.filter((l) => l.source === "REGULAR_DAYS"));
   const restHours = maxQty(result.lines.filter((l) => l.source === "WEEKLY_REST"));
+  const timeTypePaid = sumQty(result.lines.filter((l) => l.source === "TIME_TYPE_RULE_PAY"));
   const normalOt = sumQty(overtime.filter((l) => !String(l.componentName).toUpperCase().includes("REST")));
   const restOt = sumQty(overtime.filter((l) => String(l.componentName).toUpperCase().includes("REST")));
 
@@ -377,6 +378,7 @@ function PayslipPanel({ run, result }: { run: PayrollRun; result: PayrollResult 
           <PayslipMetric label="Regular days" value={qty(regularDays || result.workedDays)} />
           <PayslipMetric label="Weekend/Holiday hours" value={qty(restHours)} />
           <PayslipMetric label="Normal hours" value={qty(result.normalHours)} />
+          <PayslipMetric label="Time type paid" value={qty(timeTypePaid)} />
           <PayslipMetric label="Normal OT" value={qty(normalOt)} />
           <PayslipMetric label="Rest/Holiday OT" value={qty(restOt)} />
           <PayslipMetric label="Total OT" value={qty(result.otHours)} />

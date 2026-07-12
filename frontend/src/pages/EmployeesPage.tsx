@@ -572,6 +572,7 @@ function LeaveBalanceTab({ employeeId }: { employeeId: string }) {
               <TableCell align="right">Entitled</TableCell>
               <TableCell align="right">Adjustments</TableCell>
               <TableCell align="right">Approved used</TableCell>
+              <TableCell align="right">Timesheet used</TableCell>
               <TableCell align="right">Pending</TableCell>
               <TableCell align="right">Balance</TableCell>
             </TableRow>
@@ -584,6 +585,7 @@ function LeaveBalanceTab({ employeeId }: { employeeId: string }) {
                 <TableCell align="right">{Number(b.entitledToDate ?? 0).toFixed(2)}</TableCell>
                 <TableCell align="right">{Number(b.adjustments ?? 0).toFixed(2)}</TableCell>
                 <TableCell align="right">{Number(b.usedApproved ?? 0).toFixed(2)}</TableCell>
+                <TableCell align="right">{Number(b.usedTimesheet ?? 0).toFixed(2)}</TableCell>
                 <TableCell align="right">{Number(b.pending ?? 0).toFixed(2)}</TableCell>
                 <TableCell align="right"><b>{Number(b.balance ?? 0).toFixed(2)}</b></TableCell>
               </TableRow>

@@ -14,6 +14,7 @@ public class LeaveBalanceDto {
     private BigDecimal entitledToDate = BigDecimal.ZERO;
     private BigDecimal adjustments = BigDecimal.ZERO;
     private BigDecimal usedApproved = BigDecimal.ZERO;
+    private BigDecimal usedTimesheet = BigDecimal.ZERO;
     private BigDecimal pending = BigDecimal.ZERO;
     private BigDecimal balance = BigDecimal.ZERO;
     public UUID getEmployeeId() { return employeeId; }
@@ -34,6 +35,8 @@ public class LeaveBalanceDto {
     public void setAdjustments(BigDecimal adjustments) { this.adjustments = adjustments; }
     public BigDecimal getUsedApproved() { return usedApproved; }
     public void setUsedApproved(BigDecimal usedApproved) { this.usedApproved = usedApproved; }
+    public BigDecimal getUsedTimesheet() { return usedTimesheet; }
+    public void setUsedTimesheet(BigDecimal usedTimesheet) { this.usedTimesheet = usedTimesheet; }
     public BigDecimal getPending() { return pending; }
     public void setPending(BigDecimal pending) { this.pending = pending; }
     public BigDecimal getBalance() { return balance; }

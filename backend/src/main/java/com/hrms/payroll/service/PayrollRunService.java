@@ -740,9 +740,11 @@ public class PayrollRunService {
         BigDecimal deductAmount = round(unitRate.multiply(deductQty));
         List<PayrollResultLine> lines = new java.util.ArrayList<>();
         if (payQty.compareTo(BigDecimal.ZERO) > 0) {
-            lines.add(payItemLine(companyId, resultId, component,
+            PayrollResultLine payLine = payItemLine(companyId, resultId, component,
                     component.getName() + " - Time type pay",
-                    payQty, unitRate, payAmount, "TIME_TYPE_RULE_PAY", component.getPriority()));
+                    payQty, unitRate, payAmount, "TIME_TYPE_RULE_PAY", component.getPriority());
+            payLine.setDetails(breakdown.payDetails());
+            lines.add(payLine);
         }
         if (deductQty.compareTo(BigDecimal.ZERO) > 0) {
             PayrollResultLine deductionLine = manualLine(companyId, resultId, component.getCode(),
@@ -887,6 +889,7 @@ public class PayrollRunService {
         BigDecimal legacyPayHours = BigDecimal.ZERO;
         String basis = "HOURS";
         boolean touched = false;
+        List<String> payDetails = new ArrayList<>();
         List<String> deductionDetails = new ArrayList<>();
         for (TimesheetDay day : policy.days()) {
             TimeType type = day.getTimeTypeId() != null ? policy.types().get(day.getTimeTypeId()) : null;
@@ -917,6 +920,9 @@ public class PayrollRunService {
             basis = effect.basis();
             payQty = payQty.add(effect.payQuantity());
             deductQty = deductQty.add(effect.deductQuantity());
+            if (effect.payQuantity().compareTo(BigDecimal.ZERO) > 0) {
+                payDetails.add(timeTypeDetail(day, type, explicit, effect.payQuantity()));
+            }
             if (effect.deductQuantity().compareTo(BigDecimal.ZERO) > 0) {
                 deductionDetails.add(timeTypeDetail(day, type, explicit, effect.deductQuantity()));
             }
@@ -928,7 +934,8 @@ public class PayrollRunService {
             BigDecimal divisorFull = effectiveDivisor(rule, categoryPolicy, periodDays).multiply(policy.shiftHours());
             payQty = payQty.subtract(legacyPayHours).add(divisorFull);
         }
-        return new ComponentPolicyBreakdown(payQty, deductQty, basis, touched, String.join("\n", deductionDetails));
+        return new ComponentPolicyBreakdown(payQty, deductQty, basis, touched,
+                String.join("\n", payDetails), String.join("\n", deductionDetails));
     }
 
     private DayEffect explicitEffect(TimeTypePayrollRule explicit, TimesheetDay day, TimeType type, PayrollRule rule, BigDecimal shiftHours) {
@@ -1343,7 +1350,8 @@ public class PayrollRunService {
         }
     }
 
-    private record ComponentPolicyBreakdown(BigDecimal payQuantity, BigDecimal deductQuantity, String basis, boolean touched, String details) {
+    private record ComponentPolicyBreakdown(BigDecimal payQuantity, BigDecimal deductQuantity, String basis,
+                                            boolean touched, String payDetails, String details) {
         boolean hasAny() {
             return touched && (z(payQuantity).compareTo(BigDecimal.ZERO) > 0 || z(deductQuantity).compareTo(BigDecimal.ZERO) > 0);
         }

@@ -30,6 +30,7 @@ import com.hrms.security.domain.AppUser;
 import com.hrms.security.repository.AppUserRepository;
 import com.hrms.timesheet.domain.TimeType;
 import com.hrms.timesheet.repository.TimeTypeRepository;
+import com.hrms.timesheet.repository.TimesheetDayRepository;
 import com.hrms.timesheet.service.TimesheetService;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -58,6 +59,7 @@ public class LeaveService {
     private final EmployeeRepository employeeRepo;
     private final AssignmentRepository assignmentRepo;
     private final TimeTypeRepository timeTypeRepo;
+    private final TimesheetDayRepository timesheetDayRepo;
     private final CompanyRulePackageRepository companyRulePackageRepo;
     private final RulePackageRepository rulePackageRepo;
     private final RuleRepository ruleRepo;
@@ -69,6 +71,7 @@ public class LeaveService {
     public LeaveService(LeaveTypeRepository typeRepo, LeaveRequestRepository requestRepo,
                         LeaveAdjustmentRepository adjustmentRepo, EmployeeRepository employeeRepo,
                         AssignmentRepository assignmentRepo, TimeTypeRepository timeTypeRepo,
+                        TimesheetDayRepository timesheetDayRepo,
                         CompanyRulePackageRepository companyRulePackageRepo,
                         RulePackageRepository rulePackageRepo, RuleRepository ruleRepo,
                         TimesheetService timesheetService, TimekeeperService timekeeperService,
@@ -79,6 +82,7 @@ public class LeaveService {
         this.employeeRepo = employeeRepo;
         this.assignmentRepo = assignmentRepo;
         this.timeTypeRepo = timeTypeRepo;
+        this.timesheetDayRepo = timesheetDayRepo;
         this.companyRulePackageRepo = companyRulePackageRepo;
         this.rulePackageRepo = rulePackageRepo;
         this.ruleRepo = ruleRepo;
@@ -266,14 +270,23 @@ public class LeaveService {
                 : BigDecimal.ZERO;
         BigDecimal adjustments = adjustments(companyId, employee.getId(), type.getId(), asOf);
         BigDecimal approved = requestDays(companyId, employee.getId(), type.getId(), Set.of("APPROVED"), asOf);
+        BigDecimal manualTimesheet = manualTimesheetLeaveDays(companyId, employee.getId(), type, asOf);
         BigDecimal pending = requestDays(companyId, employee.getId(), type.getId(), PENDING, asOf);
         dto.setAnnualRate(annualRate);
         dto.setEntitledToDate(entitlement);
         dto.setAdjustments(adjustments);
         dto.setUsedApproved(approved);
+        dto.setUsedTimesheet(manualTimesheet);
         dto.setPending(pending);
-        dto.setBalance(entitlement.add(adjustments).subtract(approved));
+        dto.setBalance(entitlement.add(adjustments).subtract(approved).subtract(manualTimesheet));
         return dto;
+    }
+
+    private BigDecimal manualTimesheetLeaveDays(UUID companyId, UUID employeeId, LeaveType type, LocalDate asOf) {
+        if (type.getTimeTypeId() == null) {
+            return BigDecimal.ZERO;
+        }
+        return timesheetDayRepo.sumManualLeaveDays(companyId, employeeId, type.getTimeTypeId(), asOf);
     }
 
     private BigDecimal adjustments(UUID companyId, UUID employeeId, UUID leaveTypeId, LocalDate asOf) {

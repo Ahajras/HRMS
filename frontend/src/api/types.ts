@@ -336,6 +336,7 @@ export interface LeaveBalance {
   entitledToDate: number;
   adjustments: number;
   usedApproved: number;
+  usedTimesheet: number;
   pending: number;
   balance: number;
 }
