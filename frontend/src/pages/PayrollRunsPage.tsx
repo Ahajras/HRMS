@@ -480,7 +480,7 @@ function SummaryRow({ label, value, strong, negative }: { label: string; value: 
 }
 
 function LineDetails({ details }: { details?: string }) {
-  const rows = String(details ?? "").split(/\r?\n/).map((row) => row.trim()).filter(Boolean);
+  const rows = summarizeDetails(details);
   if (rows.length === 0) return null;
   return (
     <Stack spacing={0.15} mt={0.5}>
@@ -564,7 +564,7 @@ function printPayslip(run: PayrollRun, result: PayrollResult) {
                   <td>
                     <div><strong>${escapeHtml(item.label)}</strong></div>
                     <div class="muted">${escapeHtml(item.code)}</div>
-                    ${item.details.map((d) => `<div class="details">${d.kind === "pay" ? "Paid" : "Deducted"}: ${escapeHtml(d.label)} - ${qty(d.qty)} - ${money(d.amount)}</div>`).join("")}
+                    ${item.details.map((d) => `<div class="details">${d.kind === "pay" ? "Paid" : "Deducted"}: ${escapeHtml(d.label)} - ${qty(d.qty)} - ${money(d.amount)}${summarizeDetails(d.details).map((summary) => ` (${escapeHtml(summary)})`).join("")}</div>`).join("")}
                   </td>
                   <td class="right">${qty(item.payQty)}</td>
                   <td class="right">${qty(item.deductQty)}</td>
@@ -631,9 +631,94 @@ function printLineTable(lines: PayrollResultLine[]) {
 }
 
 function printDetails(details?: string) {
-  const rows = String(details ?? "").split(/\r?\n/).map((row) => row.trim()).filter(Boolean);
+  const rows = summarizeDetails(details);
   if (rows.length === 0) return "";
   return `<div class="muted">${rows.map((row) => escapeHtml(row)).join("<br/>")}</div>`;
+}
+
+function summarizeDetails(details?: string) {
+  const raw = String(details ?? "").split(/\r?\n/).map((row) => row.trim()).filter(Boolean);
+  const parsed = raw.map(parseTimeTypeDetail).filter((row): row is ParsedDetail => !!row);
+  if (parsed.length === 0) return raw;
+  const groups = new Map<string, ParsedDetail[]>();
+  for (const row of parsed) {
+    const key = `${row.code}|${row.name}|${row.basis}|${row.action}|${row.percent}`;
+    groups.set(key, [...(groups.get(key) ?? []), row]);
+  }
+  return Array.from(groups.values()).map((rows) => {
+    const first = rows[0];
+    const totalQty = rows.reduce((sum, row) => sum + row.qty, 0);
+    const dates = compactDates(rows.map((row) => row.date));
+    const label = `${first.code}${first.name ? ` - ${first.name}` : ""}`;
+    const effect = `${first.action} ${formatNumber(first.percent)}%`;
+    return `${label}: ${formatNumber(totalQty)} ${first.basis} (${dates}) | ${effect}`;
+  });
+}
+
+interface ParsedDetail {
+  date: string;
+  code: string;
+  name: string;
+  qty: number;
+  basis: string;
+  action: string;
+  percent: number;
+}
+
+function parseTimeTypeDetail(row: string): ParsedDetail | null {
+  const parts = row.split("|").map((part) => part.trim());
+  if (parts.length < 4) return null;
+  const typeMatch = parts[1].match(/^([^-]+?)(?:\s+-\s+(.*))?$/);
+  const qtyMatch = parts[2].match(/^(-?\d+(?:\.\d+)?)\s+(.+)$/);
+  const effectMatch = parts[3].match(/^([A-Za-z_]+)\s+(-?\d+(?:\.\d+)?)%$/);
+  if (!typeMatch || !qtyMatch || !effectMatch) return null;
+  return {
+    date: parts[0],
+    code: typeMatch[1].trim(),
+    name: (typeMatch[2] ?? "").trim(),
+    qty: Number(qtyMatch[1] ?? 0),
+    basis: qtyMatch[2].trim(),
+    action: effectMatch[1].trim(),
+    percent: Number(effectMatch[2] ?? 0),
+  };
+}
+
+function compactDates(dates: string[]) {
+  const sorted = dates
+    .map((value) => ({ value, date: new Date(`${value}T00:00:00`) }))
+    .filter((item) => !Number.isNaN(item.date.getTime()))
+    .sort((a, b) => a.date.getTime() - b.date.getTime());
+  if (sorted.length === 0) return dates.join(", ");
+  const ranges: string[] = [];
+  let start = sorted[0];
+  let prev = sorted[0];
+  for (let i = 1; i < sorted.length; i++) {
+    const current = sorted[i];
+    const diffDays = Math.round((current.date.getTime() - prev.date.getTime()) / 86400000);
+    if (diffDays === 1) {
+      prev = current;
+      continue;
+    }
+    ranges.push(formatDateRange(start.value, prev.value));
+    start = current;
+    prev = current;
+  }
+  ranges.push(formatDateRange(start.value, prev.value));
+  return ranges.join(", ");
+}
+
+function formatDateRange(start: string, end: string) {
+  return start === end ? shortDate(start) : `${shortDate(start)}-${shortDate(end)}`;
+}
+
+function shortDate(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function formatNumber(value: number) {
+  return Number(value ?? 0).toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
 function openPrintWindow(html: string) {
@@ -697,7 +782,8 @@ function PayslipBreakdownTable({ items }: { items: ComponentBreakdownRow[] }) {
                 <Stack spacing={0.25} mt={0.75}>
                   {item.details.map((detail, idx) => (
                     <Typography key={`${item.code}-${idx}`} variant="caption" color="text.secondary">
-                      {detail.kind === "pay" ? "Paid" : "Deducted"}: {detail.label} · {qty(detail.qty)} · {money(detail.amount)}
+                      {detail.kind === "pay" ? "Paid" : "Deducted"}: {detail.label} - {qty(detail.qty)} - {money(detail.amount)}
+                      {summarizeDetails(detail.details).map((summary) => ` (${summary})`).join("")}
                     </Typography>
                   ))}
                 </Stack>
