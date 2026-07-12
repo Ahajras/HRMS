@@ -25,6 +25,7 @@ import com.hrms.timesheet.repository.PayrollPeriodRepository;
 import com.hrms.timesheet.repository.TimesheetDayRepository;
 import com.hrms.timesheet.repository.TimesheetRepository;
 import com.hrms.timesheet.service.TimesheetService;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -48,6 +49,9 @@ import java.util.UUID;
 @Service
 @Transactional(readOnly = true)
 public class AuditService {
+    private static final UUID DEFAULT_HANDOVER_KEPT_EMPLOYEE_ID =
+            UUID.fromString("efe2f49c-1f5e-4ce8-a004-9275da55af1a");
+    private static final String HANDOVER_CONFIRMATION = "DELETE HANDOVER";
 
     private final PayrollAdjustmentRepository adjustmentRepo;
     private final PayrollRunRepository runRepo;
@@ -61,13 +65,15 @@ public class AuditService {
     private final TimesheetRepository timesheetRepo;
     private final TimesheetDayRepository dayRepo;
     private final TimesheetService timesheetService;
+    private final JdbcTemplate jdbc;
 
     public AuditService(PayrollAdjustmentRepository adjustmentRepo, PayrollRunRepository runRepo,
                         PayrollResultRepository resultRepo, PayrollResultLineRepository lineRepo,
                         PayrollPeriodRepository periodRepo, ProjectRepository projectRepo,
                         EmployeeTimeTypeUsageService usageService, LeaveRequestRepository leaveRequestRepo,
                         LeaveTypeRepository leaveTypeRepo, TimesheetRepository timesheetRepo,
-                        TimesheetDayRepository dayRepo, TimesheetService timesheetService) {
+                        TimesheetDayRepository dayRepo, TimesheetService timesheetService,
+                        JdbcTemplate jdbc) {
         this.adjustmentRepo = adjustmentRepo;
         this.runRepo = runRepo;
         this.resultRepo = resultRepo;
@@ -80,6 +86,7 @@ public class AuditService {
         this.timesheetRepo = timesheetRepo;
         this.dayRepo = dayRepo;
         this.timesheetService = timesheetService;
+        this.jdbc = jdbc;
     }
 
     /** Recalculate Time Usage — this is always computed live from the
@@ -257,5 +264,101 @@ public class AuditService {
         lineRepo.deleteByRunId(runId);
         resultRepo.deleteByRunId(runId);
         runRepo.delete(run);
+    }
+
+    @Transactional
+    public AuditDtos.HandoverCleanupResult runHandoverCleanup(String confirmation, UUID keptEmployeeId) {
+        if (!HANDOVER_CONFIRMATION.equals(confirmation)) {
+            throw new BusinessRuleException("audit.handover.confirmation",
+                    "Type DELETE HANDOVER to run the handover cleanup.");
+        }
+        UUID kept = keptEmployeeId != null ? keptEmployeeId : DEFAULT_HANDOVER_KEPT_EMPLOYEE_ID;
+        Integer keptExists = jdbc.queryForObject("select count(*) from employee where id = ?", Integer.class, kept);
+        if (keptExists == null || keptExists == 0) {
+            throw new BusinessRuleException("audit.handover.employee_missing",
+                    "Kept employee was not found: " + kept);
+        }
+
+        jdbc.update("""
+                insert into project (id, company_id, code, name, status)
+                select gen_random_uuid(), e.company_id, 'DEMO', 'Demo Project', 'ACTIVE'
+                from employee e
+                where e.id = ?
+                  and not exists (
+                    select 1 from project p where p.code = 'DEMO' and p.company_id = e.company_id
+                  )
+                """, kept);
+        jdbc.update("""
+                update assignment a
+                set project_id = p.id, cost_code_id = null
+                from employee e, project p
+                where a.employee_id = e.id
+                  and e.id = ?
+                  and p.code = 'DEMO'
+                  and p.company_id = e.company_id
+                """, kept);
+        jdbc.update("""
+                update assignment
+                set supervisor_employee_id = null
+                where employee_id = ?
+                  and supervisor_employee_id is not null
+                  and supervisor_employee_id <> ?
+                """, kept, kept);
+        jdbc.update("update employee set supervisor_employee_id = null, timekeeper_employee_id = null where id = ?", kept);
+
+        jdbc.update("delete from timesheet where employee_id = ?", kept);
+        jdbc.update("delete from leave_adjustment where employee_id = ?", kept);
+        jdbc.update("delete from leave_request where employee_id = ?", kept);
+        jdbc.update("delete from payroll_adjustment where employee_id = ?", kept);
+
+        jdbc.update("delete from payroll_result");
+        jdbc.update("delete from payroll_run");
+        jdbc.update("delete from provision_run");
+        jdbc.update("delete from ticket_ledger");
+
+        jdbc.update("delete from timesheet where employee_id <> ?", kept);
+        jdbc.update("delete from leave_adjustment where employee_id <> ?", kept);
+        jdbc.update("delete from leave_request where employee_id <> ?", kept);
+
+        jdbc.update("update crew set parent_crew_id = null where project_id in (select id from project where code <> 'DEMO')");
+        jdbc.update("delete from crew where project_id in (select id from project where code <> 'DEMO')");
+
+        jdbc.update("delete from app_user where employee_id <> ? and employee_id is not null", kept);
+        jdbc.update("delete from employee_bank_account where employee_id <> ?", kept);
+        jdbc.update("delete from employee_dependent where employee_id <> ?", kept);
+        jdbc.update("delete from employee_document where employee_id <> ?", kept);
+        jdbc.update("delete from employee_shift");
+        jdbc.update("delete from timekeeper_project");
+        jdbc.update("delete from legacy_employee_raw where employee_id <> ?", kept);
+        jdbc.update("delete from contract_pay_item where employee_id <> ?", kept);
+        jdbc.update("delete from contract where employee_id <> ?", kept);
+        jdbc.update("delete from assignment where employee_id <> ?", kept);
+
+        jdbc.update("delete from payroll_period_project where project_id in (select id from project where code <> 'DEMO')");
+        jdbc.update("delete from shift where project_id in (select id from project where code <> 'DEMO')");
+        jdbc.update("delete from cost_code where project_id in (select id from project where code <> 'DEMO')");
+        jdbc.update("delete from payroll_rule where project_id in (select id from project where code <> 'DEMO')");
+        jdbc.update("delete from provision_rule where project_id in (select id from project where code <> 'DEMO')");
+        jdbc.update("delete from timekeeper_project where project_id in (select id from project where code <> 'DEMO')");
+        jdbc.update("delete from project where code <> 'DEMO'");
+
+        jdbc.update("update employee set supervisor_employee_id = null, timekeeper_employee_id = null where id <> ?", kept);
+        jdbc.update("delete from employee where id <> ?", kept);
+
+        AuditDtos.HandoverCleanupResult result = new AuditDtos.HandoverCleanupResult();
+        result.setEmployeesLeft(count("employee"));
+        result.setProjectsLeft(count("project"));
+        result.setAppUsersLeft(count("app_user"));
+        result.setTimesheetsLeft(count("timesheet"));
+        result.setPayrollResultsLeft(count("payroll_result"));
+        result.setCrewsLeft(count("crew"));
+        result.setShiftsLeft(count("shift"));
+        result.setCostCodesLeft(count("cost_code"));
+        return result;
+    }
+
+    private long count(String tableName) {
+        Number count = jdbc.queryForObject("select count(*) from " + tableName, Number.class);
+        return count != null ? count.longValue() : 0L;
     }
 }

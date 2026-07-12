@@ -581,6 +581,8 @@ export const auditApi = {
     api.get<import("./types").AuditLeaveDiscrepancy[]>("/audit/leave-discrepancies", { params: { employeeId } }).then((r) => r.data),
   recalculateLeaveRequest: (leaveRequestId: string, newTotalDays: number) =>
     api.post(`/audit/leave-requests/${leaveRequestId}/recalculate`, { newTotalDays }).then(() => undefined),
+  runHandoverCleanup: (confirmation: string, keptEmployeeId?: string) =>
+    api.post<import("./types").HandoverCleanupResult>("/audit/handover-cleanup", { confirmation, keptEmployeeId }).then((r) => r.data),
 };
 
 export const selfApi = {

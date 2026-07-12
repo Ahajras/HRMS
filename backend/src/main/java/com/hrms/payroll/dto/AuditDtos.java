@@ -84,4 +84,32 @@ public class AuditDtos {
         public BigDecimal getActualDays() { return actualDays; }
         public void setActualDays(BigDecimal actualDays) { this.actualDays = actualDays; }
     }
+
+    public static class HandoverCleanupResult {
+        private long employeesLeft;
+        private long projectsLeft;
+        private long appUsersLeft;
+        private long timesheetsLeft;
+        private long payrollResultsLeft;
+        private long crewsLeft;
+        private long shiftsLeft;
+        private long costCodesLeft;
+
+        public long getEmployeesLeft() { return employeesLeft; }
+        public void setEmployeesLeft(long employeesLeft) { this.employeesLeft = employeesLeft; }
+        public long getProjectsLeft() { return projectsLeft; }
+        public void setProjectsLeft(long projectsLeft) { this.projectsLeft = projectsLeft; }
+        public long getAppUsersLeft() { return appUsersLeft; }
+        public void setAppUsersLeft(long appUsersLeft) { this.appUsersLeft = appUsersLeft; }
+        public long getTimesheetsLeft() { return timesheetsLeft; }
+        public void setTimesheetsLeft(long timesheetsLeft) { this.timesheetsLeft = timesheetsLeft; }
+        public long getPayrollResultsLeft() { return payrollResultsLeft; }
+        public void setPayrollResultsLeft(long payrollResultsLeft) { this.payrollResultsLeft = payrollResultsLeft; }
+        public long getCrewsLeft() { return crewsLeft; }
+        public void setCrewsLeft(long crewsLeft) { this.crewsLeft = crewsLeft; }
+        public long getShiftsLeft() { return shiftsLeft; }
+        public void setShiftsLeft(long shiftsLeft) { this.shiftsLeft = shiftsLeft; }
+        public long getCostCodesLeft() { return costCodesLeft; }
+        public void setCostCodesLeft(long costCodesLeft) { this.costCodesLeft = costCodesLeft; }
+    }
 }

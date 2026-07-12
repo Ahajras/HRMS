@@ -16,7 +16,7 @@ import {
 } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { auditApi, employeeApi } from "../api/resources";
-import type { Employee } from "../api/types";
+import type { Employee, HandoverCleanupResult } from "../api/types";
 
 const money = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -28,17 +28,77 @@ export default function AuditToolsPage() {
         Manager-only cleanup utilities. Every delete here is guarded — only PENDING Day Zero adjustments and DRAFT/CALCULATED
         payroll runs can be removed. Anything already applied, approved, or locked must be reopened from its normal screen instead.
       </Alert>
-      <DayZeroAdjustmentsPanel />
+      <HandoverCleanupPanel />
+      <Box mt={4}>
+        <PayrollRunsPanel />
+      </Box>
+      <Box mt={4}>
+        <DayZeroAdjustmentsPanel />
+      </Box>
       <Box mt={4}>
         <TimeUsagePanel />
       </Box>
       <Box mt={4}>
         <LeaveDiscrepancyPanel />
       </Box>
-      <Box mt={4}>
-        <PayrollRunsPanel />
-      </Box>
     </Box>
+  );
+}
+
+function HandoverCleanupPanel() {
+  const [confirmation, setConfirmation] = useState("");
+  const [keptEmployeeId, setKeptEmployeeId] = useState("efe2f49c-1f5e-4ce8-a004-9275da55af1a");
+  const [result, setResult] = useState<HandoverCleanupResult | null>(null);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const cleanup = useMutation({
+    mutationFn: () => auditApi.runHandoverCleanup(confirmation, keptEmployeeId || undefined),
+    onSuccess: (data) => {
+      setResult(data);
+      setMessage("Handover cleanup completed.");
+      setConfirmation("");
+    },
+    onError: (e: any) => setMessage(e?.response?.data?.message ?? "Handover cleanup failed."),
+  });
+
+  return (
+    <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, borderColor: "error.light" }}>
+      <Typography variant="subtitle1" fontWeight={700} mb={1}>Handover cleanup</Typography>
+      <Alert severity="error" sx={{ mb: 1.5 }}>
+        Irreversible reset. Keeps the selected employee, moves that employee to DEMO, and deletes operational handover data.
+      </Alert>
+      {message && <Alert severity={result ? "success" : "warning"} sx={{ mb: 1 }} onClose={() => setMessage(null)}>{message}</Alert>}
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ xs: "stretch", md: "center" }}>
+        <TextField size="small" label="Kept employee ID" value={keptEmployeeId} onChange={(e) => setKeptEmployeeId(e.target.value)} sx={{ minWidth: 360 }} />
+        <TextField size="small" label="Type DELETE HANDOVER" value={confirmation} onChange={(e) => setConfirmation(e.target.value)} sx={{ minWidth: 240 }} />
+        <Button
+          variant="contained"
+          color="error"
+          disabled={cleanup.isPending || confirmation !== "DELETE HANDOVER" || !keptEmployeeId}
+          onClick={() => {
+            if (confirm("Run handover cleanup now? This cannot be undone.")) cleanup.mutate();
+          }}
+        >
+          Run cleanup
+        </Button>
+      </Stack>
+      {result && (
+        <Stack direction="row" spacing={1} flexWrap="wrap" mt={1.5}>
+          {[
+            ["Employees", result.employeesLeft],
+            ["Projects", result.projectsLeft],
+            ["Users", result.appUsersLeft],
+            ["Timesheets", result.timesheetsLeft],
+            ["Payroll results", result.payrollResultsLeft],
+            ["Crews", result.crewsLeft],
+            ["Shifts", result.shiftsLeft],
+            ["Cost codes", result.costCodesLeft],
+          ].map(([label, value]) => (
+            <Chip key={label} label={`${label}: ${value}`} variant="outlined" />
+          ))}
+        </Stack>
+      )}
+    </Paper>
   );
 }
 

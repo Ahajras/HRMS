@@ -1164,3 +1164,14 @@ export interface AuditLeaveDiscrepancy {
   recordedDays: number;
   actualDays: number;
 }
+
+export interface HandoverCleanupResult {
+  employeesLeft: number;
+  projectsLeft: number;
+  appUsersLeft: number;
+  timesheetsLeft: number;
+  payrollResultsLeft: number;
+  crewsLeft: number;
+  shiftsLeft: number;
+  costCodesLeft: number;
+}

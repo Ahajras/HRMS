@@ -68,4 +68,12 @@ public class AuditController {
     public void recalculateLeaveRequest(@PathVariable UUID id, @RequestBody RecalculateLeaveRequest request) {
         service.recalculateLeaveRequest(id, request.newTotalDays());
     }
+
+    public record HandoverCleanupRequest(String confirmation, UUID keptEmployeeId) {
+    }
+
+    @PostMapping("/handover-cleanup")
+    public AuditDtos.HandoverCleanupResult runHandoverCleanup(@RequestBody HandoverCleanupRequest request) {
+        return service.runHandoverCleanup(request.confirmation(), request.keptEmployeeId());
+    }
 }
