@@ -1053,7 +1053,7 @@ public class PayrollRunService {
             group.rows.add(row);
         }
         return groups.values().stream()
-                .map(group -> new TimeTypeDetailGroup(group.label(), group.quantity, String.join("\n", group.rows)))
+                .map(group -> new TimeTypeDetailGroup(group.label, group.quantity, String.join("\n", group.rows)))
                 .toList();
     }
 
