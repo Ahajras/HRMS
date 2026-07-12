@@ -182,17 +182,29 @@ public class LeaveService {
         row.setStartDate(dto.getStartDate());
         row.setEndDate(dto.getEndDate());
         row.setReturnDate(dto.getReturnDate());
-        row.setTotalDays(dto.getTotalDays() != null && dto.getTotalDays().compareTo(BigDecimal.ZERO) > 0
-                ? dto.getTotalDays() : daysInclusive(dto.getStartDate(), dto.getEndDate()));
+        row.setTotalDays(daysInclusive(dto.getStartDate(), dto.getEndDate()));
         row.setReason(dto.getReason());
         row.setStatus(dto.getStatus() != null ? dto.getStatus() : "DRAFT");
         row.setRequiresTicket(dto.isRequiresTicket() || type.isRequiresTicketDefault());
-        row.setTicketFrom(dto.getTicketFrom());
-        row.setTicketTo(dto.getTicketTo());
-        row.setTravelDate(dto.getTravelDate());
-        row.setReturnTravelDate(dto.getReturnTravelDate());
-        row.setDestination(dto.getDestination());
-        row.setTravelRemarks(dto.getTravelRemarks());
+        if (row.isRequiresTicket()) {
+            row.setTicketFrom(dto.getTicketFrom());
+            row.setTicketTo(dto.getTicketTo());
+            row.setTravelDate(dto.getTravelDate());
+            row.setReturnTravelDate(dto.getReturnTravelDate());
+            row.setDestination(dto.getDestination());
+            row.setPassportNumber(dto.getPassportNumber());
+            row.setDependentCount(dto.getDependentCount());
+            row.setTravelRemarks(dto.getTravelRemarks());
+        } else {
+            row.setTicketFrom(null);
+            row.setTicketTo(null);
+            row.setTravelDate(null);
+            row.setReturnTravelDate(null);
+            row.setDestination(null);
+            row.setPassportNumber(null);
+            row.setDependentCount(null);
+            row.setTravelRemarks(null);
+        }
         row.setContactPhone(dto.getContactPhone());
         row.setContactEmail(dto.getContactEmail());
         row.setAddressDuringLeave(dto.getAddressDuringLeave());
@@ -293,11 +305,12 @@ public class LeaveService {
                 (UUID) row[0],
                 (String) row[1],
                 (String) row[2],
-                asLong(row, 3),
+                (String) row[3],
                 asLong(row, 4),
                 asLong(row, 5),
                 asLong(row, 6),
-                row[7] instanceof BigDecimal bd ? bd : BigDecimal.ZERO);
+                asLong(row, 7),
+                row[8] instanceof BigDecimal bd ? bd : BigDecimal.ZERO);
     }
 
     private Set<UUID> restrictedProjects() {
@@ -428,6 +441,8 @@ public class LeaveService {
         dto.setTravelDate(r.getTravelDate());
         dto.setReturnTravelDate(r.getReturnTravelDate());
         dto.setDestination(r.getDestination());
+        dto.setPassportNumber(r.getPassportNumber());
+        dto.setDependentCount(r.getDependentCount());
         dto.setTravelRemarks(r.getTravelRemarks());
         dto.setContactPhone(r.getContactPhone());
         dto.setContactEmail(r.getContactEmail());

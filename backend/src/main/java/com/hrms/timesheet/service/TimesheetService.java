@@ -1738,7 +1738,7 @@ public class TimesheetService {
                 if (canApplyLeaveToDay(day, normalTypeId, type.getTimeTypeId())) {
                     if (type.isDeductsBalance() && paidLeaveRemaining[0].compareTo(BigDecimal.ONE) < 0) {
                         forceUnpaidLeaveDay(day, unpaidTypeId,
-                                "Paid leave balance exhausted; converted to unpaid.");
+                                "Paid leave balance exhausted; converted to unpaid.", request.getId());
                     } else {
                         day.setTimeTypeId(type.getTimeTypeId());
                         day.setLeaveRequestId(request.getId());
@@ -1813,12 +1813,16 @@ public class TimesheetService {
     }
 
     private void forceUnpaidLeaveDay(TimesheetDay day, UUID unpaidTypeId, String reason) {
+        forceUnpaidLeaveDay(day, unpaidTypeId, reason, null);
+    }
+
+    private void forceUnpaidLeaveDay(TimesheetDay day, UUID unpaidTypeId, String reason, UUID leaveRequestId) {
         if (unpaidTypeId == null) {
             throw new BusinessRuleException("timesheet.unpaid_type.required",
                     "Time type U is required to convert excess leave to unpaid.");
         }
         day.setTimeTypeId(unpaidTypeId);
-        day.setLeaveRequestId(null);
+        day.setLeaveRequestId(leaveRequestId);
         day.setWorkedHours(BigDecimal.ZERO);
         day.setOtHours(BigDecimal.ZERO);
         day.setActualIn(null);

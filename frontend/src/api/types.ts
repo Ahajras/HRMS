@@ -280,6 +280,7 @@ export interface LeaveProjectSummary {
   projectId: string;
   projectCode: string;
   projectName: string;
+  payGroup: string;
   total: number;
   pending: number;
   approved: number;
@@ -307,6 +308,8 @@ export interface LeaveRequest {
   travelDate?: string;
   returnTravelDate?: string;
   destination?: string;
+  passportNumber?: string;
+  dependentCount?: number;
   travelRemarks?: string;
   contactPhone?: string;
   contactEmail?: string;

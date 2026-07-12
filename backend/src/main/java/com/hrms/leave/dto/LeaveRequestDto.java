@@ -24,6 +24,8 @@ public class LeaveRequestDto {
     private LocalDate travelDate;
     private LocalDate returnTravelDate;
     private String destination;
+    private String passportNumber;
+    private Integer dependentCount;
     private String travelRemarks;
     private String contactPhone;
     private String contactEmail;
@@ -68,6 +70,10 @@ public class LeaveRequestDto {
     public void setReturnTravelDate(LocalDate returnTravelDate) { this.returnTravelDate = returnTravelDate; }
     public String getDestination() { return destination; }
     public void setDestination(String destination) { this.destination = destination; }
+    public String getPassportNumber() { return passportNumber; }
+    public void setPassportNumber(String passportNumber) { this.passportNumber = passportNumber; }
+    public Integer getDependentCount() { return dependentCount; }
+    public void setDependentCount(Integer dependentCount) { this.dependentCount = dependentCount; }
     public String getTravelRemarks() { return travelRemarks; }
     public void setTravelRemarks(String travelRemarks) { this.travelRemarks = travelRemarks; }
     public String getContactPhone() { return contactPhone; }

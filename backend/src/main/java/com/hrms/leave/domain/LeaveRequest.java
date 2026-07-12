@@ -43,6 +43,10 @@ public class LeaveRequest extends AuditableEntity {
     private LocalDate returnTravelDate;
     @Column(name = "destination", length = 200)
     private String destination;
+    @Column(name = "passport_number", length = 80)
+    private String passportNumber;
+    @Column(name = "dependent_count")
+    private Integer dependentCount;
     @Column(name = "travel_remarks", length = 500)
     private String travelRemarks;
     @Column(name = "contact_phone", length = 80)
@@ -94,6 +98,10 @@ public class LeaveRequest extends AuditableEntity {
     public void setReturnTravelDate(LocalDate returnTravelDate) { this.returnTravelDate = returnTravelDate; }
     public String getDestination() { return destination; }
     public void setDestination(String destination) { this.destination = destination; }
+    public String getPassportNumber() { return passportNumber; }
+    public void setPassportNumber(String passportNumber) { this.passportNumber = passportNumber; }
+    public Integer getDependentCount() { return dependentCount; }
+    public void setDependentCount(Integer dependentCount) { this.dependentCount = dependentCount; }
     public String getTravelRemarks() { return travelRemarks; }
     public void setTravelRemarks(String travelRemarks) { this.travelRemarks = travelRemarks; }
     public String getContactPhone() { return contactPhone; }

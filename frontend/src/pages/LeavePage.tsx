@@ -33,6 +33,14 @@ const emptyRequest: LeaveRequest = {
   requiresTicket: false,
 };
 
+function inclusiveDays(from?: string, to?: string) {
+  if (!from || !to) return 0;
+  const start = new Date(`${from}T00:00:00`);
+  const end = new Date(`${to}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return 0;
+  return Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+}
+
 export default function LeavePage() {
   const qc = useQueryClient();
   const [projectId, setProjectId] = useState("");
@@ -43,7 +51,9 @@ export default function LeavePage() {
   const [page, setPage] = useState(0);
   const pageSize = 50;
   const [request, setRequest] = useState<LeaveRequest>(emptyRequest);
+  const calculatedDays = inclusiveDays(request.startDate, request.endDate);
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
+  const selectedProject = projects.find((p) => p.id === projectId);
   const { data: leaveTypes = [] } = useQuery({ queryKey: ["leaveTypes"], queryFn: leaveApi.types });
   const { data: employeePage } = useQuery({
     queryKey: ["leaveEmployeeSearch", projectId, employeeSearch],
@@ -64,22 +74,24 @@ export default function LeavePage() {
   const { data: requests } = useQuery({
     queryKey: ["leaveRequests", projectId, statusFilter, leaveTypeFilter, requestSearch, page],
     queryFn: () => leaveApi.requests({
-      projectId: projectId || undefined,
+      projectId,
       status: statusFilter || undefined,
       leaveTypeId: leaveTypeFilter || undefined,
       q: requestSearch || undefined,
       page,
       size: pageSize,
     }),
+    enabled: !!projectId,
   });
   const requestRows = requests?.content ?? [];
   const { data: summaryRows = [] } = useQuery({
     queryKey: ["leaveProjectSummary", projectId, statusFilter, leaveTypeFilter],
     queryFn: () => leaveApi.projectSummary({
-      projectId: projectId || undefined,
+      projectId,
       status: statusFilter || undefined,
       leaveTypeId: leaveTypeFilter || undefined,
     }),
+    enabled: !!projectId,
   });
   const summaryTotals = summaryRows.reduce((acc, row) => ({
     total: acc.total + row.total,
@@ -90,7 +102,7 @@ export default function LeavePage() {
   }), { total: 0, pending: 0, approved: 0, rejected: 0, approvedDays: 0 });
 
   const saveRequest = useMutation({
-    mutationFn: (payload: LeaveRequest) => leaveApi.saveRequest(payload),
+    mutationFn: (payload: LeaveRequest) => leaveApi.saveRequest({ ...payload, totalDays: calculatedDays }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["leaveRequests"] });
       qc.invalidateQueries({ queryKey: ["leaveProjectSummary"] });
@@ -124,7 +136,7 @@ export default function LeavePage() {
                 setRequest({ ...request, employeeId: "" });
                 setPage(0);
               }}>
-              <MenuItem value="">All projects</MenuItem>
+              <MenuItem value="" disabled>Select project</MenuItem>
               {projects.map((p) => <MenuItem key={p.id} value={p.id}>{p.code} - {p.name}</MenuItem>)}
             </TextField>
           </Grid>
@@ -142,6 +154,8 @@ export default function LeavePage() {
                 employeeId: emp?.id ?? "",
                 employeeNumber: emp?.employeeNumber,
                 employeeName: emp ? `${emp.firstName} ${emp.lastName}`.trim() : undefined,
+                ticketFrom: request.ticketFrom || emp?.workAirportCode,
+                ticketTo: request.ticketTo || emp?.homeAirportCode,
               })}
               getOptionLabel={(emp) => `${emp.employeeNumber} - ${emp.firstName} ${emp.lastName}`.trim()}
               isOptionEqualToValue={(a, b) => a.id === b.id}
@@ -166,8 +180,8 @@ export default function LeavePage() {
               value={request.endDate} onChange={(e) => setRequest({ ...request, endDate: e.target.value })} />
           </Grid>
           <Grid item xs={6} md={1}>
-            <TextField fullWidth size="small" type="number" label="Days" value={request.totalDays ?? ""}
-              onChange={(e) => setRequest({ ...request, totalDays: Number(e.target.value) })} />
+            <TextField fullWidth size="small" label="Days" value={calculatedDays || ""}
+              InputProps={{ readOnly: true }} error={!!request.startDate && !!request.endDate && calculatedDays === 0} />
           </Grid>
           <Grid item xs={6} md={2}>
             <TextField fullWidth size="small" type="date" label="Return" InputLabelProps={{ shrink: true }}
@@ -186,15 +200,31 @@ export default function LeavePage() {
 
           <Grid item xs={12}>
             <FormControlLabel control={<Checkbox checked={request.requiresTicket}
-              onChange={(e) => setRequest({ ...request, requiresTicket: e.target.checked })} />} label="Requires ticket" />
+              onChange={(e) => setRequest(e.target.checked
+                ? { ...request, requiresTicket: true }
+                : {
+                  ...request,
+                  requiresTicket: false,
+                  ticketFrom: undefined,
+                  ticketTo: undefined,
+                  travelDate: undefined,
+                  returnTravelDate: undefined,
+                  destination: undefined,
+                  passportNumber: undefined,
+                  dependentCount: undefined,
+                  travelRemarks: undefined,
+                })} />} label="Requires ticket" />
           </Grid>
           {request.requiresTicket && (
             <>
-              <Grid item xs={12} md={3}><TextField fullWidth size="small" label="Ticket from" value={request.ticketFrom ?? ""} onChange={(e) => setRequest({ ...request, ticketFrom: e.target.value })} /></Grid>
-              <Grid item xs={12} md={3}><TextField fullWidth size="small" label="Ticket to" value={request.ticketTo ?? ""} onChange={(e) => setRequest({ ...request, ticketTo: e.target.value })} /></Grid>
-              <Grid item xs={6} md={2}><TextField fullWidth size="small" type="date" label="Travel date" InputLabelProps={{ shrink: true }} value={request.travelDate ?? ""} onChange={(e) => setRequest({ ...request, travelDate: e.target.value })} /></Grid>
-              <Grid item xs={6} md={2}><TextField fullWidth size="small" type="date" label="Return travel" InputLabelProps={{ shrink: true }} value={request.returnTravelDate ?? ""} onChange={(e) => setRequest({ ...request, returnTravelDate: e.target.value })} /></Grid>
-              <Grid item xs={12} md={2}><TextField fullWidth size="small" label="Destination" value={request.destination ?? ""} onChange={(e) => setRequest({ ...request, destination: e.target.value })} /></Grid>
+              <Grid item xs={12} md={2}><TextField fullWidth size="small" label="Work airport" value={request.ticketFrom ?? selectedEmployee?.workAirportCode ?? ""} onChange={(e) => setRequest({ ...request, ticketFrom: e.target.value.toUpperCase() })} /></Grid>
+              <Grid item xs={12} md={2}><TextField fullWidth size="small" label="Home airport" value={request.ticketTo ?? selectedEmployee?.homeAirportCode ?? ""} onChange={(e) => setRequest({ ...request, ticketTo: e.target.value.toUpperCase() })} /></Grid>
+              <Grid item xs={6} md={2}><TextField fullWidth size="small" type="date" label="Departure" InputLabelProps={{ shrink: true }} value={request.travelDate ?? ""} onChange={(e) => setRequest({ ...request, travelDate: e.target.value })} /></Grid>
+              <Grid item xs={6} md={2}><TextField fullWidth size="small" type="date" label="Return flight" InputLabelProps={{ shrink: true }} value={request.returnTravelDate ?? ""} onChange={(e) => setRequest({ ...request, returnTravelDate: e.target.value })} /></Grid>
+              <Grid item xs={12} md={2}><TextField fullWidth size="small" label="Passport no." value={request.passportNumber ?? ""} onChange={(e) => setRequest({ ...request, passportNumber: e.target.value })} /></Grid>
+              <Grid item xs={12} md={2}><TextField fullWidth size="small" type="number" label="Dependents" value={request.dependentCount ?? 0} onChange={(e) => setRequest({ ...request, dependentCount: Math.max(0, Number(e.target.value) || 0) })} /></Grid>
+              <Grid item xs={12} md={4}><TextField fullWidth size="small" label="Route / destination" value={request.destination ?? ""} onChange={(e) => setRequest({ ...request, destination: e.target.value })} /></Grid>
+              <Grid item xs={12} md={8}><TextField fullWidth size="small" label="Ticket remarks" value={request.travelRemarks ?? ""} onChange={(e) => setRequest({ ...request, travelRemarks: e.target.value })} /></Grid>
             </>
           )}
           <Grid item xs={12} md={3}><TextField fullWidth size="small" label="Travel phone" value={request.contactPhone ?? ""} onChange={(e) => setRequest({ ...request, contactPhone: e.target.value })} /></Grid>
@@ -204,7 +234,7 @@ export default function LeavePage() {
           <Grid item xs={12}><TextField fullWidth size="small" label="Address during leave" value={request.addressDuringLeave ?? ""} onChange={(e) => setRequest({ ...request, addressDuringLeave: e.target.value })} /></Grid>
           <Grid item xs={12}>
             <Stack direction="row" spacing={1}>
-              <Button variant="contained" disabled={!request.employeeId || !request.leaveTypeId || saveRequest.isPending} onClick={() => saveRequest.mutate(request)}>
+              <Button variant="contained" disabled={!projectId || !request.employeeId || !request.leaveTypeId || calculatedDays <= 0 || saveRequest.isPending} onClick={() => saveRequest.mutate(request)}>
                 {request.id ? "Update" : "Create"}
               </Button>
               {request.id && <Button onClick={() => setRequest(emptyRequest)}>Cancel</Button>}
@@ -216,6 +246,16 @@ export default function LeavePage() {
       <LeaveTypesPanel rows={leaveTypes} />
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
+        {!projectId && (
+          <Alert severity="info" sx={{ mb: 1.5 }}>
+            Select a project to view leave requests and project leave totals.
+          </Alert>
+        )}
+        {projectId && (
+          <Typography variant="subtitle2" gutterBottom>
+            Leave summary for {selectedProject ? `${selectedProject.code} - ${selectedProject.name}` : "selected project"}
+          </Typography>
+        )}
         <Stack direction="row" spacing={1} flexWrap="wrap" mb={1.5}>
           {[
             { label: "Total", value: summaryTotals.total },
@@ -230,11 +270,11 @@ export default function LeavePage() {
             </Box>
           ))}
         </Stack>
-        {!projectId && summaryRows.length > 0 && (
+        {projectId && summaryRows.length > 0 && (
           <Table size="small">
             <TableHead>
               <TableRow>
-                <TableCell>Project</TableCell>
+                <TableCell>Pay group</TableCell>
                 <TableCell align="right">Total</TableCell>
                 <TableCell align="right">Pending</TableCell>
                 <TableCell align="right">Approved</TableCell>
@@ -244,8 +284,8 @@ export default function LeavePage() {
             </TableHead>
             <TableBody>
               {summaryRows.map((row) => (
-                <TableRow key={row.projectId} hover sx={{ cursor: "pointer" }} onClick={() => { setProjectId(row.projectId); setPage(0); }}>
-                  <TableCell>{row.projectCode} - {row.projectName}</TableCell>
+                <TableRow key={`${row.projectId}-${row.payGroup}`} hover>
+                  <TableCell>{row.payGroup}</TableCell>
                   <TableCell align="right">{row.total}</TableCell>
                   <TableCell align="right">{row.pending}</TableCell>
                   <TableCell align="right">{row.approved}</TableCell>
@@ -291,36 +331,43 @@ export default function LeavePage() {
       </Paper>
 
       <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "auto" }}>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Employee</TableCell>
-              <TableCell>Leave</TableCell>
-              <TableCell>Dates</TableCell>
-              <TableCell align="right">Days</TableCell>
-              <TableCell>Ticket</TableCell>
-              <TableCell>Status</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {requestRows.map((row) => (
-              <TableRow key={row.id} hover>
-                <TableCell>{row.employeeNumber} - {row.employeeName}</TableCell>
-                <TableCell>{row.leaveTypeCode}</TableCell>
-                <TableCell>{row.startDate} - {row.endDate}</TableCell>
-                <TableCell align="right">{Number(row.totalDays ?? 0).toFixed(2)}</TableCell>
-                <TableCell>{row.requiresTicket ? `${row.ticketFrom ?? ""} -> ${row.ticketTo ?? ""}` : ""}</TableCell>
-                <TableCell>{row.status}</TableCell>
-                <TableCell align="right">
-                  <Button size="small" onClick={() => setRequest(row)}>Edit</Button>
-                  {row.id && row.status !== "APPROVED" && <Button size="small" onClick={() => status.mutate({ id: row.id!, next: "APPROVED" })}>Approve</Button>}
-                  {row.id && row.status !== "REJECTED" && <Button size="small" color="error" onClick={() => status.mutate({ id: row.id!, next: "REJECTED" })}>Reject</Button>}
-                </TableCell>
+        {!projectId ? (
+          <Typography variant="body2" color="text.secondary" p={2}>Select a project first.</Typography>
+        ) : (
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Employee</TableCell>
+                <TableCell>Leave</TableCell>
+                <TableCell>Dates</TableCell>
+                <TableCell align="right">Days</TableCell>
+                <TableCell>Ticket</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+            </TableHead>
+            <TableBody>
+              {requestRows.map((row) => (
+                <TableRow key={row.id} hover>
+                  <TableCell>{row.employeeNumber} - {row.employeeName}</TableCell>
+                  <TableCell>{row.leaveTypeCode}</TableCell>
+                  <TableCell>{row.startDate} - {row.endDate}</TableCell>
+                  <TableCell align="right">{Number(row.totalDays ?? 0).toFixed(2)}</TableCell>
+                  <TableCell>{row.requiresTicket ? `${row.ticketFrom ?? ""} -> ${row.ticketTo ?? ""}` : ""}</TableCell>
+                  <TableCell>{row.status}</TableCell>
+                  <TableCell align="right">
+                    <Button size="small" onClick={() => setRequest(row)}>Edit</Button>
+                    {row.id && row.status !== "APPROVED" && <Button size="small" onClick={() => status.mutate({ id: row.id!, next: "APPROVED" })}>Approve</Button>}
+                    {row.id && row.status !== "REJECTED" && <Button size="small" color="error" onClick={() => status.mutate({ id: row.id!, next: "REJECTED" })}>Reject</Button>}
+                  </TableCell>
+                </TableRow>
+              ))}
+              {requestRows.length === 0 && (
+                <TableRow><TableCell colSpan={7}><Typography variant="body2" color="text.secondary">No leave requests for this project.</Typography></TableCell></TableRow>
+              )}
+            </TableBody>
+          </Table>
+        )}
       </Paper>
     </Box>
   );

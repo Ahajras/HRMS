@@ -7,6 +7,7 @@ public class LeaveProjectSummaryDto {
     private UUID projectId;
     private String projectCode;
     private String projectName;
+    private String payGroup;
     private long total;
     private long pending;
     private long approved;
@@ -14,11 +15,12 @@ public class LeaveProjectSummaryDto {
     private BigDecimal approvedDays = BigDecimal.ZERO;
 
     public LeaveProjectSummaryDto(UUID projectId, String projectCode, String projectName,
-                                  long total, long pending, long approved, long rejected,
+                                  String payGroup, long total, long pending, long approved, long rejected,
                                   BigDecimal approvedDays) {
         this.projectId = projectId;
         this.projectCode = projectCode;
         this.projectName = projectName;
+        this.payGroup = payGroup;
         this.total = total;
         this.pending = pending;
         this.approved = approved;
@@ -29,6 +31,7 @@ public class LeaveProjectSummaryDto {
     public UUID getProjectId() { return projectId; }
     public String getProjectCode() { return projectCode; }
     public String getProjectName() { return projectName; }
+    public String getPayGroup() { return payGroup; }
     public long getTotal() { return total; }
     public long getPending() { return pending; }
     public long getApproved() { return approved; }

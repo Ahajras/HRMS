@@ -119,6 +119,7 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
               p.id as project_id,
               p.code as project_code,
               p.name as project_name,
+              coalesce(nullif(upper(e.pay_status), ''), 'UNASSIGNED') as pay_group,
               count(lr.id) as total,
               sum(case when lr.status in ('DRAFT', 'SUBMITTED') then 1 else 0 end) as pending,
               sum(case when lr.status = 'APPROVED' then 1 else 0 end) as approved,
@@ -129,6 +130,8 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
               and upper(coalesce(a.status, '')) = 'ACTIVE'
               and a.primary_assignment = true
               and a.effective_to is null
+            left join employee e on e.id = a.employee_id
+              and e.company_id = :companyId
             left join leave_request lr on lr.employee_id = a.employee_id
               and lr.company_id = :companyId
               and (:status is null or :status = '' or lr.status = :status)
@@ -137,8 +140,8 @@ public interface LeaveRequestRepository extends JpaRepository<LeaveRequest, UUID
               and (:toDate is null or lr.start_date <= :toDate)
             where p.company_id = :companyId
               and (:projectId is null or p.id = :projectId)
-            group by p.id, p.code, p.name
-            order by p.code
+            group by p.id, p.code, p.name, coalesce(nullif(upper(e.pay_status), ''), 'UNASSIGNED')
+            order by p.code, pay_group
             """, nativeQuery = true)
     List<Object[]> projectSummary(@Param("companyId") UUID companyId,
                                   @Param("projectId") UUID projectId,
