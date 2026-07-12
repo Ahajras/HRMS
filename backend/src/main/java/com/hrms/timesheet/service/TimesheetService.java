@@ -345,28 +345,16 @@ public class TimesheetService {
             return "OPEN";
         }
         UUID companyId = TenantContext.requireCompanyId();
-        String all = periodProjectRepo.findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(companyId, periodId, projectId, "ALL")
-                .map(PayrollPeriodProject::getStatus).orElse("OPEN");
         String group = normalizePayGroup(payGroup);
         if ("ALL".equals(group)) {
-            return all;
+            return periodProjectRepo.findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(companyId, periodId, projectId, "ALL")
+                    .map(PayrollPeriodProject::getStatus).orElse("OPEN");
         }
-        if ("CLOSED".equals(all)) {
-            return "CLOSED";
-        }
+        // Pay-group locks are independent: a DAILY lock must not block a MONTHLY employee.
+        // The ALL scope is handled only when the requested scope is ALL.
         return periodProjectRepo.findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(companyId, periodId, projectId, group)
                 .map(PayrollPeriodProject::getStatus)
-                .orElse(all);
-    }
-
-    private static String strongestStatus(String a, String b) {
-        if ("CLOSED".equals(a) || "CLOSED".equals(b)) {
-            return "CLOSED";
-        }
-        if ("LOCKED".equals(a) || "LOCKED".equals(b)) {
-            return "LOCKED";
-        }
-        return "OPEN";
+                .orElse("OPEN");
     }
 
     /** Block edits when the timesheet's project is locked/closed for its period. */
@@ -579,9 +567,7 @@ public class TimesheetService {
             String allStatus = allStatusByProject.getOrDefault(e.getKey(), "OPEN");
             String status = "ALL".equals(group)
                     ? allStatus
-                    : ("CLOSED".equals(allStatus)
-                    ? "CLOSED"
-                    : groupStatusByProject.getOrDefault(e.getKey(), allStatus));
+                    : groupStatusByProject.getOrDefault(e.getKey(), "OPEN");
             row.put("status", status);
             out.add(row);
         }
@@ -1789,9 +1775,6 @@ public class TimesheetService {
     }
 
     private boolean canAutoReopenForLeaveSync(Timesheet ts) {
-        if (LOCKED.equals(ts.getStatus())) {
-            return false;
-        }
         try {
             assertEditable(ts);
             return true;
