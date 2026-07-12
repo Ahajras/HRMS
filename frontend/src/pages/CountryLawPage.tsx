@@ -28,6 +28,10 @@ const isCurrent = (r: Rule) => r.status === "ACTIVE" && (!r.effectiveTo || r.eff
 const fmtValue = (r: Rule) =>
   (r.valueNumber !== undefined && r.valueNumber !== null ? String(r.valueNumber) : r.valueText ?? "—") +
   (r.unit ? ` ${r.unit}` : "");
+const ACTIVE_CALCULATION_RULES = new Set([
+  "ANNUAL_LEAVE_DAYS_UNDER_5Y",
+  "ANNUAL_LEAVE_DAYS_5Y_PLUS",
+]);
 
 function RuleRow({ rule, history }: { rule: Rule; history: Rule[] }) {
   const qc = useQueryClient();
@@ -35,6 +39,7 @@ function RuleRow({ rule, history }: { rule: Rule; history: Rule[] }) {
   const [showHistory, setShowHistory] = useState(false);
   const [value, setValue] = useState<string>(rule.valueNumber != null ? String(rule.valueNumber) : "");
   const [effectiveFrom, setEffectiveFrom] = useState(today);
+  const usedInCalculation = ACTIVE_CALCULATION_RULES.has(rule.code);
 
   const save = useMutation({
     mutationFn: () =>
@@ -53,13 +58,34 @@ function RuleRow({ rule, history }: { rule: Rule; history: Rule[] }) {
   });
 
   return (
-    <Box sx={{ py: 1, borderTop: 1, borderColor: "divider" }}>
+    <Box sx={{
+      py: 1.25,
+      px: usedInCalculation ? 1.25 : 0,
+      borderTop: 1,
+      borderColor: "divider",
+      borderLeft: usedInCalculation ? 4 : 0,
+      borderLeftColor: "error.main",
+      bgcolor: usedInCalculation ? "rgba(211,47,47,0.04)" : "transparent",
+    }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between">
         <Box>
-          <Typography variant="body2" fontWeight={600}>{rule.name}</Typography>
+          <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
+            <Typography variant="body2" fontWeight={600}>{rule.name}</Typography>
+            <Chip
+              size="small"
+              color={usedInCalculation ? "error" : "default"}
+              variant={usedInCalculation ? "filled" : "outlined"}
+              label={usedInCalculation ? "Used in leave balance" : "Reference only"}
+            />
+          </Stack>
           <Typography variant="caption" color="text.secondary">
             {rule.description ?? rule.code} · since {rule.effectiveFrom}
           </Typography>
+          {usedInCalculation && (
+            <Typography variant="caption" color="error" sx={{ display: "block", mt: 0.25, fontWeight: 700 }}>
+              Change this when moving to another country's annual leave entitlement.
+            </Typography>
+          )}
         </Box>
         <Stack direction="row" alignItems="center" spacing={1}>
           <Chip size="small" color="primary" variant="outlined" label={fmtValue(rule)} sx={{ fontWeight: 600 }} />
@@ -149,7 +175,7 @@ export default function CountryLawPage() {
       </Stack>
 
       <Alert severity="info" sx={{ mb: 2 }}>
-        These are configurable defaults. Confirm each value against current law before running payroll.
+        Red items are currently used by calculations. Other values are reference only until linked to payroll, time type, or provision rules.
       </Alert>
 
       {Object.keys(grouped).sort().map((cat) => (
