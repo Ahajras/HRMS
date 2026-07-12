@@ -1713,21 +1713,29 @@ public class TimesheetService {
             // instead of blocking the change outright.
             boolean allEstimated = approved && affected.stream().allMatch(TimesheetDay::isEstimated);
             if (!allEstimated) {
-                throw new BusinessRuleException("leave.timesheet.not.draft",
-                        "Leave changes can sync only to DRAFT timesheets. Reopen the employee timesheet first.");
+                if (!canAutoReopenForLeaveSync(ts)) {
+                    throw new BusinessRuleException("leave.timesheet.not.draft",
+                            "Leave changes can sync only to an open timesheet period. Reopen the project or employee timesheet first.");
+                }
+                ts.setStatus(DRAFT);
+                ts.setSubmittedAt(null);
+                ts.setApprovedAt(null);
+                ts.setApprovedBy(null);
+                timesheetRepo.save(ts);
+            } else {
+                // One adjustment PER DAY, not one lump sum for the whole leave
+                // date range — so each day's own amount is separately visible
+                // for audit and for telling the employee exactly what changed.
+                for (TimesheetDay day : affected) {
+                    TimeType oldType = day.getTimeTypeId() != null ? timeTypeRepo.findById(day.getTimeTypeId()).orElse(null) : null;
+                    String oldLabel = oldType != null ? oldType.getCode() + " - " + oldType.getName() : "(none)";
+                    String newLabel = type.getName();
+                    String reason = "Day Zero: " + day.getWorkDate() + " (" + oldLabel + " -> " + newLabel
+                            + ") reclassified after the period was already locked (recomputed against the original month)";
+                    createDayZeroAdjustment(ts, Map.of(day.getId(), buildOverrideDay(day, ts, type.getTimeTypeId(), null)), reason);
+                }
+                return;
             }
-            // One adjustment PER DAY, not one lump sum for the whole leave
-            // date range — so each day's own amount is separately visible
-            // for audit and for telling the employee exactly what changed.
-            for (TimesheetDay day : affected) {
-                TimeType oldType = day.getTimeTypeId() != null ? timeTypeRepo.findById(day.getTimeTypeId()).orElse(null) : null;
-                String oldLabel = oldType != null ? oldType.getCode() + " - " + oldType.getName() : "(none)";
-                String newLabel = type.getName();
-                String reason = "Day Zero: " + day.getWorkDate() + " (" + oldLabel + " -> " + newLabel
-                        + ") reclassified after the period was already locked (recomputed against the original month)";
-                createDayZeroAdjustment(ts, Map.of(day.getId(), buildOverrideDay(day, ts, type.getTimeTypeId(), null)), reason);
-            }
-            return;
         }
 
         Map<UUID, Shift> shiftCache = new HashMap<>();
@@ -1777,6 +1785,18 @@ public class TimesheetService {
         if (changed) {
             recomputeTotals(ts);
             timesheetRepo.save(ts);
+        }
+    }
+
+    private boolean canAutoReopenForLeaveSync(Timesheet ts) {
+        if (LOCKED.equals(ts.getStatus())) {
+            return false;
+        }
+        try {
+            assertEditable(ts);
+            return true;
+        } catch (BusinessRuleException ex) {
+            return false;
         }
     }
 
