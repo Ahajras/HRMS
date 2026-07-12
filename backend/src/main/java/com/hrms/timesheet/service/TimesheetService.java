@@ -15,6 +15,7 @@ import com.hrms.leave.domain.LeaveRequest;
 import com.hrms.leave.domain.LeaveType;
 import com.hrms.leave.repository.LeaveRequestRepository;
 import com.hrms.leave.repository.LeaveTypeRepository;
+import com.hrms.leave.service.LeaveBalanceService;
 import com.hrms.project.domain.CostCode;
 import com.hrms.project.domain.Project;
 import com.hrms.project.repository.CostCodeRepository;
@@ -123,6 +124,7 @@ public class TimesheetService {
     private final CostCodeRepository costCodeRepo;
     private final LeaveRequestRepository leaveRequestRepo;
     private final LeaveTypeRepository leaveTypeRepo;
+    private final LeaveBalanceService leaveBalanceService;
     private final com.hrms.payroll.repository.PayrollRunRepository payrollRunRepo;
     private final com.hrms.payroll.repository.PayrollAdjustmentRepository payrollAdjustmentRepo;
     private final com.hrms.payroll.service.PayrollRunService payrollRunService;
@@ -141,6 +143,7 @@ public class TimesheetService {
                             CostCodeRepository costCodeRepo,
                             LeaveRequestRepository leaveRequestRepo,
                             LeaveTypeRepository leaveTypeRepo,
+                            LeaveBalanceService leaveBalanceService,
                             com.hrms.payroll.repository.PayrollRunRepository payrollRunRepo,
                             com.hrms.payroll.repository.PayrollAdjustmentRepository payrollAdjustmentRepo,
                             com.hrms.payroll.service.PayrollRunService payrollRunService,
@@ -165,6 +168,7 @@ public class TimesheetService {
         this.costCodeRepo = costCodeRepo;
         this.leaveRequestRepo = leaveRequestRepo;
         this.leaveTypeRepo = leaveTypeRepo;
+        this.leaveBalanceService = leaveBalanceService;
         this.payrollRunRepo = payrollRunRepo;
         this.payrollAdjustmentRepo = payrollAdjustmentRepo;
         this.payrollRunService = payrollRunService;
@@ -1229,6 +1233,7 @@ public class TimesheetService {
                 .orElse(null);
         boolean monthly = isMonthlyPaid(ts);
         boolean otEligibleSave = isOtEligible(ts);
+        Map<UUID, BigDecimal> leaveConsumedInSave = new HashMap<>();
 
         for (TimesheetDayDto dto : dayDtos) {
             TimesheetDay day = byId.get(dto.getId());
@@ -1257,6 +1262,7 @@ public class TimesheetService {
             day.setProjectId(dto.getProjectId());
             day.setCostCodeId(dto.getCostCodeId());
             day.setRemarks(dto.getRemarks());
+            enforceLeaveBalanceForManualDay(ts, employee, day, notEmployedTypeId, leaveConsumedInSave);
             recomputeDay(day, ts, shiftCache, typeCache, weekCache, monthly, otEligibleSave);
             validateDayAllocation(day, dto.getCosts());
             validateCostSplit(day, dto.getCosts());
@@ -1670,6 +1676,11 @@ public class TimesheetService {
                 .findFirst()
                 .map(TimeType::getId)
                 .orElse(null);
+        UUID unpaidTypeId = unpaidTypeId(request.getCompanyId());
+        Employee employee = employeeRepo.findById(request.getEmployeeId())
+                .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + request.getEmployeeId()));
+        BigDecimal[] paidLeaveRemaining = {leaveBalanceService.availableBeforeDay(
+                request.getCompanyId(), employee, type, request.getEndDate(), request.getId(), null)};
         boolean approved = "APPROVED".equals(status);
         YearMonth cursor = YearMonth.from(request.getStartDate());
         YearMonth end = YearMonth.from(request.getEndDate());
@@ -1678,14 +1689,15 @@ public class TimesheetService {
                     request.getCompanyId(), request.getEmployeeId(), cursor.getYear(), cursor.getMonthValue())
                     .orElse(null);
             if (ts != null) {
-                syncLeaveRequestMonth(ts, request, type, normalTypeId, approved);
+                syncLeaveRequestMonth(ts, request, type, normalTypeId, unpaidTypeId, paidLeaveRemaining, approved);
             }
             cursor = cursor.plusMonths(1);
         }
     }
 
     private void syncLeaveRequestMonth(Timesheet ts, LeaveRequest request, LeaveType type,
-                                       UUID normalTypeId, boolean approved) {
+                                       UUID normalTypeId, UUID unpaidTypeId, BigDecimal[] paidLeaveRemaining,
+                                       boolean approved) {
         List<TimesheetDay> days = dayRepo.findByTimesheetIdOrderByWorkDate(ts.getId());
         List<TimesheetDay> affected = days.stream()
                 .filter(day -> leaveSyncAffectsDay(day, request, type, normalTypeId, approved))
@@ -1719,6 +1731,10 @@ public class TimesheetService {
         }
 
         Map<UUID, Shift> shiftCache = new HashMap<>();
+        Map<UUID, TimeType> typeCache = new HashMap<>();
+        Map<UUID, Map<String, ShiftDay>> weekCache = new HashMap<>();
+        boolean monthly = isMonthlyPaid(ts);
+        boolean otEligible = isOtEligible(ts);
         boolean changed = false;
         for (TimesheetDay day : days) {
             if (!within(day.getWorkDate(), request.getStartDate(), request.getEndDate())) {
@@ -1726,12 +1742,21 @@ public class TimesheetService {
             }
             if (approved) {
                 if (canApplyLeaveToDay(day, normalTypeId, type.getTimeTypeId())) {
-                    day.setTimeTypeId(type.getTimeTypeId());
-                    day.setLeaveRequestId(request.getId());
-                    day.setWorkedHours(BigDecimal.ZERO);
-                    day.setOtHours(BigDecimal.ZERO);
-                    day.setActualIn(null);
-                    day.setActualOut(null);
+                    if (type.isDeductsBalance() && paidLeaveRemaining[0].compareTo(BigDecimal.ONE) < 0) {
+                        forceUnpaidLeaveDay(day, unpaidTypeId,
+                                "Paid leave balance exhausted; converted to unpaid.");
+                    } else {
+                        day.setTimeTypeId(type.getTimeTypeId());
+                        day.setLeaveRequestId(request.getId());
+                        day.setWorkedHours(BigDecimal.ZERO);
+                        day.setOtHours(BigDecimal.ZERO);
+                        day.setActualIn(null);
+                        day.setActualOut(null);
+                        if (type.isDeductsBalance()) {
+                            paidLeaveRemaining[0] = paidLeaveRemaining[0].subtract(BigDecimal.ONE);
+                        }
+                    }
+                    recomputeDay(day, ts, shiftCache, typeCache, weekCache, monthly, otEligible);
                     dayRepo.save(day);
                     saveDayCosts(day.getId(), List.of());
                     changed = true;
@@ -1744,6 +1769,7 @@ public class TimesheetService {
                 Shift shift = resolveDayShift(day, ts, shiftCache);
                 day.setActualIn(shift != null ? shift.getStartTime() : null);
                 day.setActualOut(shift != null ? shift.getEndTime() : null);
+                recomputeDay(day, ts, shiftCache, typeCache, weekCache, monthly, otEligible);
                 dayRepo.save(day);
                 changed = true;
             }
@@ -1752,6 +1778,49 @@ public class TimesheetService {
             recomputeTotals(ts);
             timesheetRepo.save(ts);
         }
+    }
+
+    private void enforceLeaveBalanceForManualDay(Timesheet ts, Employee employee, TimesheetDay day, UUID unpaidTypeId,
+                                                 Map<UUID, BigDecimal> leaveConsumedInSave) {
+        if (day.getTimeTypeId() == null || day.getLeaveRequestId() != null) {
+            return;
+        }
+        LeaveType type = leaveTypeRepo.findByCompanyIdAndTimeTypeId(ts.getCompanyId(), day.getTimeTypeId())
+                .filter(LeaveType::isDeductsBalance)
+                .filter(t -> "ACTIVE".equalsIgnoreCase(t.getStatus()))
+                .orElse(null);
+        if (type == null) {
+            return;
+        }
+        BigDecimal available = leaveBalanceService.availableBeforeDay(
+                ts.getCompanyId(), employee, type, day.getWorkDate(), null, day.getId());
+        BigDecimal alreadyConsumed = leaveConsumedInSave.getOrDefault(type.getId(), BigDecimal.ZERO);
+        if (available.subtract(alreadyConsumed).compareTo(BigDecimal.ONE) < 0) {
+            forceUnpaidLeaveDay(day, unpaidTypeId,
+                    "Paid leave balance exhausted; converted to unpaid.");
+        } else {
+            leaveConsumedInSave.merge(type.getId(), BigDecimal.ONE, BigDecimal::add);
+        }
+    }
+
+    private UUID unpaidTypeId(UUID companyId) {
+        return timeTypeRepo.findByCompanyIdAndCode(companyId, "U").map(TimeType::getId)
+                .orElseThrow(() -> new BusinessRuleException("timesheet.unpaid_type.required",
+                        "Time type U is required to convert excess leave to unpaid."));
+    }
+
+    private void forceUnpaidLeaveDay(TimesheetDay day, UUID unpaidTypeId, String reason) {
+        if (unpaidTypeId == null) {
+            throw new BusinessRuleException("timesheet.unpaid_type.required",
+                    "Time type U is required to convert excess leave to unpaid.");
+        }
+        day.setTimeTypeId(unpaidTypeId);
+        day.setLeaveRequestId(null);
+        day.setWorkedHours(BigDecimal.ZERO);
+        day.setOtHours(BigDecimal.ZERO);
+        day.setActualIn(null);
+        day.setActualOut(null);
+        day.setRemarks(reason);
     }
 
     /** Day Zero — shared core. Given fully-built override days (all

@@ -67,6 +67,7 @@ public class LeaveService {
     private final TimekeeperService timekeeperService;
     private final AppUserRepository appUserRepo;
     private final TicketService ticketService;
+    private final LeaveBalanceService leaveBalanceService;
 
     public LeaveService(LeaveTypeRepository typeRepo, LeaveRequestRepository requestRepo,
                         LeaveAdjustmentRepository adjustmentRepo, EmployeeRepository employeeRepo,
@@ -75,7 +76,8 @@ public class LeaveService {
                         CompanyRulePackageRepository companyRulePackageRepo,
                         RulePackageRepository rulePackageRepo, RuleRepository ruleRepo,
                         TimesheetService timesheetService, TimekeeperService timekeeperService,
-                        AppUserRepository appUserRepo, TicketService ticketService) {
+                        AppUserRepository appUserRepo, TicketService ticketService,
+                        LeaveBalanceService leaveBalanceService) {
         this.typeRepo = typeRepo;
         this.requestRepo = requestRepo;
         this.adjustmentRepo = adjustmentRepo;
@@ -90,6 +92,7 @@ public class LeaveService {
         this.timekeeperService = timekeeperService;
         this.appUserRepo = appUserRepo;
         this.ticketService = ticketService;
+        this.leaveBalanceService = leaveBalanceService;
     }
 
     @Transactional(readOnly = true)
@@ -258,28 +261,7 @@ public class LeaveService {
     }
 
     private LeaveBalanceDto balance(UUID companyId, Employee employee, LeaveType type, LocalDate asOf) {
-        LeaveBalanceDto dto = new LeaveBalanceDto();
-        dto.setEmployeeId(employee.getId());
-        dto.setLeaveTypeId(type.getId());
-        dto.setLeaveTypeCode(type.getCode());
-        dto.setLeaveTypeName(type.getName());
-        dto.setAsOfDate(asOf);
-        BigDecimal annualRate = annualLeaveRate(companyId, employee, asOf);
-        BigDecimal entitlement = "ANNUAL".equalsIgnoreCase(type.getCode())
-                ? proratedEntitlement(companyId, employee.getHireDate(), asOf)
-                : BigDecimal.ZERO;
-        BigDecimal adjustments = adjustments(companyId, employee.getId(), type.getId(), asOf);
-        BigDecimal approved = requestDays(companyId, employee.getId(), type.getId(), Set.of("APPROVED"), asOf);
-        BigDecimal manualTimesheet = manualTimesheetLeaveDays(companyId, employee.getId(), type, asOf);
-        BigDecimal pending = requestDays(companyId, employee.getId(), type.getId(), PENDING, asOf);
-        dto.setAnnualRate(annualRate);
-        dto.setEntitledToDate(entitlement);
-        dto.setAdjustments(adjustments);
-        dto.setUsedApproved(approved);
-        dto.setUsedTimesheet(manualTimesheet);
-        dto.setPending(pending);
-        dto.setBalance(entitlement.add(adjustments).subtract(approved).subtract(manualTimesheet));
-        return dto;
+        return leaveBalanceService.balance(companyId, employee, type, asOf);
     }
 
     private BigDecimal manualTimesheetLeaveDays(UUID companyId, UUID employeeId, LeaveType type, LocalDate asOf) {

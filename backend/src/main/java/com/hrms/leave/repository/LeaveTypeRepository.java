@@ -10,4 +10,5 @@ import java.util.UUID;
 public interface LeaveTypeRepository extends JpaRepository<LeaveType, UUID> {
     List<LeaveType> findByCompanyIdOrderByCode(UUID companyId);
     Optional<LeaveType> findByCompanyIdAndCode(UUID companyId, String code);
+    Optional<LeaveType> findByCompanyIdAndTimeTypeId(UUID companyId, UUID timeTypeId);
 }
