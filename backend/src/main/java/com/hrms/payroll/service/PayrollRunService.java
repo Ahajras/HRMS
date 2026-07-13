@@ -980,10 +980,10 @@ public class PayrollRunService {
             payQty = payQty.add(effect.payQuantity());
             deductQty = deductQty.add(effect.deductQuantity());
             if (effect.payQuantity().compareTo(BigDecimal.ZERO) > 0) {
-                payDetails.add(timeTypeDetail(day, type, explicit, effect.payQuantity()));
+                payDetails.add(timeTypeDetail(day, type, "PAY", effect.payBasis(), effect.payPercent(), effect.payQuantity()));
             }
             if (effect.deductQuantity().compareTo(BigDecimal.ZERO) > 0) {
-                deductionDetails.add(timeTypeDetail(day, type, explicit, effect.deductQuantity()));
+                deductionDetails.add(timeTypeDetail(day, type, "DEDUCT", effect.deductBasis(), effect.deductPercent(), effect.deductQuantity()));
             }
             if (explicit == null) {
                 legacyPayHours = legacyPayHours.add(effect.payQuantity());
@@ -1014,17 +1014,17 @@ public class PayrollRunService {
                 return DayEffect.none();
             }
             if (usesActualWorked(rule) && "SHORTAGE".equalsIgnoreCase(explicit.getBasis())) {
-                return new DayEffect(legacy.payQuantity(), BigDecimal.ZERO, explicit.getBasis());
+                return DayEffect.pay(legacy.payQuantity(), legacy.payBasis(), legacy.payPercent());
             }
             String deductQuantitySource = !isDailyRule(rule) && unpaidDay ? "PAYABLE_SCHEDULE" : quantitySource(rule);
             BigDecimal baseQuantity = quantityForBasis(day, explicit.getBasis(), shiftHours, deductQuantitySource);
             BigDecimal scaled = baseQuantity.multiply(z(explicit.getPercent()).divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP));
-            return new DayEffect(legacy.payQuantity(), scaled, explicit.getBasis());
+            return DayEffect.deduct(legacy.payQuantity(), legacy.basis(), explicit.getBasis(), z(explicit.getPercent()), scaled);
         }
         BigDecimal baseQuantity = quantityForBasis(day, explicit.getBasis(), shiftHours, quantitySource(rule));
         BigDecimal scaled = baseQuantity.multiply(z(explicit.getPercent()).divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP));
         if ("PAY".equalsIgnoreCase(explicit.getAction())) {
-            return new DayEffect(scaled, BigDecimal.ZERO, explicit.getBasis());
+            return DayEffect.pay(scaled, explicit.getBasis(), z(explicit.getPercent()));
         }
         if ("IGNORE".equalsIgnoreCase(explicit.getAction()) || "SUSPEND".equalsIgnoreCase(explicit.getAction())) {
             return DayEffect.none();
@@ -1042,14 +1042,19 @@ public class PayrollRunService {
     }
 
     private static String timeTypeDetail(TimesheetDay day, TimeType type, TimeTypePayrollRule rule, BigDecimal quantity) {
-        String code = type != null ? type.getCode() : String.valueOf(day.getTimeTypeId());
-        String name = type != null ? type.getName() : "";
         String basis = rule != null && rule.getBasis() != null ? rule.getBasis() : "HOURS";
         String action = rule != null && rule.getAction() != null ? rule.getAction() : "DEDUCT";
         BigDecimal percent = rule != null ? z(rule.getPercent()) : new BigDecimal("100.00");
+        return timeTypeDetail(day, type, action, basis, percent, quantity);
+    }
+
+    private static String timeTypeDetail(TimesheetDay day, TimeType type, String action, String basis,
+                                         BigDecimal percent, BigDecimal quantity) {
+        String code = type != null ? type.getCode() : String.valueOf(day.getTimeTypeId());
+        String name = type != null ? type.getName() : "";
         return day.getWorkDate() + " | " + code + (name == null || name.isBlank() ? "" : " - " + name)
                 + " | " + z(quantity).stripTrailingZeros().toPlainString() + " " + basis
-                + " | " + action + " " + percent.stripTrailingZeros().toPlainString() + "%";
+                + " | " + action + " " + z(percent).stripTrailingZeros().toPlainString() + "%";
     }
 
     private static List<TimeTypeDetailGroup> detailGroups(String details) {
@@ -1115,7 +1120,7 @@ public class PayrollRunService {
         BigDecimal standardHours = shiftHours;
         if (rest) {
             if (!daily && (type == null || type.isPaid() || rule.isWeeklyRestPaid())) {
-                return new DayEffect(restHours(day, standardHours), BigDecimal.ZERO, "HOURS");
+            return DayEffect.pay(restHours(day, standardHours), "HOURS", new BigDecimal("100.00"));
             }
             return DayEffect.none();
         }
@@ -1126,10 +1131,10 @@ public class PayrollRunService {
                 // there is nothing left here to deduct on top of it.
                 return DayEffect.none();
             }
-            return new DayEffect(BigDecimal.ZERO, payrollHours(day, standardHours), "HOURS");
+            return DayEffect.deduct(BigDecimal.ZERO, "HOURS", "HOURS", new BigDecimal("100.00"), payrollHours(day, standardHours));
         }
         if (type == null || type.isPaid()) {
-            return new DayEffect(payrollHours(day, standardHours), BigDecimal.ZERO, "HOURS");
+            return DayEffect.pay(payrollHours(day, standardHours), "HOURS", new BigDecimal("100.00"));
         }
         return DayEffect.none();
     }
@@ -1520,9 +1525,23 @@ public class PayrollRunService {
                                              Map<AnnualUsageKey, Integer> priorAnnualCounts) {
     }
 
-    private record DayEffect(BigDecimal payQuantity, BigDecimal deductQuantity, String basis) {
+    private record DayEffect(BigDecimal payQuantity, BigDecimal deductQuantity, String basis,
+                             String payBasis, String deductBasis, BigDecimal payPercent, BigDecimal deductPercent) {
         static DayEffect none() {
-            return new DayEffect(BigDecimal.ZERO, BigDecimal.ZERO, "HOURS");
+            return new DayEffect(BigDecimal.ZERO, BigDecimal.ZERO, "HOURS",
+                    "HOURS", "HOURS", new BigDecimal("100.00"), new BigDecimal("100.00"));
+        }
+
+        static DayEffect pay(BigDecimal payQuantity, String payBasis, BigDecimal payPercent) {
+            return new DayEffect(payQuantity, BigDecimal.ZERO, payBasis,
+                    payBasis, "HOURS", payPercent, new BigDecimal("100.00"));
+        }
+
+        static DayEffect deduct(BigDecimal payQuantity, String payBasis, String deductBasis,
+                                BigDecimal deductPercent, BigDecimal deductQuantity) {
+            String basis = z(deductQuantity).compareTo(BigDecimal.ZERO) > 0 ? deductBasis : payBasis;
+            return new DayEffect(payQuantity, deductQuantity, basis,
+                    payBasis, deductBasis, new BigDecimal("100.00"), deductPercent);
         }
 
         boolean hasAny() {
