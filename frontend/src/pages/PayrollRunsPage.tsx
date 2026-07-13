@@ -210,8 +210,16 @@ export default function PayrollRunsPage() {
                       {r.status === "CALCULATED" ? "Recalculate" : "Calculate"}
                     </Button>
                   )}
-                  {r.status === "DRAFT" && r.id && (
-                    <Button size="small" color="error" onClick={() => remove.mutate(r.id!)}>Delete</Button>
+                  {(r.status === "DRAFT" || r.status === "CALCULATED") && r.id && (
+                    <Button
+                      size="small"
+                      color="error"
+                      onClick={() => {
+                        if (confirm("Delete this payroll run and all related payroll results? This cannot be undone.")) remove.mutate(r.id!);
+                      }}
+                    >
+                      Delete
+                    </Button>
                   )}
                   {r.status === "CALCULATED" && r.id && (
                     <Button size="small" color="success" onClick={() => action.mutate({ id: r.id!, fn: "approve" })}>Approve</Button>

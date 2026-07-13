@@ -608,9 +608,11 @@ public class PayrollRunService {
 
     public void delete(UUID id) {
         PayrollRun run = getEntity(id);
-        if (!DRAFT.equals(run.getStatus())) {
-            throw new BusinessRuleException("payroll.run.delete.state", "Only a DRAFT payroll run can be deleted.");
+        if (!DRAFT.equals(run.getStatus()) && !"CALCULATED".equalsIgnoreCase(run.getStatus())) {
+            throw new BusinessRuleException("payroll.run.delete.state", "Only a DRAFT or CALCULATED payroll run can be deleted.");
         }
+        lineRepo.deleteByRunId(run.getId());
+        resultRepo.deleteByRunId(run.getId());
         runRepo.delete(run);
     }
 
