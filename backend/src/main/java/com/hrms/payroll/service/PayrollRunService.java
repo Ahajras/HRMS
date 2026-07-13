@@ -1019,8 +1019,6 @@ public class PayrollRunService {
         if (explicit == null) {
             return legacyEffect(type, day, rule, shiftHours);
         }
-        BigDecimal baseQuantity = quantityForBasis(day, explicit.getBasis(), shiftHours, quantitySource(rule));
-        BigDecimal scaled = baseQuantity.multiply(z(explicit.getPercent()).divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP));
         if ("DEDUCT".equalsIgnoreCase(explicit.getAction())) {
             DayEffect legacy = legacyEffect(type, day, rule, shiftHours);
             // A daily-rate employee's pay is simply the sum of days actually
@@ -1033,8 +1031,13 @@ public class PayrollRunService {
             if (isDailyRule(rule) && usesActualWorked(rule) && unpaidDay) {
                 return DayEffect.none();
             }
+            String deductQuantitySource = !isDailyRule(rule) && unpaidDay ? "PAYABLE_SCHEDULE" : quantitySource(rule);
+            BigDecimal baseQuantity = quantityForBasis(day, explicit.getBasis(), shiftHours, deductQuantitySource);
+            BigDecimal scaled = baseQuantity.multiply(z(explicit.getPercent()).divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP));
             return new DayEffect(legacy.payQuantity(), scaled, explicit.getBasis());
         }
+        BigDecimal baseQuantity = quantityForBasis(day, explicit.getBasis(), shiftHours, quantitySource(rule));
+        BigDecimal scaled = baseQuantity.multiply(z(explicit.getPercent()).divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP));
         if ("PAY".equalsIgnoreCase(explicit.getAction())) {
             return new DayEffect(scaled, BigDecimal.ZERO, explicit.getBasis());
         }
