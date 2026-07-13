@@ -108,9 +108,6 @@ public class TimeTypePayrollRuleService {
             TimeTypePayrollRule entity = repository
                     .findByCompanyIdAndTimeTypeIdAndPayrollComponentId(companyId, timeTypeId, component.getId())
                     .orElseGet(TimeTypePayrollRule::new);
-            if (entity.getId() != null && !shouldResetInitializedRule(entity, false)) {
-                continue;
-            }
             entity.setCompanyId(companyId);
             entity.setTimeTypeId(timeTypeId);
             entity.setPayrollComponentId(component.getId());
