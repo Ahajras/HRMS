@@ -1308,10 +1308,10 @@ public class PayrollRunService {
     }
 
     private static BigDecimal plannedShiftHours(TimesheetDay day, BigDecimal standardHours) {
-        BigDecimal normal = z(day.getNormalHours());
-        if (normal.compareTo(BigDecimal.ZERO) > 0) return normal;
         BigDecimal planned = z(day.getPlannedHours());
         if (planned.compareTo(BigDecimal.ZERO) > 0) return planned;
+        BigDecimal normal = z(day.getNormalHours());
+        if (normal.compareTo(BigDecimal.ZERO) > 0) return normal;
         BigDecimal worked = z(day.getWorkedHours()).subtract(z(day.getOtHours())).max(BigDecimal.ZERO);
         if (worked.compareTo(BigDecimal.ZERO) > 0) return worked;
         return z(standardHours);
