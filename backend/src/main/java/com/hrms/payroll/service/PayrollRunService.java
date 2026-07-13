@@ -1013,9 +1013,6 @@ public class PayrollRunService {
             if (isDailyRule(rule) && usesActualWorked(rule) && unpaidDay) {
                 return DayEffect.none();
             }
-            if (usesActualWorked(rule) && "SHORTAGE".equalsIgnoreCase(explicit.getBasis())) {
-                return DayEffect.pay(legacy.payQuantity(), legacy.payBasis(), legacy.payPercent());
-            }
             String deductQuantitySource = !isDailyRule(rule) && unpaidDay ? "PAYABLE_SCHEDULE" : quantitySource(rule);
             BigDecimal baseQuantity = quantityForBasis(day, explicit.getBasis(), shiftHours, deductQuantitySource);
             BigDecimal scaled = baseQuantity.multiply(z(explicit.getPercent()).divide(new BigDecimal("100"), 8, RoundingMode.HALF_UP));
