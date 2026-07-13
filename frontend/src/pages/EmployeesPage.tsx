@@ -150,6 +150,7 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
   const maritals = useLookup("MARITAL_STATUS");
   const statuses = useLookup("EMPLOYEE_STATUS");
   const payStatuses = useLookup("PAY_STATUS");
+  const paymentMethods = useLookup("PAYMENT_METHOD");
   const bands = useLookup("BAND");
   const { data: otCategories = [] } = useQuery({ queryKey: ["overtimeCategories"], queryFn: overtimeCategoryApi.list });
   const otCategoryOpts = otCategories.map((c) => ({
@@ -212,6 +213,9 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
       </Grid>
       <Grid item xs={12} sm={4}>
         <SelectField label="Pay Status" value={form.payStatus} onChange={(v) => set("payStatus", v)} options={lk(payStatuses)} allowEmpty={false} required />
+      </Grid>
+      <Grid item xs={12} sm={4}>
+        <SelectField label="Payment Method" value={form.paymentMethodCode ?? "BANK"} onChange={(v) => set("paymentMethodCode", v)} options={lk(paymentMethods)} allowEmpty={false} required />
       </Grid>
       <Grid item xs={12} sm={4}>
         <SelectField label="Band" value={form.band} onChange={(v) => set("band", v)} options={lk(bands)} />

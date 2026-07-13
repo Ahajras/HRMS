@@ -4,6 +4,7 @@ import {
   Button,
   Grid,
   IconButton,
+  MenuItem,
   Paper,
   Stack,
   TextField,
@@ -12,7 +13,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
-import { costCodeApi, projectApi } from "../api/resources";
+import { costCodeApi, projectApi, sponsorApi } from "../api/resources";
 import type { CostCode, Project } from "../api/types";
 
 function CostCodesPanel({ projectId }: { projectId: string }) {
@@ -59,6 +60,7 @@ export default function ProjectsPage() {
   const { data = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
   const [form, setForm] = useState<Project>({ code: "", name: "" });
   const [open, setOpen] = useState<string | null>(null);
+  const { data: sponsors = [] } = useQuery({ queryKey: ["sponsors"], queryFn: sponsorApi.list });
 
   const save = useMutation({
     mutationFn: (p: Project) => (p.id ? projectApi.update(p.id, p) : projectApi.create(p)),
@@ -77,7 +79,13 @@ export default function ProjectsPage() {
         <Typography variant="subtitle2" gutterBottom>{form.id ? "Edit project" : "Add project"}</Typography>
         <Grid container spacing={1.5}>
           <Grid item xs={12} sm={3}><TextField fullWidth size="small" label="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} /></Grid>
-          <Grid item xs={12} sm={6}><TextField fullWidth size="small" label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Grid>
+          <Grid item xs={12} sm={4}><TextField fullWidth size="small" label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></Grid>
+          <Grid item xs={12} sm={2}>
+            <TextField fullWidth select size="small" label="Sponsor (WPS)" value={form.sponsorId ?? ""} onChange={(e) => setForm({ ...form, sponsorId: e.target.value || undefined })}>
+              <MenuItem value="">(none)</MenuItem>
+              {sponsors.map((s) => <MenuItem key={s.id} value={s.id}>{s.code}</MenuItem>)}
+            </TextField>
+          </Grid>
           <Grid item xs={12} sm={3}>
             <Stack direction="row" spacing={1}>
               <Button startIcon={<AddIcon />} variant="contained" disabled={!form.code || !form.name || save.isPending} onClick={() => save.mutate(form)}>

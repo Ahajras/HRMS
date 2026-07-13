@@ -30,6 +30,11 @@ public class Project extends AuditableEntity {
     @Column(name = "status", nullable = false, length = 20)
     private String status = "ACTIVE";
 
+    /** The Qatar WPS "Employer Establishment" this project reports under.
+     * Multiple projects can share one sponsor. */
+    @Column(name = "sponsor_id")
+    private UUID sponsorId;
+
     public UUID getCompanyId() { return companyId; }
     public void setCompanyId(UUID companyId) { this.companyId = companyId; }
 
@@ -44,4 +49,7 @@ public class Project extends AuditableEntity {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public UUID getSponsorId() { return sponsorId; }
+    public void setSponsorId(UUID sponsorId) { this.sponsorId = sponsorId; }
 }

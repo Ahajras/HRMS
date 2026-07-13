@@ -175,6 +175,7 @@ export interface Employee {
   jobTitle?: string;
   jobTitleCode?: string;
   payStatus?: string;
+  paymentMethodCode?: string;
   overtimeCategoryCode?: string;
   band?: string;
   arabicName?: string;
@@ -414,7 +415,65 @@ export interface Project {
   code: string;
   name: string;
   managerEmployeeId?: string;
+  sponsorId?: string;
   status?: string;
+}
+
+export interface Sponsor {
+  id?: string;
+  code: string;
+  name: string;
+  establishmentEid: string;
+  payerQid?: string;
+  payerBankCode: string;
+  payerIban: string;
+  status?: string;
+}
+
+export interface SifRow {
+  recordSequence: number;
+  employeeId: string;
+  employeeNumber: string;
+  qid?: string;
+  visaId?: string;
+  employeeName: string;
+  bankCode: string;
+  bankAccount: string;
+  salaryFrequency: string;
+  workingDays: number;
+  netSalary: number;
+  basicSalary: number;
+  extraHours: number;
+  extraIncome: number;
+  deductions: number;
+  notes: string;
+  projectCode?: string;
+}
+
+export interface SifFile {
+  sponsorCode: string;
+  sponsorName: string;
+  fileName: string;
+  establishmentEid: string;
+  payerBankCode: string;
+  payerIban: string;
+  payerQid?: string;
+  periodYear: number;
+  periodMonth: number;
+  totalSalaries: number;
+  totalRecords: number;
+  rows: SifRow[];
+}
+
+export interface SifExclusion {
+  employeeNumber: string;
+  employeeName: string;
+  reason: string;
+}
+
+export interface SifExportResult {
+  files: SifFile[];
+  exclusions: SifExclusion[];
 }
 
 export interface CostCode {

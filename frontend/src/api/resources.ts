@@ -596,3 +596,13 @@ export const selfApi = {
   submitLeaveRequest: (dto: Partial<import("./types").LeaveRequest>) =>
     api.post<import("./types").LeaveRequest>("/me/leave-requests", dto).then((r) => r.data),
 };
+
+export const sponsorApi = {
+  list: () => api.get<import("./types").Sponsor[]>("/sponsors").then((r) => r.data),
+  save: (dto: import("./types").Sponsor) => api.post<import("./types").Sponsor>("/sponsors", dto).then((r) => r.data),
+};
+
+export const sifApi = {
+  generate: (periodId: string, projectIds: string[]) =>
+    api.post<import("./types").SifExportResult>("/payroll/sif/generate", { periodId, projectIds }).then((r) => r.data),
+};

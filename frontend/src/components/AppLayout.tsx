@@ -107,6 +107,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/payroll-runs", label: "Payroll Runs", icon: <PaymentsIcon />, authority: "payroll.config.read" },
       { to: "/payroll-reports", label: "Reports", icon: <PaymentsIcon />, authority: "payroll.config.read" },
+      { to: "/sif-export", label: "WPS / SIF Export", icon: <PaymentsIcon />, authority: "payroll.sif.generate" },
       { to: "/provisions", label: "Provisions", icon: <SavingsIcon />, authority: "payroll.config.read" },
       { to: "/provision-rules", label: "Provision Rules", icon: <SavingsIcon />, authority: "payroll.config.read" },
       { to: "/tickets", label: "Tickets", icon: <SavingsIcon />, authority: "payroll.config.read" },

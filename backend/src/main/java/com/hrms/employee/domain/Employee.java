@@ -67,6 +67,12 @@ public class Employee extends AuditableEntity {
     @Column(name = "status", nullable = false, length = 20)
     private String status = "ACTIVE";
 
+    /** 'BANK' (paid via Qatar WPS/SIF) or 'CASH' (outside the banking
+     * system, excluded from SIF entirely). Only BANK employees require a
+     * bank account and QID/Visa for SIF export. */
+    @Column(name = "payment_method_code", nullable = false, length = 20)
+    private String paymentMethodCode = "BANK";
+
     @Column(name = "job_title", length = 150)
     private String jobTitle;
 
@@ -165,6 +171,9 @@ public class Employee extends AuditableEntity {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getPaymentMethodCode() { return paymentMethodCode; }
+    public void setPaymentMethodCode(String paymentMethodCode) { this.paymentMethodCode = paymentMethodCode; }
 
     public String getJobTitle() { return jobTitle; }
     public void setJobTitle(String jobTitle) { this.jobTitle = jobTitle; }
