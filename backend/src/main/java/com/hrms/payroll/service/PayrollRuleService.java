@@ -12,6 +12,7 @@ import com.hrms.payroll.repository.PayrollRuleRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
@@ -51,18 +52,48 @@ public class PayrollRuleService {
         rule.setProjectId(dto.getProjectId());
         rule.setPayItemBasis(payItemBasis);
         rule.setQuantitySource(normalizeQuantitySource(dto.getQuantitySource(), payItemBasis));
-        rule.setOtMultiplier(dto.getOtMultiplier() != null ? dto.getOtMultiplier() : new java.math.BigDecimal("1.2500"));
-        rule.setRestDayOtMultiplier(dto.getRestDayOtMultiplier() != null ? dto.getRestDayOtMultiplier() : new java.math.BigDecimal("1.5000"));
-        rule.setStandardHoursPerDay(dto.getStandardHoursPerDay() != null ? dto.getStandardHoursPerDay() : new java.math.BigDecimal("8.00"));
-        rule.setMonthDivisor(dto.getMonthDivisor() != null ? dto.getMonthDivisor() : new java.math.BigDecimal("30.00"));
+        rule.setOtMultiplier(dto.getOtMultiplier() != null ? dto.getOtMultiplier() : new BigDecimal("1.2500"));
+        rule.setRestDayOtMultiplier(dto.getRestDayOtMultiplier() != null ? dto.getRestDayOtMultiplier() : new BigDecimal("1.5000"));
+        rule.setStandardHoursPerDay(dto.getStandardHoursPerDay() != null ? dto.getStandardHoursPerDay() : new BigDecimal("8.00"));
+        rule.setMonthDivisor(dto.getMonthDivisor() != null ? dto.getMonthDivisor() : new BigDecimal("30.00"));
         rule.setDivisorMode(dto.getDivisorMode() != null ? dto.getDivisorMode() : "FIXED");
         rule.setWeeklyRestPaid(dto.isWeeklyRestPaid());
         rule.setDayZeroCutoffDay(dto.getDayZeroCutoffDay());
         rule.setStatus("ACTIVE");
         rule = repository.save(rule);
         saveCategoryRules(companyId, rule.getId(), dto.getCategoryRules());
-        ensureDefaultCategoryRules(companyId, rule.getId());
+        ensureDefaultCategoryRules(companyId, rule.getId(), group);
         return toDto(rule);
+    }
+
+    public void initializeDefaultsForProject(UUID companyId, UUID projectId) {
+        requireProject(projectId);
+        createDefaultRuleIfMissing(companyId, projectId, defaultDailyRule(projectId));
+        createDefaultRuleIfMissing(companyId, projectId, defaultMonthlyRule(projectId));
+    }
+
+    private void createDefaultRuleIfMissing(UUID companyId, UUID projectId, PayrollRuleDto dto) {
+        String group = normalizeRequired(dto.getPayGroup(), "Pay group is required.");
+        if (repository.findByCompanyIdAndProjectIdAndPayGroupAndStatus(companyId, projectId, group, "ACTIVE").isPresent()) {
+            return;
+        }
+        PayrollRule rule = new PayrollRule();
+        rule.setCompanyId(companyId);
+        rule.setProjectId(projectId);
+        rule.setPayGroup(group);
+        rule.setPayItemBasis(dto.getPayItemBasis());
+        rule.setQuantitySource(normalizeQuantitySource(dto.getQuantitySource(), dto.getPayItemBasis()));
+        rule.setOtMultiplier(dto.getOtMultiplier());
+        rule.setRestDayOtMultiplier(dto.getRestDayOtMultiplier());
+        rule.setStandardHoursPerDay(dto.getStandardHoursPerDay());
+        rule.setMonthDivisor(dto.getMonthDivisor());
+        rule.setDivisorMode(dto.getDivisorMode());
+        rule.setWeeklyRestPaid(dto.isWeeklyRestPaid());
+        rule.setDayZeroCutoffDay(dto.getDayZeroCutoffDay());
+        rule.setStatus("ACTIVE");
+        rule = repository.save(rule);
+        saveCategoryRules(companyId, rule.getId(), dto.getCategoryRules());
+        ensureDefaultCategoryRules(companyId, rule.getId(), group);
     }
 
     private static String normalizeRequired(String value, String message) {
@@ -70,6 +101,53 @@ public class PayrollRuleService {
             throw new BusinessRuleException("payroll.rule.required", message);
         }
         return value.trim().toUpperCase();
+    }
+
+    public static PayrollRuleDto defaultDailyRule(UUID projectId) {
+        PayrollRuleDto dto = baseDefaultRule(projectId, "DAILY", "DAILY_RATE", "ACTUAL_WORKED");
+        dto.setWeeklyRestPaid(false);
+        dto.setDayZeroCutoffDay(null);
+        dto.setCategoryRules(List.of(
+                category("ALLOWANCE", "ACTUAL_PAYABLE", "INHERIT", null),
+                category("SALARY", "ACTUAL_PAYABLE", "INHERIT", null)
+        ));
+        return dto;
+    }
+
+    public static PayrollRuleDto defaultMonthlyRule(UUID projectId) {
+        PayrollRuleDto dto = baseDefaultRule(projectId, "MONTHLY", "FIXED_AMOUNT", "PAYABLE_SCHEDULE");
+        dto.setWeeklyRestPaid(true);
+        dto.setDayZeroCutoffDay(22);
+        dto.setCategoryRules(List.of(
+                category("ALLOWANCE", "FIXED_AMOUNT", "FIXED", new BigDecimal("30.00")),
+                category("SALARY", "FIXED_AMOUNT", "FIXED", new BigDecimal("30.00"))
+        ));
+        return dto;
+    }
+
+    private static PayrollRuleDto baseDefaultRule(UUID projectId, String payGroup, String payItemBasis, String quantitySource) {
+        PayrollRuleDto dto = new PayrollRuleDto();
+        dto.setProjectId(projectId);
+        dto.setPayGroup(payGroup);
+        dto.setPayItemBasis(payItemBasis);
+        dto.setQuantitySource(quantitySource);
+        dto.setOtMultiplier(new BigDecimal("1.2500"));
+        dto.setRestDayOtMultiplier(new BigDecimal("1.5000"));
+        dto.setStandardHoursPerDay(new BigDecimal("8.00"));
+        dto.setMonthDivisor(new BigDecimal("30.00"));
+        dto.setDivisorMode("FIXED");
+        dto.setStatus("ACTIVE");
+        return dto;
+    }
+
+    private static PayrollCategoryRuleDto category(String category, String basis, String divisorMode, BigDecimal monthDivisor) {
+        PayrollCategoryRuleDto dto = new PayrollCategoryRuleDto();
+        dto.setCategory(category);
+        dto.setBasis(basis);
+        dto.setDivisorMode(divisorMode);
+        dto.setMonthDivisor(monthDivisor);
+        dto.setStatus("ACTIVE");
+        return dto;
     }
 
     public PayrollRuleDto update(UUID id, PayrollRuleDto dto) {
@@ -91,7 +169,7 @@ public class PayrollRuleService {
         rule.setDayZeroCutoffDay(dto.getDayZeroCutoffDay());
         rule = repository.save(rule);
         saveCategoryRules(rule.getCompanyId(), rule.getId(), dto.getCategoryRules());
-        ensureDefaultCategoryRules(rule.getCompanyId(), rule.getId());
+        ensureDefaultCategoryRules(rule.getCompanyId(), rule.getId(), rule.getPayGroup());
         return toDto(rule);
     }
 
@@ -135,12 +213,18 @@ public class PayrollRuleService {
         return "DAILY_RATE".equalsIgnoreCase(payItemBasis) ? "ACTUAL_WORKED" : "PAYABLE_SCHEDULE";
     }
 
-    private void ensureDefaultCategoryRules(UUID companyId, UUID payrollRuleId) {
-        ensureDefaultCategoryRule(companyId, payrollRuleId, "SALARY", "FULL_MONTH");
-        ensureDefaultCategoryRule(companyId, payrollRuleId, "ALLOWANCE", "ACTUAL_PAYABLE");
+    private void ensureDefaultCategoryRules(UUID companyId, UUID payrollRuleId, String payGroup) {
+        if ("MONTHLY".equalsIgnoreCase(payGroup)) {
+            ensureDefaultCategoryRule(companyId, payrollRuleId, "ALLOWANCE", "FIXED_AMOUNT", "FIXED", new BigDecimal("30.00"));
+            ensureDefaultCategoryRule(companyId, payrollRuleId, "SALARY", "FIXED_AMOUNT", "FIXED", new BigDecimal("30.00"));
+            return;
+        }
+        ensureDefaultCategoryRule(companyId, payrollRuleId, "ALLOWANCE", "ACTUAL_PAYABLE", "INHERIT", null);
+        ensureDefaultCategoryRule(companyId, payrollRuleId, "SALARY", "ACTUAL_PAYABLE", "INHERIT", null);
     }
 
-    private void ensureDefaultCategoryRule(UUID companyId, UUID payrollRuleId, String category, String basis) {
+    private void ensureDefaultCategoryRule(UUID companyId, UUID payrollRuleId, String category, String basis,
+                                           String divisorMode, BigDecimal monthDivisor) {
         if (categoryRuleRepository.findByPayrollRuleIdAndCategoryAndStatus(payrollRuleId, category, "ACTIVE").isPresent()) {
             return;
         }
@@ -149,7 +233,8 @@ public class PayrollRuleService {
         row.setPayrollRuleId(payrollRuleId);
         row.setCategory(category);
         row.setBasis(basis);
-        row.setDivisorMode("INHERIT");
+        row.setDivisorMode(divisorMode);
+        row.setMonthDivisor(monthDivisor);
         row.setStatus("ACTIVE");
         categoryRuleRepository.save(row);
     }

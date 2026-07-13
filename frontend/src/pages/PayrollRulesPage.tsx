@@ -44,9 +44,66 @@ const CATEGORY_DIVISOR_MODE = [
 ];
 
 const DEFAULT_CATEGORY_RULES: PayrollCategoryRule[] = [
-  { category: "SALARY", basis: "FULL_MONTH", divisorMode: "INHERIT", monthDivisor: null },
   { category: "ALLOWANCE", basis: "ACTUAL_PAYABLE", divisorMode: "INHERIT", monthDivisor: null },
+  { category: "SALARY", basis: "ACTUAL_PAYABLE", divisorMode: "INHERIT", monthDivisor: null },
 ];
+
+const MONTHLY_CATEGORY_RULES: PayrollCategoryRule[] = [
+  { category: "ALLOWANCE", basis: "FIXED_AMOUNT", divisorMode: "FIXED", monthDivisor: 30 },
+  { category: "SALARY", basis: "FIXED_AMOUNT", divisorMode: "FIXED", monthDivisor: 30 },
+];
+
+function defaultRuleFor(projectId: string, payGroup: string): PayrollRule {
+  if (payGroup === "DAILY") {
+    return {
+      payGroup,
+      projectId,
+      payItemBasis: "DAILY_RATE",
+      quantitySource: "ACTUAL_WORKED",
+      otMultiplier: 1.25,
+      restDayOtMultiplier: 1.5,
+      standardHoursPerDay: 8,
+      weeklyRestPaid: false,
+      monthDivisor: 30,
+      divisorMode: "FIXED",
+      dayZeroCutoffDay: null,
+      status: "ACTIVE",
+      categoryRules: DEFAULT_CATEGORY_RULES,
+    };
+  }
+  if (payGroup === "MONTHLY") {
+    return {
+      payGroup,
+      projectId,
+      payItemBasis: "FIXED_AMOUNT",
+      quantitySource: "PAYABLE_SCHEDULE",
+      otMultiplier: 1.25,
+      restDayOtMultiplier: 1.5,
+      standardHoursPerDay: 8,
+      weeklyRestPaid: true,
+      monthDivisor: 30,
+      divisorMode: "FIXED",
+      dayZeroCutoffDay: 22,
+      status: "ACTIVE",
+      categoryRules: MONTHLY_CATEGORY_RULES,
+    };
+  }
+  return {
+    payGroup,
+    projectId,
+    payItemBasis: "FIXED_AMOUNT",
+    quantitySource: "PAYABLE_SCHEDULE",
+    otMultiplier: 1.25,
+    restDayOtMultiplier: 1.5,
+    standardHoursPerDay: 8,
+    weeklyRestPaid: true,
+    monthDivisor: 30,
+    divisorMode: "FIXED",
+    dayZeroCutoffDay: null,
+    status: "ACTIVE",
+    categoryRules: MONTHLY_CATEGORY_RULES,
+  };
+}
 
 function formulaFor(rule: PayrollRule) {
   if (rule.payItemBasis === "DAILY_RATE") {
@@ -86,20 +143,7 @@ export default function PayrollRulesPage() {
   const cloneForProject = (payGroup: string) => {
     const base = rules.find((r) => !r.projectId && r.payGroup === payGroup);
     if (!base) {
-      createRule.mutate({
-        payGroup,
-        projectId,
-        payItemBasis: "FIXED_AMOUNT",
-        quantitySource: payGroup === "DAILY" ? "ACTUAL_WORKED" : "PAYABLE_SCHEDULE",
-        otMultiplier: 1.25,
-        restDayOtMultiplier: 1.5,
-        standardHoursPerDay: 8,
-        weeklyRestPaid: true,
-        monthDivisor: 30,
-        divisorMode: "FIXED",
-        status: "ACTIVE",
-        categoryRules: DEFAULT_CATEGORY_RULES,
-      });
+      createRule.mutate(defaultRuleFor(projectId, payGroup));
       return;
     }
     const { id, ...rest } = base;

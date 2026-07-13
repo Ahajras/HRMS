@@ -3,6 +3,7 @@ package com.hrms.project.service;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
 import com.hrms.crew.service.TimekeeperService;
+import com.hrms.payroll.service.PayrollRuleService;
 import com.hrms.project.domain.Project;
 import com.hrms.project.dto.ProjectDto;
 import com.hrms.project.repository.ProjectRepository;
@@ -26,12 +27,15 @@ public class ProjectService {
     private final ProjectRepository repository;
     private final TimekeeperService timekeeperService;
     private final AppUserRepository appUserRepo;
+    private final PayrollRuleService payrollRuleService;
 
     public ProjectService(ProjectRepository repository, TimekeeperService timekeeperService,
-                          AppUserRepository appUserRepo) {
+                          AppUserRepository appUserRepo,
+                          PayrollRuleService payrollRuleService) {
         this.repository = repository;
         this.timekeeperService = timekeeperService;
         this.appUserRepo = appUserRepo;
+        this.payrollRuleService = payrollRuleService;
     }
 
     @Transactional(readOnly = true)
@@ -52,9 +56,12 @@ public class ProjectService {
 
     public ProjectDto create(ProjectDto dto) {
         Project entity = new Project();
-        entity.setCompanyId(TenantContext.requireCompanyId());
+        UUID companyId = TenantContext.requireCompanyId();
+        entity.setCompanyId(companyId);
         apply(dto, entity);
-        return toDto(repository.save(entity));
+        Project saved = repository.save(entity);
+        payrollRuleService.initializeDefaultsForProject(companyId, saved.getId());
+        return toDto(saved);
     }
 
     public ProjectDto update(UUID id, ProjectDto dto) {
