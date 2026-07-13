@@ -23,7 +23,7 @@ SET action = CASE
         ELSE 'Initialized late rule: pay planned shift hours; late deduction is handled by basic salary.'
     END,
     updated_at = now()
-FROM time_type tt
-JOIN payroll_component pc ON pc.id = r.payroll_component_id
+FROM time_type tt, payroll_component pc
 WHERE r.time_type_id = tt.id
+  AND pc.id = r.payroll_component_id
   AND tt.code = 'T';
