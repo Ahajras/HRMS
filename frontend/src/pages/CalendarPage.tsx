@@ -1,4 +1,4 @@
-import { Fragment, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import {
   Box,
   Button,
@@ -124,11 +124,17 @@ export default function CalendarPage() {
 
 function ProjectLocksPanel({ periodId }: { periodId: string }) {
   const qc = useQueryClient();
-  const [payGroup, setPayGroup] = useState("ALL");
+  const [payGroup, setPayGroup] = useState("");
   const { data: payGroups = [] } = useQuery({ queryKey: ["lookup", "PAY_STATUS"], queryFn: () => lookupApi.byCategory("PAY_STATUS") });
+  useEffect(() => {
+    if (!payGroup && payGroups.length > 0) {
+      setPayGroup(payGroups[0].code ?? "");
+    }
+  }, [payGroup, payGroups]);
   const { data: rows = [] } = useQuery({
     queryKey: ["periodLocks", periodId, payGroup],
     queryFn: () => periodLockApi.statuses(periodId, payGroup),
+    enabled: !!payGroup,
   });
   const act = useMutation({
     mutationFn: ({ projectId, a }: { projectId: string; a: "lock" | "close" | "reopen" }) =>
@@ -141,7 +147,7 @@ function ProjectLocksPanel({ periodId }: { periodId: string }) {
       <Stack direction="row" spacing={1.5} alignItems="center" mb={1}>
         <Typography variant="subtitle2">Lock per project (ready for payroll)</Typography>
         <TextField select size="small" label="Pay group" value={payGroup} onChange={(e) => setPayGroup(e.target.value)} sx={{ minWidth: 160 }}>
-          <MenuItem value="ALL">All</MenuItem>
+          <MenuItem value="" disabled>Select pay group</MenuItem>
           {payGroups.map((g) => (
             <MenuItem key={g.code} value={g.code}>{g.label || g.code}</MenuItem>
           ))}

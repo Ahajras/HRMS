@@ -50,7 +50,7 @@ export default function PayrollRunsPage() {
   const qc = useQueryClient();
   const [periodId, setPeriodId] = useState("");
   const [projectId, setProjectId] = useState("");
-  const [payGroup, setPayGroup] = useState("ALL");
+  const [payGroup, setPayGroup] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [calcJobId, setCalcJobId] = useState<string | null>(null);
   const [calcRunId, setCalcRunId] = useState<string | null>(null);
@@ -75,9 +75,14 @@ export default function PayrollRunsPage() {
       setPeriodId(periods[0].id ?? "");
     }
   }, [periodId, periods]);
+  useEffect(() => {
+    if (!payGroup && payGroups.length > 0) {
+      setPayGroup(payGroups[0].code ?? "");
+    }
+  }, [payGroup, payGroups]);
 
   const create = useMutation({
-    mutationFn: () => payrollRunApi.create(periodId, projectId || undefined, payGroup),
+    mutationFn: () => payrollRunApi.create(periodId, projectId, payGroup),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["payrollRuns"] });
       setSelectedId(r.id ?? null);
@@ -145,20 +150,20 @@ export default function PayrollRunsPage() {
           </Grid>
           <Grid item xs={12} sm={4}>
             <TextField select fullWidth size="small" label="Project" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-              <MenuItem value="">Whole company</MenuItem>
+              <MenuItem value="" disabled>Select project</MenuItem>
               {projects.map((p) => <MenuItem key={p.id} value={p.id}>{p.code} — {p.name}</MenuItem>)}
             </TextField>
           </Grid>
           <Grid item xs={6} sm={2}>
             <TextField select fullWidth size="small" label="Pay group" value={payGroup} onChange={(e) => setPayGroup(e.target.value)}>
-              <MenuItem value="ALL">All</MenuItem>
+              <MenuItem value="" disabled>Select pay group</MenuItem>
               {payGroups.map((g) => (
                 <MenuItem key={g.code} value={g.code}>{g.label || g.code}</MenuItem>
               ))}
             </TextField>
           </Grid>
           <Grid item xs={6} sm={2}>
-            <Button variant="contained" disabled={!periodId || create.isPending} onClick={() => create.mutate()}>
+            <Button variant="contained" disabled={!periodId || !projectId || !payGroup || create.isPending} onClick={() => create.mutate()}>
               Create run
             </Button>
           </Grid>

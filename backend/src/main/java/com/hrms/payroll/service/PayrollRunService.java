@@ -305,6 +305,14 @@ public class PayrollRunService {
         UUID companyId = TenantContext.requireCompanyId();
         periodRepo.findById(periodId).orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
         String normalizedPayGroup = normalizePayGroup(payGroup);
+        if (projectId == null) {
+            throw new BusinessRuleException("payroll.run.project_required",
+                    "Select a project before creating payroll. Payroll is locked and calculated by period/project/pay group.");
+        }
+        if ("ALL".equals(normalizedPayGroup)) {
+            throw new BusinessRuleException("payroll.run.pay_group_required",
+                    "Select a pay group before creating payroll. Payroll is locked and calculated by period/project/pay group.");
+        }
         List<PayrollRun> existing = runRepo.findExistingScope(companyId, periodId, projectId, normalizedPayGroup);
         if (!existing.isEmpty()) {
             return toDto(existing.get(0), false);
@@ -1638,13 +1646,15 @@ public class PayrollRunService {
 
     private void assertPayrollScopeLocked(PayrollRun run) {
         if (run.getProjectId() == null) {
-            return;
+            throw new BusinessRuleException("payroll.scope.project_required",
+                    "Select a project before calculating payroll. Payroll must be locked by period/project/pay group first.");
         }
         String group = normalizePayGroup(run.getPayGroup());
+        if ("ALL".equals(group)) {
+            throw new BusinessRuleException("payroll.scope.pay_group_required",
+                    "Select a pay group before calculating payroll. Payroll must be locked by period/project/pay group first.");
+        }
         boolean locked = periodProjectRepo
-                .findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(run.getCompanyId(), run.getPeriodId(), run.getProjectId(), "ALL")
-                .map(PayrollPeriodProject::getStatus).filter(s -> "LOCKED".equals(s) || "CLOSED".equals(s)).isPresent()
-                || periodProjectRepo
                 .findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(run.getCompanyId(), run.getPeriodId(), run.getProjectId(), group)
                 .map(PayrollPeriodProject::getStatus).filter(s -> "LOCKED".equals(s) || "CLOSED".equals(s)).isPresent();
         if (!locked) {
