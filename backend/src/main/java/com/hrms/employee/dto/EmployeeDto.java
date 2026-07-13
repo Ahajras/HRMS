@@ -66,6 +66,9 @@ public class EmployeeDto {
 
     private String status = "ACTIVE";
 
+    @Size(max = 20)
+    private String paymentMethodCode = "BANK";
+
     @Size(max = 150)
     private String jobTitle;
 
@@ -165,6 +168,9 @@ public class EmployeeDto {
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
+
+    public String getPaymentMethodCode() { return paymentMethodCode; }
+    public void setPaymentMethodCode(String paymentMethodCode) { this.paymentMethodCode = paymentMethodCode; }
 
     public String getJobTitle() { return jobTitle; }
     public void setJobTitle(String jobTitle) { this.jobTitle = jobTitle; }

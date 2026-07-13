@@ -20,6 +20,8 @@ public class ProjectDto {
 
     private UUID managerEmployeeId;
 
+    private UUID sponsorId;
+
     private String status = "ACTIVE";
 
     public UUID getId() { return id; }
@@ -36,6 +38,9 @@ public class ProjectDto {
 
     public UUID getManagerEmployeeId() { return managerEmployeeId; }
     public void setManagerEmployeeId(UUID managerEmployeeId) { this.managerEmployeeId = managerEmployeeId; }
+
+    public UUID getSponsorId() { return sponsorId; }
+    public void setSponsorId(UUID sponsorId) { this.sponsorId = sponsorId; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

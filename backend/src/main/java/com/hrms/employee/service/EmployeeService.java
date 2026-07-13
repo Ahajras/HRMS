@@ -179,6 +179,7 @@ public class EmployeeService {
         entity.setTerminationDate(dto.getTerminationDate());
         entity.setEmail(dto.getEmail());
         entity.setPhone(dto.getPhone());
+        entity.setPaymentMethodCode(dto.getPaymentMethodCode() != null ? dto.getPaymentMethodCode() : "BANK");
         entity.setJobTitle(dto.getJobTitle());
         entity.setJobTitleCode(dto.getJobTitleCode());
         entity.setPayStatus(dto.getPayStatus());
@@ -222,6 +223,7 @@ public class EmployeeService {
         dto.setTerminationDate(entity.getTerminationDate());
         dto.setEmail(entity.getEmail());
         dto.setPhone(entity.getPhone());
+        dto.setPaymentMethodCode(entity.getPaymentMethodCode());
         dto.setJobTitle(entity.getJobTitle());
         dto.setJobTitleCode(entity.getJobTitleCode());
         dto.setPayStatus(entity.getPayStatus());

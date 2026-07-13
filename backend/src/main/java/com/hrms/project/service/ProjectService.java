@@ -103,6 +103,7 @@ public class ProjectService {
         entity.setCode(dto.getCode());
         entity.setName(dto.getName());
         entity.setManagerEmployeeId(dto.getManagerEmployeeId());
+        entity.setSponsorId(dto.getSponsorId());
         if (dto.getStatus() != null) {
             entity.setStatus(dto.getStatus());
         }
@@ -115,6 +116,7 @@ public class ProjectService {
         dto.setCode(e.getCode());
         dto.setName(e.getName());
         dto.setManagerEmployeeId(e.getManagerEmployeeId());
+        dto.setSponsorId(e.getSponsorId());
         dto.setStatus(e.getStatus());
         return dto;
     }
