@@ -1152,6 +1152,9 @@ public class PayrollRunService {
             }
             return planned.subtract(actualPayHours(day)).max(BigDecimal.ZERO);
         }
+        if ("PLANNED_SHIFT".equals(normalized)) {
+            return plannedShiftHours(day, standardHours);
+        }
         if ("DAYS".equals(normalized) || "FIXED".equals(normalized)) {
             BigDecimal hours = quantityHours(day, standardHours, quantitySource);
             if (hours.compareTo(BigDecimal.ZERO) <= 0) {
