@@ -111,16 +111,16 @@ public class TimeTypePayrollRuleService {
             entity.setCompanyId(companyId);
             entity.setTimeTypeId(timeTypeId);
             entity.setPayrollComponentId(component.getId());
-            entity.setAction("PAY");
+            entity.setAction("DEDUCT");
             entity.setPercent(new java.math.BigDecimal("100.00"));
-            entity.setBasis("HOURS");
+            entity.setBasis("SHORTAGE");
             entity.setThresholdDays(0);
             entity.setThresholdScope("NONE");
             entity.setYearBasis("CALENDAR");
             entity.setAffectsOvertime(false);
             entity.setProcessSeparately(false);
             entity.setSortOrder(component.getPriority());
-            entity.setRemarks("Initialized late rule: pay worked hours.");
+            entity.setRemarks("Initialized late rule: pay planned hours and deduct shortage hours.");
             repository.save(entity);
         }
     }
