@@ -66,6 +66,10 @@ public class TimeTypePayrollRuleService {
     public List<TimeTypePayrollRuleDto> initializeDefaults(UUID timeTypeId) {
         UUID companyId = TenantContext.requireCompanyId();
         TimeType timeType = requireTimeType(companyId, timeTypeId);
+        if ("T".equalsIgnoreCase(timeType.getCode())) {
+            initializeLateDefaults(companyId, timeTypeId);
+            return findByTimeType(timeTypeId);
+        }
         boolean unpaid = "U".equalsIgnoreCase(timeType.getCode());
         String defaultAction = unpaid ? "DEDUCT" : "PAY";
         for (PayrollComponent component : payrollComponentRepository.findByCompanyIdOrderByPriority(companyId)) {
@@ -96,14 +100,66 @@ public class TimeTypePayrollRuleService {
         return findByTimeType(timeTypeId);
     }
 
+    private void initializeLateDefaults(UUID companyId, UUID timeTypeId) {
+        repository.findByCompanyIdAndTimeTypeIdOrderBySortOrderAsc(companyId, timeTypeId).stream()
+                .filter(rule -> !isBasicSalaryComponent(companyId, rule.getPayrollComponentId()))
+                .filter(TimeTypePayrollRuleService::isInitializedRule)
+                .forEach(repository::delete);
+        for (PayrollComponent component : payrollComponentRepository.findByCompanyIdOrderByPriority(companyId)) {
+            if (!"ACTIVE".equalsIgnoreCase(component.getStatus()) || !isBasicSalaryComponent(component)) {
+                continue;
+            }
+            TimeTypePayrollRule entity = repository
+                    .findByCompanyIdAndTimeTypeIdAndPayrollComponentId(companyId, timeTypeId, component.getId())
+                    .orElseGet(TimeTypePayrollRule::new);
+            entity.setCompanyId(companyId);
+            entity.setTimeTypeId(timeTypeId);
+            entity.setPayrollComponentId(component.getId());
+            entity.setAction("DEDUCT");
+            entity.setPercent(new java.math.BigDecimal("100.00"));
+            entity.setBasis("SHORTAGE");
+            entity.setThresholdDays(0);
+            entity.setThresholdScope("NONE");
+            entity.setYearBasis("CALENDAR");
+            entity.setAffectsOvertime(false);
+            entity.setProcessSeparately(false);
+            entity.setSortOrder(100);
+            entity.setRemarks("Late/short worked: deduct only planned-vs-worked shortage from basic salary.");
+            repository.save(entity);
+        }
+    }
+
     private static boolean shouldResetInitializedRule(TimeTypePayrollRule entity, boolean unpaid) {
         if (unpaid) {
             return true;
         }
+        return isInitializedRule(entity);
+    }
+
+    private static boolean isInitializedRule(TimeTypePayrollRule entity) {
         String action = entity.getAction();
         String remarks = entity.getRemarks();
         return "DEFAULT".equalsIgnoreCase(action)
                 || (remarks != null && remarks.trim().toUpperCase().startsWith("INITIALIZED"));
+    }
+
+    private boolean isBasicSalaryComponent(UUID companyId, UUID componentId) {
+        return payrollComponentRepository.findById(componentId)
+                .filter(component -> companyId.equals(component.getCompanyId()))
+                .map(TimeTypePayrollRuleService::isBasicSalaryComponent)
+                .orElse(false);
+    }
+
+    private static boolean isBasicSalaryComponent(PayrollComponent component) {
+        String category = component.getCategory() == null ? "" : component.getCategory();
+        String name = component.getName() == null ? "" : component.getName();
+        String code = component.getCode() == null ? "" : component.getCode();
+        return "SALARY".equalsIgnoreCase(category)
+                && ("01".equalsIgnoreCase(code)
+                || "00".equalsIgnoreCase(code)
+                || "LEG00".equalsIgnoreCase(code)
+                || name.toUpperCase().contains("BASIC")
+                || name.toUpperCase().contains("BASE"));
     }
 
     public void delete(UUID timeTypeId, UUID componentId) {
