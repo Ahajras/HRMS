@@ -1030,7 +1030,7 @@ public class PayrollRunService {
             // base pay starts full and genuinely needs this deduction.
             String category = type != null ? type.getCategory() : "REGULAR";
             boolean unpaidDay = isUnpaidCategory(category) || (type != null && !type.isPaid());
-            if (usesActualWorked(rule) && unpaidDay) {
+            if (isDailyRule(rule) && usesActualWorked(rule) && unpaidDay) {
                 return DayEffect.none();
             }
             return new DayEffect(legacy.payQuantity(), scaled, explicit.getBasis());
