@@ -30,13 +30,17 @@ public class PayrollRuleService {
     @Transactional(readOnly = true)
     public List<PayrollRuleDto> list() {
         UUID companyId = TenantContext.requireCompanyId();
-        return repository.findByCompanyIdOrderByPayGroup(companyId).stream().map(this::toDto).toList();
+        return repository.findByCompanyIdOrderByPayGroup(companyId).stream()
+                .filter(rule -> "ACTIVE".equalsIgnoreCase(rule.getStatus()))
+                .map(this::toDto)
+                .toList();
     }
 
     public PayrollRuleDto create(PayrollRuleDto dto) {
         UUID companyId = TenantContext.requireCompanyId();
         String group = normalizeRequired(dto.getPayGroup(), "Pay group is required.");
         String payItemBasis = normalizeRequired(dto.getPayItemBasis(), "Pay item basis is required.");
+        requireProject(dto.getProjectId());
         // If a rule already exists for this (company, project, pay group), reuse it
         // instead of creating a duplicate (avoids the unique-index violation).
         PayrollRule rule = repository
@@ -74,6 +78,7 @@ public class PayrollRuleService {
         if (!TenantContext.requireCompanyId().equals(rule.getCompanyId())) {
             throw new ResourceNotFoundException("Payroll rule not found: " + id);
         }
+        requireProject(dto.getProjectId());
         rule.setPayItemBasis(dto.getPayItemBasis());
         rule.setQuantitySource(normalizeQuantitySource(dto.getQuantitySource(), dto.getPayItemBasis()));
         rule.setOtMultiplier(dto.getOtMultiplier());
@@ -88,6 +93,13 @@ public class PayrollRuleService {
         saveCategoryRules(rule.getCompanyId(), rule.getId(), dto.getCategoryRules());
         ensureDefaultCategoryRules(rule.getCompanyId(), rule.getId());
         return toDto(rule);
+    }
+
+    private static void requireProject(UUID projectId) {
+        if (projectId == null) {
+            throw new BusinessRuleException("payroll.rule.project_required",
+                    "Project is required. Payroll rules must be defined per project before payroll can be calculated.");
+        }
     }
 
     private void saveCategoryRules(UUID companyId, UUID payrollRuleId, List<PayrollCategoryRuleDto> rows) {

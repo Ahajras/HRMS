@@ -1171,9 +1171,9 @@ public class PayrollRunService {
                 return projectRule.get();
             }
         }
-        return ruleRepo.findDefaultByCompanyIdAndPayGroupAndStatus(companyId, group, "ACTIVE")
-                .orElseThrow(() -> new BusinessRuleException("payroll.rule.missing",
-                        "No active payroll rule is configured for pay group " + group + "."));
+        throw new BusinessRuleException("payroll.rule.missing",
+                "No active project payroll rule is configured for pay group " + group
+                        + ". Configure Payroll Rules for the employee project first.");
     }
 
     private PayrollRule payrollRule(Map<PayrollRuleKey, PayrollRule> rules, UUID companyId, UUID projectId, String payStatus) {
@@ -1182,12 +1182,9 @@ public class PayrollRunService {
         if (projectRule != null) {
             return projectRule;
         }
-        PayrollRule defaultRule = rules.get(new PayrollRuleKey(null, group));
-        if (defaultRule != null) {
-            return defaultRule;
-        }
         throw new BusinessRuleException("payroll.rule.missing",
-                "No active payroll rule is configured for pay group " + group + ".");
+                "No active project payroll rule is configured for pay group " + group
+                        + ". Configure Payroll Rules for the employee project first.");
     }
 
     private PayableBreakdown payableBreakdown(Timesheet ts, PayrollRule rule, BigDecimal shiftHours) {
