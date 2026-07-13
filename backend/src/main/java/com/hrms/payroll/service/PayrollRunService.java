@@ -989,6 +989,24 @@ public class PayrollRunService {
                 legacyPayHours = legacyPayHours.add(effect.payQuantity());
             }
         }
+        if (!isDailyRule(rule) && usesActualWorked(rule)) {
+            for (TimesheetDay day : policy.days()) {
+                TimeType type = day.getTimeTypeId() != null ? policy.types().get(day.getTimeTypeId()) : null;
+                String category = type != null ? type.getCategory() : "REGULAR";
+                boolean rest = "REST".equalsIgnoreCase(category) || "HOLIDAY".equalsIgnoreCase(category);
+                boolean unpaid = isUnpaidCategory(category) || (type != null && !type.isPaid());
+                if (rest || unpaid) {
+                    continue;
+                }
+                BigDecimal shortage = scheduledRegularHours(day, policy.shiftHours()).subtract(actualPayHours(day)).max(BigDecimal.ZERO);
+                if (shortage.compareTo(BigDecimal.ZERO) > 0) {
+                    touched = true;
+                    basis = "HOURS";
+                    deductQty = deductQty.add(shortage);
+                    deductionDetails.add(shortWorkedDetail(day, type, shortage));
+                }
+            }
+        }
         if ("FULL_MONTH".equals(categoryPolicy.basis()) && !isDailyRule(rule) && legacyPayHours.compareTo(BigDecimal.ZERO) > 0) {
             BigDecimal divisorFull = effectiveDivisor(rule, categoryPolicy, periodDays).multiply(policy.shiftHours());
             payQty = payQty.subtract(legacyPayHours).add(divisorFull);
@@ -1044,6 +1062,14 @@ public class PayrollRunService {
         return day.getWorkDate() + " | " + code + (name == null || name.isBlank() ? "" : " - " + name)
                 + " | " + z(quantity).stripTrailingZeros().toPlainString() + " " + basis
                 + " | " + action + " " + percent.stripTrailingZeros().toPlainString() + "%";
+    }
+
+    private static String shortWorkedDetail(TimesheetDay day, TimeType type, BigDecimal quantity) {
+        String code = type != null ? type.getCode() : String.valueOf(day.getTimeTypeId());
+        String name = type != null ? type.getName() : "";
+        return day.getWorkDate() + " | " + code + (name == null || name.isBlank() ? "" : " - " + name)
+                + " | " + z(quantity).stripTrailingZeros().toPlainString() + " HOURS"
+                + " | DEDUCT 100%";
     }
 
     private static List<TimeTypeDetailGroup> detailGroups(String details) {
@@ -1284,6 +1310,12 @@ public class PayrollRunService {
         BigDecimal normal = z(day.getNormalHours());
         if (normal.compareTo(BigDecimal.ZERO) > 0) return normal;
         return z(day.getWorkedHours()).subtract(z(day.getOtHours())).max(BigDecimal.ZERO);
+    }
+
+    private static BigDecimal scheduledRegularHours(TimesheetDay day, BigDecimal standardHours) {
+        BigDecimal planned = z(day.getPlannedHours());
+        if (planned.compareTo(BigDecimal.ZERO) > 0) return planned;
+        return z(standardHours);
     }
 
     private static BigDecimal plannedShiftHours(TimesheetDay day, BigDecimal standardHours) {
