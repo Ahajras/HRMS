@@ -101,30 +101,32 @@ public class TimeTypePayrollRuleService {
     }
 
     private void initializeLateDefaults(UUID companyId, UUID timeTypeId) {
-        repository.findByCompanyIdAndTimeTypeIdOrderBySortOrderAsc(companyId, timeTypeId).stream()
-                .filter(rule -> !isBasicSalaryComponent(companyId, rule.getPayrollComponentId()))
-                .filter(TimeTypePayrollRuleService::isInitializedRule)
-                .forEach(repository::delete);
         for (PayrollComponent component : payrollComponentRepository.findByCompanyIdOrderByPriority(companyId)) {
-            if (!"ACTIVE".equalsIgnoreCase(component.getStatus()) || !isBasicSalaryComponent(component)) {
+            if (!"ACTIVE".equalsIgnoreCase(component.getStatus())) {
                 continue;
             }
+            boolean basicSalary = isBasicSalaryComponent(component);
             TimeTypePayrollRule entity = repository
                     .findByCompanyIdAndTimeTypeIdAndPayrollComponentId(companyId, timeTypeId, component.getId())
                     .orElseGet(TimeTypePayrollRule::new);
+            if (entity.getId() != null && !shouldResetInitializedRule(entity, false)) {
+                continue;
+            }
             entity.setCompanyId(companyId);
             entity.setTimeTypeId(timeTypeId);
             entity.setPayrollComponentId(component.getId());
-            entity.setAction("DEDUCT");
+            entity.setAction(basicSalary ? "DEDUCT" : "PAY");
             entity.setPercent(new java.math.BigDecimal("100.00"));
-            entity.setBasis("SHORTAGE");
+            entity.setBasis(basicSalary ? "SHORTAGE" : "HOURS");
             entity.setThresholdDays(0);
             entity.setThresholdScope("NONE");
             entity.setYearBasis("CALENDAR");
             entity.setAffectsOvertime(false);
             entity.setProcessSeparately(false);
-            entity.setSortOrder(100);
-            entity.setRemarks("Late/short worked: deduct only planned-vs-worked shortage from basic salary.");
+            entity.setSortOrder(basicSalary ? 100 : component.getPriority());
+            entity.setRemarks(basicSalary
+                    ? "Initialized late rule: deduct planned-vs-worked shortage from basic salary."
+                    : "Initialized late rule: pay this component for the worked hours on the late day.");
             repository.save(entity);
         }
     }
