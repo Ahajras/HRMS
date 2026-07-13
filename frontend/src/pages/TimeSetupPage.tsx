@@ -175,6 +175,7 @@ function TimeTypesSection() {
             <Grid item xs={6} sm={2}>
               <TextField select fullWidth size="small" label="Basis" value={ruleForm.basis} onChange={(e) => setRuleForm({ ...ruleForm, basis: e.target.value })}>
                 <MenuItem value="HOURS">Hours</MenuItem>
+                <MenuItem value="SHORTAGE">Shortage (planned - worked)</MenuItem>
                 <MenuItem value="DAYS">Days</MenuItem>
                 <MenuItem value="FIXED">Fixed</MenuItem>
               </TextField>

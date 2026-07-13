@@ -1134,6 +1134,13 @@ public class PayrollRunService {
     private BigDecimal quantityForBasis(TimesheetDay day, String basis, BigDecimal shiftHours, String quantitySource) {
         String normalized = basis == null ? "HOURS" : basis.toUpperCase();
         BigDecimal standardHours = shiftHours;
+        if ("SHORTAGE".equals(normalized)) {
+            BigDecimal planned = z(day.getPlannedHours());
+            if (planned.compareTo(BigDecimal.ZERO) <= 0) {
+                planned = standardHours;
+            }
+            return planned.subtract(actualPayHours(day)).max(BigDecimal.ZERO);
+        }
         if ("DAYS".equals(normalized) || "FIXED".equals(normalized)) {
             BigDecimal hours = quantityHours(day, standardHours, quantitySource);
             if (hours.compareTo(BigDecimal.ZERO) <= 0) {

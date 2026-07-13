@@ -1090,6 +1090,7 @@ public class TimesheetService {
         String action = req.getAction() != null ? req.getAction().toUpperCase() : "ATTEND";
         Shift shift = resolveDayShift(day, ts, new HashMap<>());
         UUID normalTypeId = timeTypeRepo.findByCompanyIdAndCode(ts.getCompanyId(), "N").map(TimeType::getId).orElse(day.getTimeTypeId());
+        UUID lateTypeId = timeTypeRepo.findByCompanyIdAndCode(ts.getCompanyId(), "T").map(TimeType::getId).orElse(normalTypeId);
         UUID absenceTypeId = timeTypeRepo.findByCompanyIdOrderBySortOrderAscNameAsc(ts.getCompanyId()).stream()
                 .filter(t -> "ABSENCE".equalsIgnoreCase(t.getCategory()))
                 .findFirst()
@@ -1099,7 +1100,7 @@ public class TimesheetService {
         day.setRemarks(req.getRemarks());
         switch (action) {
             case "LATE" -> {
-                day.setTimeTypeId(normalTypeId);
+                day.setTimeTypeId(lateTypeId);
                 day.setActualIn(requiredTime(req.getActualIn(), "Actual in is required for late attendance."));
             }
             case "OUT_CUSTOM" -> {
@@ -1451,8 +1452,9 @@ public class TimesheetService {
 
         String category = "REGULAR";
         boolean paid = true;
+        TimeType tt = null;
         if (day.getTimeTypeId() != null) {
-            TimeType tt = typeCache.computeIfAbsent(day.getTimeTypeId(),
+            tt = typeCache.computeIfAbsent(day.getTimeTypeId(),
                     k -> timeTypeRepo.findById(k).orElse(null));
             if (tt != null && tt.getCategory() != null) {
                 category = tt.getCategory();
@@ -1465,6 +1467,11 @@ public class TimesheetService {
         BigDecimal sampleNormal = sample != null ? sample.getNormalHours()
                 : (shift != null && shift.getStandardHours() != null ? shift.getStandardHours() : BigDecimal.ZERO);
         BigDecimal declaredLimit = sample != null ? sample.getDeclaredOt() : BigDecimal.ZERO;
+        tt = applyLateTypeIfShortWorked(ts, day, tt, worked, sampleNormal, typeCache);
+        if (tt != null && tt.getCategory() != null) {
+            category = tt.getCategory();
+            paid = tt.isPaid();
+        }
 
         BigDecimal normal;
         BigDecimal ot;
@@ -1503,6 +1510,26 @@ public class TimesheetService {
         day.setDeclaredOtHours(declared);
         day.setUndeclaredOtHours(undeclared);
         day.setIneligibleOtHours(ineligibleOt);
+    }
+
+    private TimeType applyLateTypeIfShortWorked(Timesheet ts, TimesheetDay day, TimeType currentType,
+                                                BigDecimal worked, BigDecimal plannedHours,
+                                                Map<UUID, TimeType> typeCache) {
+        String code = currentType != null ? currentType.getCode() : null;
+        if (!"N".equalsIgnoreCase(code) && !"T".equalsIgnoreCase(code)) {
+            return currentType;
+        }
+        BigDecimal planned = plannedHours != null ? plannedHours : BigDecimal.ZERO;
+        boolean shortWorked = planned.compareTo(BigDecimal.ZERO) > 0
+                && worked.compareTo(BigDecimal.ZERO) > 0
+                && worked.compareTo(planned) < 0;
+        String targetCode = shortWorked ? "T" : "N";
+        TimeType targetType = timeTypeRepo.findByCompanyIdAndCode(ts.getCompanyId(), targetCode).orElse(currentType);
+        if (targetType != null) {
+            day.setTimeTypeId(targetType.getId());
+            typeCache.put(targetType.getId(), targetType);
+        }
+        return targetType;
     }
 
     /** True unless the employee's overtime category is explicitly not eligible. */
