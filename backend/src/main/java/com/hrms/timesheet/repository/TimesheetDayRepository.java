@@ -157,7 +157,7 @@ public interface TimesheetDayRepository extends JpaRepository<TimesheetDay, UUID
             join time_type tt on tt.id = td.time_type_id
             where t.company_id = :companyId and td.work_date = :day
             """, nativeQuery = true)
-    Object[] dailyAttendanceBreakdown(@Param("companyId") UUID companyId, @Param("day") LocalDate day);
+    List<Object[]> dailyAttendanceBreakdown(@Param("companyId") UUID companyId, @Param("day") LocalDate day);
 
     /** Management dashboard — cumulative day-counts (present/leave/absent)
      * for the whole month so far, aggregated in the database. */
@@ -173,6 +173,6 @@ public interface TimesheetDayRepository extends JpaRepository<TimesheetDay, UUID
             where t.company_id = :companyId and t.period_year = :year and t.period_month = :month
               and td.work_date <= :asOf
             """, nativeQuery = true)
-    Object[] monthlyAttendanceBreakdown(@Param("companyId") UUID companyId, @Param("year") int year,
+    List<Object[]> monthlyAttendanceBreakdown(@Param("companyId") UUID companyId, @Param("year") int year,
                                        @Param("month") int month, @Param("asOf") LocalDate asOf);
 }

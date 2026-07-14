@@ -55,7 +55,8 @@ public class DashboardService {
         dto.setActiveEmployeeCount((int) employeeRepo.countByCompanyIdAndStatus(companyId, "ACTIVE"));
 
         // Today's roster.
-        Object[] daily = dayRepo.dailyAttendanceBreakdown(companyId, today);
+        List<Object[]> dailyResult = dayRepo.dailyAttendanceBreakdown(companyId, today);
+        Object[] daily = dailyResult.isEmpty() ? new Object[]{0, 0, 0, 0} : dailyResult.get(0);
         int present = toInt(daily[0]);
         int onLeave = toInt(daily[1]);
         int absent = toInt(daily[2]);
@@ -66,7 +67,8 @@ public class DashboardService {
         dto.setNotMarkedToday(Math.max(0, dto.getActiveEmployeeCount() - marked));
 
         // This month so far.
-        Object[] monthly = dayRepo.monthlyAttendanceBreakdown(companyId, today.getYear(), today.getMonthValue(), today);
+        List<Object[]> monthlyResult = dayRepo.monthlyAttendanceBreakdown(companyId, today.getYear(), today.getMonthValue(), today);
+        Object[] monthly = monthlyResult.isEmpty() ? new Object[]{0, 0, 0} : monthlyResult.get(0);
         dto.setPresentDaysMonth(toInt(monthly[0]));
         dto.setLeaveDaysMonth(toInt(monthly[1]));
         dto.setAbsentDaysMonth(toInt(monthly[2]));
