@@ -103,6 +103,11 @@ public class PayrollRunController {
         return service.lock(id);
     }
 
+    @PostMapping("/{id}/reopen")
+    public PayrollRunDto reopen(@PathVariable UUID id) {
+        return service.reopen(id);
+    }
+
     @DeleteMapping("/{id}")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable UUID id) {

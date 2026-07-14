@@ -614,6 +614,18 @@ public class PayrollRunService {
         return toDto(runRepo.save(run), false);
     }
 
+    public PayrollRunDto reopen(UUID id) {
+        PayrollRun run = getEntity(id);
+        if (!"APPROVED".equals(run.getStatus()) && !"LOCKED".equals(run.getStatus())) {
+            throw new BusinessRuleException("payroll.run.reopen.state", "Only an APPROVED or LOCKED payroll run can be reopened.");
+        }
+        String previousStatus = run.getStatus();
+        String username = currentUsername();
+        run.setStatus(CALCULATED);
+        run.setNotes(appendNote(run.getNotes(), "Reopened from " + previousStatus + " by " + username + " at " + Instant.now()));
+        return toDto(runRepo.save(run), false);
+    }
+
     public void delete(UUID id) {
         PayrollRun run = getEntity(id);
         if (!DRAFT.equals(run.getStatus()) && !"CALCULATED".equalsIgnoreCase(run.getStatus())) {
@@ -622,6 +634,11 @@ public class PayrollRunService {
         lineRepo.deleteByRunId(run.getId());
         resultRepo.deleteByRunId(run.getId());
         runRepo.delete(run);
+    }
+
+    private String appendNote(String existing, String note) {
+        String value = (existing == null || existing.isBlank()) ? note : existing + " | " + note;
+        return value.length() <= 500 ? value : value.substring(value.length() - 500);
     }
 
     private PayrollResult buildResult(PayrollRun run, Timesheet ts, Employee emp, PayrollRule rule, PayableBreakdown breakdown) {

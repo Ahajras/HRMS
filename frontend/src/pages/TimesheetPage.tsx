@@ -415,13 +415,13 @@ export default function TimesheetPage() {
             textAlign: "center",
           }}
         >
-          PAYROLL LOCKED
+          PAYROLL CLOSED
         </Box>
       )}
       <Typography variant="h5" mb={2}>Timesheets</Typography>
       {payrollClosed && (
         <Alert severity="warning" sx={{ mb: 2, position: "relative", zIndex: 2 }}>
-          {payrollClosedLabel} Large corrections must be handled by an authorized manager deleting/reopening the payroll run first.
+          {payrollClosedLabel} Large corrections must be handled by an authorized manager reopening the payroll run first.
         </Alert>
       )}
 

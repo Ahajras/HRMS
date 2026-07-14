@@ -89,7 +89,7 @@ export default function PayrollRunsPage() {
     },
   });
   const action = useMutation({
-    mutationFn: ({ id, fn }: { id: string; fn: "approve" | "lock" }) => payrollRunApi[fn](id),
+    mutationFn: ({ id, fn }: { id: string; fn: "approve" | "lock" | "reopen" }) => payrollRunApi[fn](id),
     onSuccess: (r) => {
       qc.invalidateQueries({ queryKey: ["payrollRuns"] });
       qc.invalidateQueries({ queryKey: ["payrollRun", r.id] });
@@ -231,6 +231,19 @@ export default function PayrollRunsPage() {
                   )}
                   {r.status === "APPROVED" && r.id && (
                     <Button size="small" color="warning" onClick={() => action.mutate({ id: r.id!, fn: "lock" })}>Lock</Button>
+                  )}
+                  {(r.status === "APPROVED" || r.status === "LOCKED") && r.id && (
+                    <Button
+                      size="small"
+                      color="error"
+                      onClick={() => {
+                        if (confirm("Admin override: reopen this payroll run for corrections? This will unlock timesheet editing for this payroll scope until it is approved/locked again.")) {
+                          action.mutate({ id: r.id!, fn: "reopen" });
+                        }
+                      }}
+                    >
+                      Reopen
+                    </Button>
                   )}
                 </TableCell>
               </TableRow>
