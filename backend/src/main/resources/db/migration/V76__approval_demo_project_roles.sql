@@ -28,7 +28,7 @@ on conflict do nothing;
 
 create table if not exists project_approval_role (
     id uuid primary key,
-    company_id uuid not null references company(id),
+    company_id uuid not null,
     project_id uuid not null references project(id),
     role_code varchar(50) not null,
     employee_id uuid not null references employee(id),
