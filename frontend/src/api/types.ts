@@ -1235,11 +1235,25 @@ export interface HandoverCleanupResult {
   costCodesLeft: number;
 }
 
+export interface DashboardProjectStat {
+  projectCode: string;
+  projectName: string;
+  headcount: number;
+  manHours: number;
+  netPay: number;
+}
+
+export interface DashboardCategoryStat {
+  category: string;
+  amount: number;
+}
+
 export interface DashboardSummary {
   projectCount: number;
   activeEmployeeCount: number;
   periodYear: number;
   periodMonth: number;
+  isCurrentMonth: boolean;
   presentToday: number;
   onLeaveToday: number;
   absentToday: number;
@@ -1252,4 +1266,6 @@ export interface DashboardSummary {
   totalDeductions: number;
   payslipCount: number;
   periodLocked: boolean;
+  projectStats: DashboardProjectStat[];
+  categoryStats: DashboardCategoryStat[];
 }

@@ -36,4 +36,19 @@ public interface PayrollResultLineRepository extends JpaRepository<PayrollResult
               and upper(coalesce(l.componentType, '')) = 'EARNING'
             """)
     java.math.BigDecimal sumAllowancesForLockedPeriod(@Param("periodId") UUID periodId);
+
+    /** Management dashboard — total EARNING amount grouped by component
+     * category (SALARY / ALLOWANCE / OVERTIME / ...) across every LOCKED
+     * run in a period. */
+    @Query("""
+            select l.category, coalesce(sum(l.amount), 0)
+            from PayrollResultLine l, PayrollResult r, com.hrms.payroll.domain.PayrollRun run
+            where r.id = l.resultId
+              and run.id = r.runId
+              and run.periodId = :periodId
+              and upper(run.status) = 'LOCKED'
+              and upper(coalesce(l.componentType, '')) = 'EARNING'
+            group by l.category
+            """)
+    List<Object[]> earningsByCategoryForLockedPeriod(@Param("periodId") UUID periodId);
 }

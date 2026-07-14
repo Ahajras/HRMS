@@ -608,5 +608,6 @@ export const sifApi = {
 };
 
 export const dashboardApi = {
-  summary: () => api.get<import("./types").DashboardSummary>("/dashboard/summary").then((r) => r.data),
+  summary: (periodId?: string) =>
+    api.get<import("./types").DashboardSummary>("/dashboard/summary", { params: periodId ? { periodId } : {} }).then((r) => r.data),
 };

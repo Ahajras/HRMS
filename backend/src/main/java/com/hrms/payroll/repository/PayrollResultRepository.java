@@ -85,4 +85,16 @@ public interface PayrollResultRepository extends JpaRepository<PayrollResult, UU
               and upper(run.status) = 'LOCKED'
             """)
     List<Object[]> summarizeLockedPeriod(@Param("periodId") UUID periodId);
+
+    /** Management dashboard — every employee's net pay for a LOCKED
+     * period, so the caller can group it by project (project isn't on
+     * PayrollResult directly — it comes from the employee's assignment). */
+    @Query("""
+            select r.employeeId, r.net
+            from PayrollResult r, PayrollRun run
+            where run.id = r.runId
+              and run.periodId = :periodId
+              and upper(run.status) = 'LOCKED'
+            """)
+    List<Object[]> employeeNetForLockedPeriod(@Param("periodId") UUID periodId);
 }

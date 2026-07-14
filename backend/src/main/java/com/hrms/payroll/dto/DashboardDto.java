@@ -1,30 +1,65 @@
 package com.hrms.payroll.dto;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
+import java.util.List;
 
 public class DashboardDto {
     private int projectCount;
     private int activeEmployeeCount;
     private int periodYear;
     private int periodMonth;
+    private boolean isCurrentMonth;
 
-    // Today
+    // Today (only meaningful when the selected period is the current month)
     private int presentToday;
     private int onLeaveToday;
     private int absentToday;
     private int notMarkedToday;
 
-    // This month so far
+    // The selected period so far (or in full, if it's a past period)
     private int presentDaysMonth;
     private int leaveDaysMonth;
     private int absentDaysMonth;
 
-    // Latest LOCKED payroll for the reference period
+    // Latest LOCKED payroll for the selected period
     private BigDecimal netDisbursed = BigDecimal.ZERO;
     private BigDecimal totalAllowances = BigDecimal.ZERO;
     private BigDecimal totalDeductions = BigDecimal.ZERO;
     private int payslipCount;
     private boolean periodLocked;
+
+    private List<ProjectStat> projectStats = new ArrayList<>();
+    private List<CategoryStat> categoryStats = new ArrayList<>();
+
+    public static class ProjectStat {
+        private String projectCode;
+        private String projectName;
+        private int headcount;
+        private BigDecimal manHours = BigDecimal.ZERO;
+        private BigDecimal netPay = BigDecimal.ZERO;
+
+        public String getProjectCode() { return projectCode; }
+        public void setProjectCode(String projectCode) { this.projectCode = projectCode; }
+        public String getProjectName() { return projectName; }
+        public void setProjectName(String projectName) { this.projectName = projectName; }
+        public int getHeadcount() { return headcount; }
+        public void setHeadcount(int headcount) { this.headcount = headcount; }
+        public BigDecimal getManHours() { return manHours; }
+        public void setManHours(BigDecimal manHours) { this.manHours = manHours; }
+        public BigDecimal getNetPay() { return netPay; }
+        public void setNetPay(BigDecimal netPay) { this.netPay = netPay; }
+    }
+
+    public static class CategoryStat {
+        private String category;
+        private BigDecimal amount = BigDecimal.ZERO;
+
+        public String getCategory() { return category; }
+        public void setCategory(String category) { this.category = category; }
+        public BigDecimal getAmount() { return amount; }
+        public void setAmount(BigDecimal amount) { this.amount = amount; }
+    }
 
     public int getProjectCount() { return projectCount; }
     public void setProjectCount(int projectCount) { this.projectCount = projectCount; }
@@ -34,6 +69,8 @@ public class DashboardDto {
     public void setPeriodYear(int periodYear) { this.periodYear = periodYear; }
     public int getPeriodMonth() { return periodMonth; }
     public void setPeriodMonth(int periodMonth) { this.periodMonth = periodMonth; }
+    public boolean isCurrentMonth() { return isCurrentMonth; }
+    public void setCurrentMonth(boolean currentMonth) { isCurrentMonth = currentMonth; }
     public int getPresentToday() { return presentToday; }
     public void setPresentToday(int presentToday) { this.presentToday = presentToday; }
     public int getOnLeaveToday() { return onLeaveToday; }
@@ -58,4 +95,8 @@ public class DashboardDto {
     public void setPayslipCount(int payslipCount) { this.payslipCount = payslipCount; }
     public boolean isPeriodLocked() { return periodLocked; }
     public void setPeriodLocked(boolean periodLocked) { this.periodLocked = periodLocked; }
+    public List<ProjectStat> getProjectStats() { return projectStats; }
+    public void setProjectStats(List<ProjectStat> projectStats) { this.projectStats = projectStats; }
+    public List<CategoryStat> getCategoryStats() { return categoryStats; }
+    public void setCategoryStats(List<CategoryStat> categoryStats) { this.categoryStats = categoryStats; }
 }

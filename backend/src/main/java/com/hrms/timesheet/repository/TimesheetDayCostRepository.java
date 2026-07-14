@@ -26,4 +26,17 @@ public interface TimesheetDayCostRepository extends JpaRepository<TimesheetDayCo
     List<TimesheetDayCost> findByTimesheetIdIn(@Param("timesheetIds") Collection<UUID> timesheetIds);
 
     void deleteByTimesheetDayId(UUID timesheetDayId);
+
+    /** Management dashboard — total worked hours per project for one
+     * period, aggregated directly in the database. */
+    @Query(value = """
+            select tdc.project_id, coalesce(sum(tdc.hours), 0)
+            from timesheet_day_cost tdc
+            join timesheet_day td on td.id = tdc.timesheet_day_id
+            join timesheet t on t.id = td.timesheet_id
+            where t.company_id = :companyId and t.period_year = :year and t.period_month = :month
+              and tdc.project_id is not null
+            group by tdc.project_id
+            """, nativeQuery = true)
+    List<Object[]> manHoursByProject(@Param("companyId") UUID companyId, @Param("year") int year, @Param("month") int month);
 }

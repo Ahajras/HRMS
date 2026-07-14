@@ -1,6 +1,8 @@
-import { Box, Stack, Typography } from "@mui/material";
+import { useState } from "react";
+import { Box, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { dashboardApi } from "../api/resources";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
+import { dashboardApi, periodApi } from "../api/resources";
 
 const INK = "#151A21";
 const PANEL = "#1B222B";
@@ -10,6 +12,7 @@ const TEAL = "#38D6C0";
 const CORAL = "#FF6E5C";
 const SLATE = "#8B96A5";
 const PAPER = "#EDEFF2";
+const CATEGORY_COLORS = [AMBER, TEAL, CORAL, "#7C93F2", "#C084F5", "#5FB8E8"];
 
 const mono = { fontFamily: "'IBM Plex Mono', monospace" };
 
@@ -29,23 +32,10 @@ function BoardPanel({
   label, value, unit, accent = AMBER, big = false,
 }: { label: string; value: string | number; unit?: string; accent?: string; big?: boolean }) {
   return (
-    <Box
-      sx={{
-        flex: 1,
-        minWidth: 150,
-        bgcolor: PANEL,
-        border: `1px solid ${PANEL_BORDER}`,
-        borderTop: `3px solid ${accent}`,
-        borderRadius: "4px",
-        p: 2,
-        position: "relative",
-      }}
-    >
+    <Box sx={{ flex: 1, minWidth: 150, bgcolor: PANEL, border: `1px solid ${PANEL_BORDER}`, borderTop: `3px solid ${accent}`, borderRadius: "4px", p: 2 }}>
       <Eyebrow>{label}</Eyebrow>
       <Stack direction="row" alignItems="baseline" spacing={0.75} mt={0.75}>
-        <Typography sx={{ ...mono, fontSize: big ? 40 : 30, fontWeight: 700, color: PAPER, lineHeight: 1 }}>
-          {value}
-        </Typography>
+        <Typography sx={{ ...mono, fontSize: big ? 40 : 30, fontWeight: 700, color: PAPER, lineHeight: 1 }}>{value}</Typography>
         {unit && <Typography sx={{ ...mono, fontSize: 13, color: SLATE }}>{unit}</Typography>}
       </Stack>
     </Box>
@@ -55,18 +45,15 @@ function BoardPanel({
 function LivePulse() {
   return (
     <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.75, ml: 1.5 }}>
-      <Box
-        sx={{
-          width: 7, height: 7, borderRadius: "50%", bgcolor: TEAL,
-          boxShadow: `0 0 0 0 ${TEAL}`,
-          animation: "pulseDot 1.8s ease-out infinite",
-          "@keyframes pulseDot": {
-            "0%": { boxShadow: `0 0 0 0 ${TEAL}66` },
-            "70%": { boxShadow: `0 0 0 8px ${TEAL}00` },
-            "100%": { boxShadow: `0 0 0 0 ${TEAL}00` },
-          },
-        }}
-      />
+      <Box sx={{
+        width: 7, height: 7, borderRadius: "50%", bgcolor: TEAL,
+        animation: "pulseDot 1.8s ease-out infinite",
+        "@keyframes pulseDot": {
+          "0%": { boxShadow: `0 0 0 0 ${TEAL}66` },
+          "70%": { boxShadow: `0 0 0 8px ${TEAL}00` },
+          "100%": { boxShadow: `0 0 0 0 ${TEAL}00` },
+        },
+      }} />
       <Typography sx={{ ...mono, fontSize: 11, letterSpacing: "0.1em", color: TEAL, textTransform: "uppercase" }}>Live</Typography>
     </Box>
   );
@@ -101,8 +88,60 @@ function RosterBar({ present, onLeave, absent, notMarked }: { present: number; o
   );
 }
 
+const chartTooltipStyle = {
+  contentStyle: { background: PANEL, border: `1px solid ${PANEL_BORDER}`, borderRadius: 4, color: PAPER, fontSize: 12 },
+  labelStyle: { color: SLATE },
+  itemStyle: { color: PAPER },
+};
+
+function ProjectManpowerChart({ data }: { data: { projectCode: string; headcount: number }[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <BarChart data={data} margin={{ left: -20 }}>
+        <CartesianGrid stroke={PANEL_BORDER} vertical={false} />
+        <XAxis dataKey="projectCode" tick={{ fill: SLATE, fontSize: 11 }} axisLine={{ stroke: PANEL_BORDER }} tickLine={false} />
+        <YAxis tick={{ fill: SLATE, fontSize: 11 }} axisLine={false} tickLine={false} />
+        <Tooltip {...chartTooltipStyle} cursor={{ fill: "#ffffff08" }} />
+        <Bar dataKey="headcount" fill={TEAL} radius={[3, 3, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function ProjectHoursChart({ data }: { data: { projectCode: string; manHours: number }[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <BarChart data={data} margin={{ left: -20 }}>
+        <CartesianGrid stroke={PANEL_BORDER} vertical={false} />
+        <XAxis dataKey="projectCode" tick={{ fill: SLATE, fontSize: 11 }} axisLine={{ stroke: PANEL_BORDER }} tickLine={false} />
+        <YAxis tick={{ fill: SLATE, fontSize: 11 }} axisLine={false} tickLine={false} />
+        <Tooltip {...chartTooltipStyle} cursor={{ fill: "#ffffff08" }} />
+        <Bar dataKey="manHours" fill={AMBER} radius={[3, 3, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
+function CategoryDonut({ data }: { data: { category: string; amount: number }[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={220}>
+      <PieChart>
+        <Pie data={data} dataKey="amount" nameKey="category" innerRadius={55} outerRadius={85} paddingAngle={2}>
+          {data.map((_, i) => <Cell key={i} fill={CATEGORY_COLORS[i % CATEGORY_COLORS.length]} />)}
+        </Pie>
+        <Tooltip {...chartTooltipStyle} />
+      </PieChart>
+    </ResponsiveContainer>
+  );
+}
+
 export default function DashboardPage() {
-  const { data, isLoading } = useQuery({ queryKey: ["dashboardSummary"], queryFn: dashboardApi.summary });
+  const [periodId, setPeriodId] = useState<string>("");
+  const { data: periods = [] } = useQuery({ queryKey: ["periodsForDashboard"], queryFn: () => periodApi.list() });
+  const { data, isLoading } = useQuery({
+    queryKey: ["dashboardSummary", periodId],
+    queryFn: () => dashboardApi.summary(periodId || undefined),
+  });
 
   const today = new Date();
   const dateStr = today.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
@@ -117,30 +156,49 @@ export default function DashboardPage() {
 
   return (
     <Box sx={{ bgcolor: INK, m: -3, p: { xs: 2, md: 3 }, minHeight: "100vh" }}>
-      <Stack direction="row" alignItems="center" mb={0.5}>
-        <Eyebrow color={AMBER}>Workforce Operations</Eyebrow>
-        <LivePulse />
+      <Stack direction="row" justifyContent="space-between" alignItems="flex-start" flexWrap="wrap" gap={2} mb={0.5}>
+        <Box>
+          <Stack direction="row" alignItems="center">
+            <Eyebrow color={AMBER}>Workforce Operations</Eyebrow>
+            {data.isCurrentMonth && <LivePulse />}
+          </Stack>
+          <Typography sx={{ color: PAPER, fontSize: 26, fontWeight: 700 }}>{dateStr}</Typography>
+        </Box>
+        <TextField
+          select size="small" label="Period" value={periodId}
+          onChange={(e) => setPeriodId(e.target.value)}
+          sx={{
+            minWidth: 160, bgcolor: PANEL, borderRadius: 1,
+            "& .MuiOutlinedInput-notchedOutline": { borderColor: PANEL_BORDER },
+            "& .MuiInputLabel-root": { color: SLATE }, "& .MuiSelect-select": { color: PAPER },
+          }}
+        >
+          <MenuItem value="">Current</MenuItem>
+          {periods.map((p) => (
+            <MenuItem key={p.id} value={p.id}>{p.periodYear}-{String(p.periodMonth).padStart(2, "0")}</MenuItem>
+          ))}
+        </TextField>
       </Stack>
-      <Typography sx={{ color: PAPER, fontSize: 26, fontWeight: 700, mb: 3 }}>{dateStr}</Typography>
+      <Box mb={3} />
 
       {/* Vitals strip */}
       <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap mb={3}>
         <BoardPanel label="Active Projects" value={data.projectCount} accent={AMBER} big />
         <BoardPanel label="Active Workforce" value={fmt(data.activeEmployeeCount)} accent={AMBER} big />
-        <BoardPanel label="Present Today" value={fmt(data.presentToday)} accent={TEAL} big />
-        <BoardPanel label="On Leave Today" value={fmt(data.onLeaveToday)} accent={AMBER} big />
-        <BoardPanel label="Absent Today" value={fmt(data.absentToday)} accent={CORAL} big />
+        {data.isCurrentMonth && <BoardPanel label="Present Today" value={fmt(data.presentToday)} accent={TEAL} big />}
+        {data.isCurrentMonth && <BoardPanel label="On Leave Today" value={fmt(data.onLeaveToday)} accent={AMBER} big />}
+        {data.isCurrentMonth && <BoardPanel label="Absent Today" value={fmt(data.absentToday)} accent={CORAL} big />}
       </Stack>
 
-      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
-        {/* Today's roster */}
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} mb={1.5}>
+        {/* Roster */}
         <Box sx={{ flex: 1, bgcolor: PANEL, border: `1px solid ${PANEL_BORDER}`, borderTop: `3px solid ${TEAL}`, borderRadius: "4px", p: 2.5 }}>
-          <Eyebrow color={TEAL}>Today's Roster</Eyebrow>
+          <Eyebrow color={TEAL}>{data.isCurrentMonth ? "Today's Roster" : `${data.periodYear}-${String(data.periodMonth).padStart(2, "0")} Attendance`}</Eyebrow>
           <Box mt={2}>
             <RosterBar present={data.presentToday} onLeave={data.onLeaveToday} absent={data.absentToday} notMarked={data.notMarkedToday} />
           </Box>
           <Box mt={3}>
-            <Eyebrow>Month to date</Eyebrow>
+            <Eyebrow>{data.isCurrentMonth ? "Month to date" : "Full period"}</Eyebrow>
             <Stack direction="row" spacing={3} mt={1}>
               <Box><Typography sx={{ ...mono, color: PAPER, fontSize: 20, fontWeight: 700 }}>{fmt(data.presentDaysMonth)}</Typography><Typography sx={{ color: SLATE, fontSize: 12 }}>present days</Typography></Box>
               <Box><Typography sx={{ ...mono, color: PAPER, fontSize: 20, fontWeight: 700 }}>{fmt(data.leaveDaysMonth)}</Typography><Typography sx={{ color: SLATE, fontSize: 12 }}>leave days</Typography></Box>
@@ -151,11 +209,9 @@ export default function DashboardPage() {
 
         {/* Payroll */}
         <Box sx={{ flex: 1, bgcolor: PANEL, border: `1px solid ${PANEL_BORDER}`, borderTop: `3px solid ${AMBER}`, borderRadius: "4px", p: 2.5 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Eyebrow color={AMBER}>
-              {data.periodYear}-{String(data.periodMonth).padStart(2, "0")} Payroll {data.periodLocked ? "(Locked)" : "(Not yet locked)"}
-            </Eyebrow>
-          </Stack>
+          <Eyebrow color={AMBER}>
+            {data.periodYear}-{String(data.periodMonth).padStart(2, "0")} Payroll {data.periodLocked ? "(Locked)" : "(Not yet locked)"}
+          </Eyebrow>
           <Typography sx={{ color: SLATE, fontSize: 12, mt: 0.5 }}>{data.payslipCount} payslips</Typography>
           <Stack mt={2}>
             <Eyebrow>Net disbursed</Eyebrow>
@@ -165,6 +221,43 @@ export default function DashboardPage() {
             <Box><Typography sx={{ ...mono, color: TEAL, fontSize: 18, fontWeight: 700 }}>{fmt(data.totalAllowances)}</Typography><Typography sx={{ color: SLATE, fontSize: 12 }}>allowances (QAR)</Typography></Box>
             <Box><Typography sx={{ ...mono, color: CORAL, fontSize: 18, fontWeight: 700 }}>{fmt(data.totalDeductions)}</Typography><Typography sx={{ color: SLATE, fontSize: 12 }}>deductions (QAR)</Typography></Box>
           </Stack>
+        </Box>
+      </Stack>
+
+      {/* Charts */}
+      <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>
+        <Box sx={{ flex: 1, bgcolor: PANEL, border: `1px solid ${PANEL_BORDER}`, borderTop: `3px solid ${TEAL}`, borderRadius: "4px", p: 2.5 }}>
+          <Eyebrow color={TEAL}>Manpower by Project</Eyebrow>
+          {data.projectStats.length > 0
+            ? <ProjectManpowerChart data={data.projectStats} />
+            : <Typography sx={{ color: SLATE, fontSize: 13, mt: 4, textAlign: "center" }}>No active project assignments yet.</Typography>}
+        </Box>
+        <Box sx={{ flex: 1, bgcolor: PANEL, border: `1px solid ${PANEL_BORDER}`, borderTop: `3px solid ${AMBER}`, borderRadius: "4px", p: 2.5 }}>
+          <Eyebrow color={AMBER}>Man-Hours by Project</Eyebrow>
+          {data.projectStats.some((p) => p.manHours > 0)
+            ? <ProjectHoursChart data={data.projectStats} />
+            : <Typography sx={{ color: SLATE, fontSize: 13, mt: 4, textAlign: "center" }}>No worked hours logged for this period yet.</Typography>}
+        </Box>
+        <Box sx={{ flex: 1, bgcolor: PANEL, border: `1px solid ${PANEL_BORDER}`, borderTop: `3px solid ${CORAL}`, borderRadius: "4px", p: 2.5 }}>
+          <Eyebrow color={CORAL}>Salary by Category</Eyebrow>
+          {data.categoryStats.length > 0
+            ? (
+              <>
+                <CategoryDonut data={data.categoryStats} />
+                <Stack spacing={0.5} mt={1}>
+                  {data.categoryStats.map((c, i) => (
+                    <Stack key={c.category} direction="row" justifyContent="space-between" alignItems="center">
+                      <Stack direction="row" alignItems="center" spacing={0.75}>
+                        <Box sx={{ width: 8, height: 8, borderRadius: "2px", bgcolor: CATEGORY_COLORS[i % CATEGORY_COLORS.length] }} />
+                        <Typography sx={{ color: SLATE, fontSize: 12 }}>{c.category}</Typography>
+                      </Stack>
+                      <Typography sx={{ ...mono, color: PAPER, fontSize: 12, fontWeight: 600 }}>{fmt(c.amount)}</Typography>
+                    </Stack>
+                  ))}
+                </Stack>
+              </>
+            )
+            : <Typography sx={{ color: SLATE, fontSize: 13, mt: 4, textAlign: "center" }}>No LOCKED payroll for this period yet.</Typography>}
         </Box>
       </Stack>
     </Box>
