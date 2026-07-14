@@ -13,6 +13,7 @@ import DayZeroPage from "./pages/DayZeroPage";
 import AuditToolsPage from "./pages/AuditToolsPage";
 import MyPortalPage from "./pages/MyPortalPage";
 import SifExportPage from "./pages/SifExportPage";
+import DashboardPage from "./pages/DashboardPage";
 import PayrollRunsPage from "./pages/PayrollRunsPage";
 import PayrollRulesPage from "./pages/PayrollRulesPage";
 import CountriesPage from "./pages/CountriesPage";
@@ -72,6 +73,7 @@ export default function App() {
         <Route path="/audit-tools" element={<AuditToolsPage />} />
         <Route path="/my-portal" element={<MyPortalPage />} />
         <Route path="/sif-export" element={<SifExportPage />} />
+        <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/payroll-rules" element={<PayrollRulesPage />} />
         <Route path="/payroll-runs" element={<PayrollRunsPage />} />
         <Route path="/countries" element={<CountriesPage />} />

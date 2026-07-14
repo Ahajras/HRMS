@@ -1234,3 +1234,22 @@ export interface HandoverCleanupResult {
   shiftsLeft: number;
   costCodesLeft: number;
 }
+
+export interface DashboardSummary {
+  projectCount: number;
+  activeEmployeeCount: number;
+  periodYear: number;
+  periodMonth: number;
+  presentToday: number;
+  onLeaveToday: number;
+  absentToday: number;
+  notMarkedToday: number;
+  presentDaysMonth: number;
+  leaveDaysMonth: number;
+  absentDaysMonth: number;
+  netDisbursed: number;
+  totalAllowances: number;
+  totalDeductions: number;
+  payslipCount: number;
+  periodLocked: boolean;
+}

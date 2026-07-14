@@ -22,4 +22,18 @@ public interface PayrollResultLineRepository extends JpaRepository<PayrollResult
     @Modifying
     @Query("delete from PayrollResultLine l where l.resultId in (select r.id from PayrollResult r where r.runId = :runId)")
     void deleteByRunId(@Param("runId") UUID runId);
+
+    /** Management dashboard — total ALLOWANCE earnings across every LOCKED
+     * run in a period, aggregated directly. */
+    @Query("""
+            select coalesce(sum(l.amount), 0)
+            from PayrollResultLine l, PayrollResult r, com.hrms.payroll.domain.PayrollRun run
+            where r.id = l.resultId
+              and run.id = r.runId
+              and run.periodId = :periodId
+              and upper(run.status) = 'LOCKED'
+              and upper(coalesce(l.category, '')) = 'ALLOWANCE'
+              and upper(coalesce(l.componentType, '')) = 'EARNING'
+            """)
+    java.math.BigDecimal sumAllowancesForLockedPeriod(@Param("periodId") UUID periodId);
 }

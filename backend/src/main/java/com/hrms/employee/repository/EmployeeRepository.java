@@ -16,6 +16,9 @@ public interface EmployeeRepository extends JpaRepository<Employee, UUID> {
 
     Page<Employee> findByCompanyId(UUID companyId, Pageable pageable);
 
+    /** Management dashboard — headcount without fetching every row. */
+    long countByCompanyIdAndStatus(UUID companyId, String status);
+
     List<Employee> findByCompanyIdOrderByEmployeeNumber(UUID companyId);
 
     List<Employee> findByCompanyIdAndTimekeeperEmployeeIdOrderByEmployeeNumber(UUID companyId, UUID timekeeperEmployeeId);

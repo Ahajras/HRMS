@@ -606,3 +606,7 @@ export const sifApi = {
   generate: (periodId: string, projectIds: string[]) =>
     api.post<import("./types").SifExportResult>("/payroll/sif/generate", { periodId, projectIds }).then((r) => r.data),
 };
+
+export const dashboardApi = {
+  summary: () => api.get<import("./types").DashboardSummary>("/dashboard/summary").then((r) => r.data),
+};

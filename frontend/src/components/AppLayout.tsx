@@ -27,6 +27,7 @@ import ExpandLess from "@mui/icons-material/ExpandLess";
 import ExpandMore from "@mui/icons-material/ExpandMore";
 import PeopleIcon from "@mui/icons-material/People";
 import AccountCircleIcon from "@mui/icons-material/AccountCircle";
+import SpaceDashboardIcon from "@mui/icons-material/SpaceDashboard";
 import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import LayersIcon from "@mui/icons-material/Layers";
 import PaymentsIcon from "@mui/icons-material/Payments";
@@ -76,6 +77,12 @@ interface NavGroup {
 }
 
 const NAV_GROUPS: NavGroup[] = [
+  {
+    label: "Overview",
+    items: [
+      { to: "/dashboard", label: "Dashboard", icon: <SpaceDashboardIcon />, authority: "payroll.config.read" },
+    ],
+  },
   {
     label: "My Portal",
     items: [

@@ -73,4 +73,16 @@ public interface PayrollResultRepository extends JpaRepository<PayrollResult, UU
             where r.runId = :runId
             """)
     List<Object[]> summarizeRun(@Param("runId") UUID runId);
+
+    /** Management dashboard — total net/deductions and payslip count for
+     * every LOCKED run in a given period (across all projects/pay
+     * groups), aggregated directly rather than fetching every result. */
+    @Query("""
+            select count(r), coalesce(sum(r.net), 0), coalesce(sum(r.totalDeductions), 0)
+            from PayrollResult r, PayrollRun run
+            where run.id = r.runId
+              and run.periodId = :periodId
+              and upper(run.status) = 'LOCKED'
+            """)
+    List<Object[]> summarizeLockedPeriod(@Param("periodId") UUID periodId);
 }

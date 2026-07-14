@@ -140,4 +140,39 @@ public interface TimesheetDayRepository extends JpaRepository<TimesheetDay, UUID
     Optional<TimesheetDay> findByTimesheetIdAndWorkDate(UUID timesheetId, LocalDate workDate);
 
     void deleteByTimesheetId(UUID timesheetId);
+
+    /** Management dashboard — how many distinct employees fall into each
+     * attendance bucket for one specific day, aggregated directly in the
+     * database (never fetched row-by-row, so this stays fast regardless
+     * of company size). */
+    @Query(value = """
+            select
+              count(distinct case when tt.counts_as_worked then td.timesheet_id end) as present,
+              count(distinct case when not tt.counts_as_worked
+                    and upper(coalesce(tt.category,'')) not in ('REST','HOLIDAY','UNPAID') then td.timesheet_id end) as on_leave,
+              count(distinct case when upper(coalesce(tt.category,'')) = 'UNPAID' then td.timesheet_id end) as absent,
+              count(distinct td.timesheet_id) as marked
+            from timesheet_day td
+            join timesheet t on t.id = td.timesheet_id
+            join time_type tt on tt.id = td.time_type_id
+            where t.company_id = :companyId and td.work_date = :day
+            """, nativeQuery = true)
+    Object[] dailyAttendanceBreakdown(@Param("companyId") UUID companyId, @Param("day") LocalDate day);
+
+    /** Management dashboard — cumulative day-counts (present/leave/absent)
+     * for the whole month so far, aggregated in the database. */
+    @Query(value = """
+            select
+              count(case when tt.counts_as_worked then 1 end) as present_days,
+              count(case when not tt.counts_as_worked
+                    and upper(coalesce(tt.category,'')) not in ('REST','HOLIDAY','UNPAID') then 1 end) as leave_days,
+              count(case when upper(coalesce(tt.category,'')) = 'UNPAID' then 1 end) as absent_days
+            from timesheet_day td
+            join timesheet t on t.id = td.timesheet_id
+            join time_type tt on tt.id = td.time_type_id
+            where t.company_id = :companyId and t.period_year = :year and t.period_month = :month
+              and td.work_date <= :asOf
+            """, nativeQuery = true)
+    Object[] monthlyAttendanceBreakdown(@Param("companyId") UUID companyId, @Param("year") int year,
+                                       @Param("month") int month, @Param("asOf") LocalDate asOf);
 }

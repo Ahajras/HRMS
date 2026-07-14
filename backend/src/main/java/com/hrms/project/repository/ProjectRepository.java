@@ -12,4 +12,7 @@ public interface ProjectRepository extends JpaRepository<Project, UUID> {
     List<Project> findByCompanyIdOrderByName(UUID companyId);
 
     List<Project> findByCompanyIdAndIdInOrderByName(UUID companyId, Collection<UUID> ids);
+
+    /** Management dashboard — project count without fetching every row. */
+    long countByCompanyIdAndStatus(UUID companyId, String status);
 }
