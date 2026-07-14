@@ -40,4 +40,26 @@ public interface PayrollRunRepository extends JpaRepository<PayrollRun, UUID> {
     List<PayrollRun> findAllForScope(@Param("companyId") UUID companyId,
                                      @Param("periodId") UUID periodId,
                                      @Param("projectId") UUID projectId);
+
+    @Query("""
+            select count(r) > 0 from PayrollRun r
+            where r.companyId = :companyId
+              and r.periodId = :periodId
+              and (r.projectId is null or r.projectId = :projectId)
+              and (upper(r.payGroup) = 'ALL' or upper(:payGroup) = 'ALL' or upper(r.payGroup) = upper(:payGroup))
+              and upper(r.status) in ('APPROVED', 'LOCKED')
+            """)
+    boolean existsApprovedOrLockedForScope(@Param("companyId") UUID companyId,
+                                           @Param("periodId") UUID periodId,
+                                           @Param("projectId") UUID projectId,
+                                           @Param("payGroup") String payGroup);
+
+    @Query("""
+            select count(r) > 0 from PayrollRun r
+            where r.companyId = :companyId
+              and r.periodId = :periodId
+              and upper(r.status) in ('APPROVED', 'LOCKED')
+            """)
+    boolean existsApprovedOrLockedForPeriod(@Param("companyId") UUID companyId,
+                                            @Param("periodId") UUID periodId);
 }

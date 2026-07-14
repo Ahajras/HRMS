@@ -3,6 +3,7 @@ package com.hrms.timesheet.service;
 import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
+import com.hrms.payroll.repository.PayrollRunRepository;
 import com.hrms.timesheet.domain.PayrollCalendar;
 import com.hrms.timesheet.domain.PayrollPeriod;
 import com.hrms.timesheet.domain.PayrollWeek;
@@ -47,13 +48,16 @@ public class PayrollPeriodService {
     private final PayrollWeekRepository weekRepo;
     private final TimesheetRepository timesheetRepo;
     private final PayrollCalendarService calendarService;
+    private final PayrollRunRepository payrollRunRepo;
 
     public PayrollPeriodService(PayrollPeriodRepository periodRepo, PayrollWeekRepository weekRepo,
-                                TimesheetRepository timesheetRepo, PayrollCalendarService calendarService) {
+                                TimesheetRepository timesheetRepo, PayrollCalendarService calendarService,
+                                PayrollRunRepository payrollRunRepo) {
         this.periodRepo = periodRepo;
         this.weekRepo = weekRepo;
         this.timesheetRepo = timesheetRepo;
         this.calendarService = calendarService;
+        this.payrollRunRepo = payrollRunRepo;
     }
 
     /** Generate the 12 monthly periods (and their weeks) for a year. Idempotent. */
@@ -152,6 +156,10 @@ public class PayrollPeriodService {
         PayrollPeriod p = getEntity(id);
         if (CLOSED.equals(p.getStatus())) {
             throw new BusinessRuleException("period.reopen.closed", "A CLOSED period cannot be reopened.");
+        }
+        if (payrollRunRepo.existsApprovedOrLockedForPeriod(p.getCompanyId(), p.getId())) {
+            throw new BusinessRuleException("period.reopen.payroll_locked",
+                    "Payroll is already approved or locked for this period. Do not reopen it; post any correction through Day Zero in the next payroll.");
         }
         p.setStatus(OPEN);
         p.setLockedAt(null);

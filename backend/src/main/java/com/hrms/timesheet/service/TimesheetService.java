@@ -412,6 +412,7 @@ public class TimesheetService {
     public Map<String, Object> reopenProject(UUID periodId, UUID projectId, String payGroup) {
         UUID companyId = TenantContext.requireCompanyId();
         String group = normalizePayGroup(payGroup);
+        assertNoApprovedOrLockedPayroll(companyId, periodId, projectId, group);
         PayrollPeriodProject pp = periodProjectRepo
                 .findByCompanyIdAndPeriodIdAndProjectIdAndPayGroup(companyId, periodId, projectId, group).orElse(null);
         if (pp != null && "CLOSED".equals(pp.getStatus())) {
@@ -1410,6 +1411,7 @@ public class TimesheetService {
     /** Send a SUBMITTED/APPROVED timesheet back to DRAFT, invalidating the approval. */
     public TimesheetDto reopen(UUID id) {
         Timesheet ts = getEntity(id);
+        assertTimesheetNotPaid(ts);
         assertEditable(ts);
         if (DRAFT.equals(ts.getStatus())) {
             return toFullDto(ts);
@@ -1425,6 +1427,22 @@ public class TimesheetService {
         Timesheet ts = getEntity(id);
         assertEditable(ts);
         timesheetRepo.delete(ts);
+    }
+
+    private void assertTimesheetNotPaid(Timesheet ts) {
+        UUID projectId = employeeProject(ts.getEmployeeId());
+        assertNoApprovedOrLockedPayroll(ts.getCompanyId(), ts.getPeriodId(), projectId, payGroup(ts.getEmployeeId()));
+    }
+
+    private void assertNoApprovedOrLockedPayroll(UUID companyId, UUID periodId, UUID projectId, String payGroup) {
+        if (periodId == null || projectId == null) {
+            return;
+        }
+        String group = normalizePayGroup(payGroup);
+        if (payrollRunRepo.existsApprovedOrLockedForScope(companyId, periodId, projectId, group)) {
+            throw new BusinessRuleException("timesheet.reopen.payroll_locked",
+                    "Payroll is already approved or locked for this period/project/pay group. Do not reopen this timesheet; post any correction through Day Zero in the next payroll.");
+        }
     }
 
     private static String currentUsername() {
