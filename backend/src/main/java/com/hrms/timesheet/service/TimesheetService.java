@@ -359,6 +359,7 @@ public class TimesheetService {
 
     /** Block edits when the timesheet's project is locked/closed for its period. */
     private void assertEditable(Timesheet ts) {
+        assertTimesheetNotPaid(ts);
         PayrollPeriod period = periodRepo.findById(ts.getPeriodId()).orElse(null);
         if (period != null && "CLOSED".equals(period.getStatus())) {
             throw new BusinessRuleException("period.closed",
@@ -385,6 +386,7 @@ public class TimesheetService {
         String group = normalizePayGroup(payGroup);
         periodRepo.findById(periodId)
                 .orElseThrow(() -> new ResourceNotFoundException("Period not found: " + periodId));
+        assertNoApprovedOrLockedPayroll(companyId, periodId, projectId, group);
         List<String> blockers = projectReadiness(companyId, periodId, projectId, group);
         if (!blockers.isEmpty()) {
             throw new BusinessRuleException("period.project.not.ready",
@@ -659,6 +661,7 @@ public class TimesheetService {
         }
         UUID employeeProjectId = employeeProjectOverride != null ? employeeProjectOverride : employeeProject(req.getEmployeeId());
         String pst = projectStatus(req.getPeriodId(), employeeProjectId, payGroup(req.getEmployeeId()));
+        assertNoApprovedOrLockedPayroll(companyId, req.getPeriodId(), employeeProjectId, payGroup(req.getEmployeeId()));
         if ("LOCKED".equals(pst)) {
             throw new BusinessRuleException("period.project.locked",
                     "This employee's project is LOCKED for the period - reopen it from Payroll Calendar first.");
@@ -827,6 +830,7 @@ public class TimesheetService {
             throw new BusinessRuleException("period.not.open",
                     "The period is CLOSED. It cannot be edited.");
         }
+        assertNoApprovedOrLockedPayroll(companyId, periodId, projectId, "ALL");
         Set<UUID> allowed = restrictedProjects();
         if (projectId != null) {
             // Explicit project filter from the screen takes precedence, but still
@@ -1404,6 +1408,7 @@ public class TimesheetService {
         if (!APPROVED.equals(ts.getStatus())) {
             throw new BusinessRuleException("timesheet.lock.state", "Only an APPROVED timesheet can be locked.");
         }
+        assertEditable(ts);
         ts.setStatus(LOCKED);
         return toFullDto(timesheetRepo.save(ts));
     }
@@ -1411,7 +1416,6 @@ public class TimesheetService {
     /** Send a SUBMITTED/APPROVED timesheet back to DRAFT, invalidating the approval. */
     public TimesheetDto reopen(UUID id) {
         Timesheet ts = getEntity(id);
-        assertTimesheetNotPaid(ts);
         assertEditable(ts);
         if (DRAFT.equals(ts.getStatus())) {
             return toFullDto(ts);
@@ -1435,13 +1439,20 @@ public class TimesheetService {
     }
 
     private void assertNoApprovedOrLockedPayroll(UUID companyId, UUID periodId, UUID projectId, String payGroup) {
-        if (periodId == null || projectId == null) {
+        if (periodId == null) {
+            return;
+        }
+        if (projectId == null) {
+            if (payrollRunRepo.existsApprovedOrLockedForPeriod(companyId, periodId)) {
+                throw new BusinessRuleException("timesheet.reopen.payroll_locked",
+                        "Payroll is already approved or locked for this period. Do not edit timesheets; post any correction through Day Zero in the next payroll.");
+            }
             return;
         }
         String group = normalizePayGroup(payGroup);
         if (payrollRunRepo.existsApprovedOrLockedForScope(companyId, periodId, projectId, group)) {
             throw new BusinessRuleException("timesheet.reopen.payroll_locked",
-                    "Payroll is already approved or locked for this period/project/pay group. Do not reopen this timesheet; post any correction through Day Zero in the next payroll.");
+                    "Payroll is already approved or locked for this period/project/pay group. Do not edit timesheets; post any correction through Day Zero in the next payroll.");
         }
     }
 

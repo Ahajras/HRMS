@@ -212,7 +212,7 @@ function PayrollRunsPanel() {
       setMessage("Run deleted.");
       qc.invalidateQueries({ queryKey: ["auditPayrollRuns"] });
     },
-    onError: (e: any) => setMessage(e?.response?.data?.message ?? "Could not delete — it may already be approved or locked."),
+    onError: (e: any) => setMessage(e?.response?.data?.message ?? "Could not delete payroll run."),
   });
 
   return (
@@ -241,8 +241,8 @@ function PayrollRunsPanel() {
               <TableCell align="right">
                 <Button
                   size="small" color="error"
-                  disabled={(r.status !== "DRAFT" && r.status !== "CALCULATED") || del.isPending}
-                  onClick={() => { if (confirm("Delete this payroll run and all its results? This cannot be undone.")) del.mutate(r.id); }}
+                  disabled={del.isPending}
+                  onClick={() => { if (confirm("Manager override: delete this payroll run and all payslips/results? If it was approved or locked, the period can be reopened afterwards. This cannot be undone.")) del.mutate(r.id); }}
                 >
                   Delete
                 </Button>

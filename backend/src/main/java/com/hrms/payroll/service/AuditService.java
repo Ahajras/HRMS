@@ -246,21 +246,13 @@ public class AuditService {
         return row;
     }
 
-    /** Deletes a payroll run and everything under it (result lines, then
-     * results, then the run) — only while it is DRAFT or CALCULATED. Once
-     * a run has been APPROVED or LOCKED it represents money that may
-     * already be considered final/disbursed, so deleting it here is
-     * refused; use Reopen from the normal screen instead. */
+    /** Manager override: deletes a payroll run and everything under it
+     * (result lines, then results, then the run). This is the recovery path
+     * for large corrections when Day Zero is not enough. */
     @Transactional
     public void deletePayrollRun(UUID runId) {
         PayrollRun run = runRepo.findById(runId)
                 .orElseThrow(() -> new ResourceNotFoundException("Payroll run not found: " + runId));
-        String status = run.getStatus();
-        if (!"DRAFT".equalsIgnoreCase(status) && !"CALCULATED".equalsIgnoreCase(status)) {
-            throw new BusinessRuleException("audit.run_not_deletable",
-                    "This run is " + status + " — only DRAFT or CALCULATED runs can be deleted here. "
-                            + "Reopen it from the Payroll Runs screen first if it truly needs to be removed.");
-        }
         lineRepo.deleteByRunId(runId);
         resultRepo.deleteByRunId(runId);
         runRepo.delete(run);

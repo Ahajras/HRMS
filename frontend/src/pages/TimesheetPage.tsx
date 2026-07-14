@@ -20,8 +20,8 @@ import {
 } from "@mui/material";
 import PrintIcon from "@mui/icons-material/Print";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { costCodeApi, crewApi, periodApi, periodLockApi, projectApi, shiftApi, timeTypeApi, timesheetApi } from "../api/resources";
-import type { Timesheet, TimesheetDay, TimesheetDayCost } from "../api/types";
+import { costCodeApi, crewApi, payrollRunApi, periodApi, periodLockApi, projectApi, shiftApi, timeTypeApi, timesheetApi } from "../api/resources";
+import type { PayrollRun, Timesheet, TimesheetDay, TimesheetDayCost } from "../api/types";
 
 const STATUS_COLOR: Record<string, "default" | "info" | "success" | "warning"> = {
   DRAFT: "default",
@@ -47,6 +47,14 @@ function fmtDuration(seconds?: number): string {
   const m = Math.floor(s / 60);
   const rem = s % 60;
   return m ? `${m}m ${rem}s` : `${rem}s`;
+}
+
+function paidPayrollLocks(runs: PayrollRun[], projectId: string) {
+  return runs.filter((r) => {
+    const paid = r.status === "APPROVED" || r.status === "LOCKED";
+    const sameProject = !projectId || !r.projectId || r.projectId === projectId;
+    return paid && sameProject;
+  });
 }
 
 function printTimesheet(
@@ -188,9 +196,19 @@ export default function TimesheetPage() {
   const { data: periods = [] } = useQuery({ queryKey: ["periods"], queryFn: () => periodApi.list() });
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
   const { data: allCrews = [] } = useQuery({ queryKey: ["crews"], queryFn: crewApi.list });
+  const { data: payrollRuns = [] } = useQuery({
+    queryKey: ["payrollRuns", periodId],
+    queryFn: () => payrollRunApi.list(periodId),
+    enabled: !!periodId,
+  });
   const [genCrew, setGenCrew] = useState("");
 
   const period = periods.find((p) => p.id === periodId);
+  const paidLocks = paidPayrollLocks(payrollRuns, projectId);
+  const payrollClosed = paidLocks.length > 0;
+  const payrollClosedLabel = payrollClosed
+    ? `Payroll ${paidLocks.some((r) => r.status === "LOCKED") ? "locked" : "approved"}${projectId ? " for this project" : " for this period"}. Timesheets are read-only.`
+    : "";
   const employeeOptions = employees.filter((e) => !projectId || e.projectId === projectId);
   const selectedEmployee = employeeOptions.find((e) => e.id === genEmployee);
   const availableShifts = shifts.filter((s) => !selectedEmployee?.projectId || !s.projectId || s.projectId === selectedEmployee.projectId);
@@ -369,7 +387,7 @@ export default function TimesheetPage() {
     setLockJobId(null);
   }, [lockJob, periodId, qc]);
 
-  const periodEditable = period?.status !== "CLOSED";
+  const periodEditable = period?.status !== "CLOSED" && !payrollClosed;
   const isGeneratingBulk = generateAll.isPending || bulkJob?.status === "RUNNING";
   const isSubmittingBulk = submitAll.isPending || submitJob?.status === "RUNNING";
   const isApprovingBulk = approveAll.isPending || approveJob?.status === "RUNNING";
@@ -377,8 +395,35 @@ export default function TimesheetPage() {
   const filtered = rows;
 
   return (
-    <Box>
+    <Box sx={{ position: "relative" }}>
+      {payrollClosed && (
+        <Box
+          sx={{
+            pointerEvents: "none",
+            position: "fixed",
+            inset: 0,
+            zIndex: 1,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: { xs: 34, md: 64 },
+            fontWeight: 900,
+            color: "error.main",
+            opacity: 0.07,
+            transform: "rotate(-24deg)",
+            letterSpacing: 2,
+            textAlign: "center",
+          }}
+        >
+          PAYROLL LOCKED
+        </Box>
+      )}
       <Typography variant="h5" mb={2}>Timesheets</Typography>
+      {payrollClosed && (
+        <Alert severity="warning" sx={{ mb: 2, position: "relative", zIndex: 2 }}>
+          {payrollClosedLabel} Large corrections must be handled by an authorized manager deleting/reopening the payroll run first.
+        </Alert>
+      )}
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2, mb: 2 }}>
         <Grid container spacing={1.5} alignItems="center">
@@ -425,10 +470,10 @@ export default function TimesheetPage() {
                 <Button size="small" variant="outlined" disabled={!periodEditable || !genCrew || generateCrew.isPending} onClick={() => generateCrew.mutate()}>
                   Generate for crew
                 </Button>
-                <Button size="small" variant="outlined" disabled={rows.every((t) => t.status !== "DRAFT") || isSubmittingBulk} onClick={() => submitAll.mutate()}>
+                <Button size="small" variant="outlined" disabled={!periodEditable || rows.every((t) => t.status !== "DRAFT") || isSubmittingBulk} onClick={() => submitAll.mutate()}>
                   Submit all drafts
                 </Button>
-                <Button size="small" variant="outlined" color="success" disabled={rows.every((t) => t.status !== "SUBMITTED") || isApprovingBulk} onClick={() => approveAll.mutate()}>
+                <Button size="small" variant="outlined" color="success" disabled={!periodEditable || rows.every((t) => t.status !== "SUBMITTED") || isApprovingBulk} onClick={() => approveAll.mutate()}>
                   Approve all submitted
                 </Button>
                 <Button
@@ -511,7 +556,7 @@ export default function TimesheetPage() {
         )}
         {!periodEditable && period && (
           <Typography variant="body2" color="warning.main" mb={1}>
-            This period is CLOSED and cannot be edited.
+            {payrollClosed ? payrollClosedLabel : "This period is CLOSED and cannot be edited."}
           </Typography>
         )}
         <Grid container spacing={1.5} alignItems="center">
@@ -592,7 +637,7 @@ export default function TimesheetPage() {
                 <TableCell align="right">{t.totalAbsenceDays ?? 0}</TableCell>
                 <TableCell align="right">
                   <Button size="small" onClick={() => setSelectedId(t.id ?? null)}>Open</Button>
-                  <Button size="small" color="error" onClick={() => t.id && del.mutate(t.id)}>Delete</Button>
+                  <Button size="small" color="error" disabled={payrollClosed} onClick={() => t.id && del.mutate(t.id)}>Delete</Button>
                 </TableCell>
               </TableRow>
             ))}
@@ -611,6 +656,8 @@ export default function TimesheetPage() {
           lifecycleError={(lifecycle.error as any)?.response?.data?.message}
           onLifecycle={(action) => detail.id && lifecycle.mutate({ id: detail.id, action })}
           onDelete={() => detail.id && del.mutate(detail.id)}
+          payrollClosed={payrollClosed}
+          payrollClosedLabel={payrollClosedLabel}
         />
       )}
     </Box>
@@ -679,17 +726,21 @@ function TimesheetDetail({
   lifecycleError,
   onLifecycle,
   onDelete,
+  payrollClosed,
+  payrollClosedLabel,
 }: {
   timesheet: Timesheet;
   timeTypes: { id?: string; code: string; name: string }[];
   lifecycleError?: string;
   onLifecycle: (action: "submit" | "approve" | "lock" | "reopen") => void;
   onDelete: () => void;
+  payrollClosed: boolean;
+  payrollClosedLabel: string;
 }) {
   const qc = useQueryClient();
   const [days, setDays] = useState<TimesheetDay[]>(timesheet.days);
   const [costOpen, setCostOpen] = useState<number | null>(null);
-  const editable = timesheet.status === "DRAFT";
+  const editable = timesheet.status === "DRAFT" && !payrollClosed;
 
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
   const { data: costCodes = [] } = useQuery({ queryKey: ["costCodesAll"], queryFn: costCodeApi.list });
@@ -749,13 +800,15 @@ function TimesheetDetail({
             Print
           </Button>
           {editable && <Button size="small" variant="contained" disabled={save.isPending} onClick={() => save.mutate()}>Save days</Button>}
-          {timesheet.status === "DRAFT" && <Button size="small" onClick={() => onLifecycle("submit")}>Submit</Button>}
-          {timesheet.status === "SUBMITTED" && <Button size="small" color="success" onClick={() => onLifecycle("approve")}>Approve</Button>}
-          {timesheet.status === "APPROVED" && <Button size="small" color="warning" onClick={() => onLifecycle("lock")}>Lock</Button>}
-          {(timesheet.status === "SUBMITTED" || timesheet.status === "APPROVED" || timesheet.status === "LOCKED") && <Button size="small" onClick={() => onLifecycle("reopen")}>Reopen</Button>}
-          <Button size="small" color="error" onClick={onDelete}>Delete</Button>
+          {timesheet.status === "DRAFT" && <Button size="small" disabled={payrollClosed} onClick={() => onLifecycle("submit")}>Submit</Button>}
+          {timesheet.status === "SUBMITTED" && <Button size="small" color="success" disabled={payrollClosed} onClick={() => onLifecycle("approve")}>Approve</Button>}
+          {timesheet.status === "APPROVED" && <Button size="small" color="warning" disabled={payrollClosed} onClick={() => onLifecycle("lock")}>Lock</Button>}
+          {(timesheet.status === "SUBMITTED" || timesheet.status === "APPROVED" || timesheet.status === "LOCKED") && <Button size="small" disabled={payrollClosed} onClick={() => onLifecycle("reopen")}>Reopen</Button>}
+          <Button size="small" color="error" disabled={payrollClosed} onClick={onDelete}>Delete</Button>
         </Stack>
       </Stack>
+
+      {payrollClosed && <Alert severity="warning" sx={{ mb: 1 }}>{payrollClosedLabel}</Alert>}
 
       {lifecycleError && <Alert severity="error" sx={{ mb: 1 }}>{lifecycleError}</Alert>}
 
