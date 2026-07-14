@@ -52,6 +52,7 @@ import {
   organizationUnitApi,
   payrollComponentApi,
   projectApi,
+  projectApprovalRoleApi,
   shiftApi,
   timekeeperApi,
 } from "../api/resources";
@@ -164,10 +165,18 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
 
   // Supervisor candidates + the employee's current crew (read-only).
   const { data: empPage } = useQuery({ queryKey: ["employeesAll"], queryFn: () => employeeApi.list(0, 500) });
+  const { data: managerCandidates = [] } = useQuery({
+    queryKey: ["approvalRoleCandidates", "MANAGER"],
+    queryFn: () => projectApprovalRoleApi.candidates("MANAGER"),
+  });
   const { data: timekeeperRows = [] } = useQuery({ queryKey: ["timekeeperProjects"], queryFn: timekeeperApi.list });
-  const supervisorOpts = (empPage?.content ?? [])
+  const fallbackSupervisorOpts = (empPage?.content ?? [])
     .filter((e) => e.id !== form.id)
     .map((e) => ({ value: e.id!, label: `${e.employeeNumber} — ${e.firstName} ${e.lastName}` }));
+  const managerOpts = managerCandidates
+    .filter((c) => c.employeeId !== form.id)
+    .map((c) => ({ value: c.employeeId!, label: `${c.employeeNumber} - ${c.employeeName}` }));
+  const supervisorOpts = managerOpts.length ? managerOpts : fallbackSupervisorOpts;
   const timekeeperOpts = Array.from(new Map(timekeeperRows.map((t) => [
     t.employeeId,
     { value: t.employeeId, label: `${t.employeeNumber ?? ""} - ${t.employeeName ?? ""}` },

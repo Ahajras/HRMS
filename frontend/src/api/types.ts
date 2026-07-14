@@ -77,6 +77,25 @@ export interface Role {
   permissions: string[];
 }
 
+export interface RoleEmployeeCandidate {
+  userId?: string;
+  username?: string;
+  employeeId?: string;
+  employeeNumber?: string;
+  employeeName?: string;
+}
+
+export interface ProjectApprovalRole {
+  id?: string;
+  projectId: string;
+  projectCode?: string;
+  roleCode: string;
+  employeeId: string;
+  employeeNumber?: string;
+  employeeName?: string;
+  status?: string;
+}
+
 export interface CompanyProfile {
   id?: string;
   companyId?: string;

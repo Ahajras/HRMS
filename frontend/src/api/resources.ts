@@ -28,6 +28,8 @@ import type {
   CostCodeLine,
   EmployeeCostBreakdown,
   Project,
+  ProjectApprovalRole,
+  RoleEmployeeCandidate,
   CostCode,
   PublicHoliday,
   PayrollCalendar,
@@ -106,6 +108,14 @@ export const projectApi = {
   create: (d: Project) => api.post<Project>("/projects", d).then((r) => r.data),
   update: (id: string, d: Project) => api.put<Project>(`/projects/${id}`, d).then((r) => r.data),
   remove: (id: string) => api.delete(`/projects/${id}`).then(() => undefined),
+};
+
+export const projectApprovalRoleApi = {
+  list: () => api.get<ProjectApprovalRole[]>("/project-approval-roles").then((r) => r.data),
+  candidates: (roleCode: string) =>
+    api.get<RoleEmployeeCandidate[]>("/project-approval-roles/candidates", { params: { roleCode } }).then((r) => r.data),
+  create: (d: ProjectApprovalRole) => api.post<ProjectApprovalRole>("/project-approval-roles", d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/project-approval-roles/${id}`).then(() => undefined),
 };
 
 export const costCodeApi = {

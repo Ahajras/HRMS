@@ -21,6 +21,7 @@ import CompanyProfilePage from "./pages/CompanyProfilePage";
 import CountryLawPage from "./pages/CountryLawPage";
 import OvertimeCategoriesPage from "./pages/OvertimeCategoriesPage";
 import ProjectsPage from "./pages/ProjectsPage";
+import ProjectApprovalRolesPage from "./pages/ProjectApprovalRolesPage";
 import CurrenciesPage from "./pages/CurrenciesPage";
 import UsersPage from "./pages/UsersPage";
 import RolesPage from "./pages/RolesPage";
@@ -81,6 +82,7 @@ export default function App() {
         <Route path="/country-law" element={<CountryLawPage />} />
         <Route path="/overtime-categories" element={<OvertimeCategoriesPage />} />
         <Route path="/projects" element={<ProjectsPage />} />
+        <Route path="/project-approval-roles" element={<ProjectApprovalRolesPage />} />
         <Route path="/currencies" element={<CurrenciesPage />} />
         <Route path="/users" element={<UsersPage />} />
         <Route path="/roles" element={<RolesPage />} />

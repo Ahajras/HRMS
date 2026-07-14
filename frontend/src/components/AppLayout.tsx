@@ -127,6 +127,7 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Configuration",
     items: [
       { to: "/projects", label: "Projects", icon: <WorkIcon />, authority: "reference.read" },
+      { to: "/project-approval-roles", label: "Project Approval Roles", icon: <SecurityIcon />, authority: "employee.read" },
       { to: "/company-profile", label: "Company Profile", icon: <BusinessIcon />, authority: "reference.read" },
       { to: "/org-unit-types", label: "Org Levels", icon: <LayersIcon />, authority: "organization.read" },
       { to: "/countries", label: "Countries", icon: <PublicIcon />, authority: "reference.read" },
