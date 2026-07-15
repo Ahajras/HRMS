@@ -99,25 +99,25 @@ public class ApprovalService {
         instance.setSubmittedAt(Instant.now());
         instance = instanceRepo.save(instance);
 
-        ApprovalInstanceStep firstPending = null;
+        List<ApprovalInstanceStep> firstPending = new ArrayList<>();
         for (int i = 0; i < steps.size(); i++) {
             ApprovalWorkflowStep src = steps.get(i);
-            ApprovalInstanceStep step = new ApprovalInstanceStep();
-            step.setInstanceId(instance.getId());
-            step.setStepOrder(src.getStepOrder());
-            step.setName(src.getName());
-            step.setApproverType(src.getApproverType());
-            step.setApproverRoleCode(src.getApproverRoleCode());
-            step.setApproverEmployeeId(resolveApproverEmployee(src, employeeId, projectId));
-            step.setStatus(i == 0 ? "PENDING" : "WAITING");
-            step = instanceStepRepo.save(step);
-            if (i == 0) {
-                firstPending = step;
+            for (UUID approverId : resolveApproverEmployees(src, employeeId, projectId)) {
+                ApprovalInstanceStep step = new ApprovalInstanceStep();
+                step.setInstanceId(instance.getId());
+                step.setStepOrder(src.getStepOrder());
+                step.setName(src.getName());
+                step.setApproverType(src.getApproverType());
+                step.setApproverRoleCode(src.getApproverRoleCode());
+                step.setApproverEmployeeId(approverId);
+                step.setStatus(i == 0 ? "PENDING" : "WAITING");
+                step = instanceStepRepo.save(step);
+                if (i == 0) {
+                    firstPending.add(step);
+                }
             }
         }
-        if (firstPending != null) {
-            notificationService.notifyPending(instance, firstPending);
-        }
+        firstPending.forEach(step -> notificationService.notifyPending(instance, step));
     }
 
     public boolean approveTimesheetStep(UUID timesheetId) {
@@ -126,10 +126,13 @@ public class ApprovalService {
                         companyId, TIMESHEET_ENTITY, timesheetId, List.of("PENDING"))
                 .orElseThrow(() -> new BusinessRuleException("approval.instance.required",
                         "This timesheet has no pending approval workflow."));
-        ApprovalInstanceStep current = instanceStepRepo.findByInstanceIdAndStatus(instance.getId(), "PENDING")
-                .orElseThrow(() -> new BusinessRuleException("approval.step.required", "No pending approval step found."));
         UUID currentEmployeeId = currentEmployeeId();
-        if (currentEmployeeId == null || !currentEmployeeId.equals(current.getApproverEmployeeId())) {
+        List<ApprovalInstanceStep> pendingSteps = instanceStepRepo.findAllByInstanceIdAndStatus(instance.getId(), "PENDING");
+        ApprovalInstanceStep current = pendingSteps.stream()
+                .filter(s -> currentEmployeeId != null && currentEmployeeId.equals(s.getApproverEmployeeId()))
+                .findFirst()
+                .orElse(null);
+        if (current == null) {
             throw new BusinessRuleException("approval.step.unauthorized",
                     "This approval is waiting for another approver.");
         }
@@ -137,23 +140,37 @@ public class ApprovalService {
         current.setDecidedAt(Instant.now());
         current.setDecidedBy(currentUsername());
         instanceStepRepo.save(current);
+        for (ApprovalInstanceStep peer : pendingSteps) {
+            if (!peer.getId().equals(current.getId()) && peer.getStepOrder() == current.getStepOrder()) {
+                peer.setStatus("SKIPPED");
+                peer.setDecidedAt(Instant.now());
+                peer.setDecidedBy(currentUsername());
+                instanceStepRepo.save(peer);
+            }
+        }
 
         List<ApprovalInstanceStep> steps = instanceStepRepo.findByInstanceIdOrderByStepOrderAsc(instance.getId());
-        ApprovalInstanceStep next = steps.stream()
+        Integer nextOrder = steps.stream()
                 .filter(s -> "WAITING".equals(s.getStatus()))
-                .min(Comparator.comparingInt(ApprovalInstanceStep::getStepOrder))
+                .map(ApprovalInstanceStep::getStepOrder)
+                .min(Comparator.naturalOrder())
                 .orElse(null);
-        if (next == null) {
+        if (nextOrder == null) {
             instance.setStatus("APPROVED");
             instance.setCompletedAt(Instant.now());
             instanceRepo.save(instance);
             return true;
         }
-        next.setStatus("PENDING");
-        instanceStepRepo.save(next);
-        instance.setCurrentStepOrder(next.getStepOrder());
+        List<ApprovalInstanceStep> nextSteps = steps.stream()
+                .filter(s -> "WAITING".equals(s.getStatus()) && s.getStepOrder() == nextOrder)
+                .toList();
+        for (ApprovalInstanceStep next : nextSteps) {
+            next.setStatus("PENDING");
+            instanceStepRepo.save(next);
+        }
+        instance.setCurrentStepOrder(nextOrder);
         instanceRepo.save(instance);
-        notificationService.notifyPending(instance, next);
+        nextSteps.forEach(next -> notificationService.notifyPending(instance, next));
         return false;
     }
 
@@ -185,11 +202,11 @@ public class ApprovalService {
             if (TIMESHEET_ENTITY.equals(instance.getEntityType()) && timesheetRepo.findById(instance.getEntityId()).isEmpty()) {
                 continue;
             }
-            ApprovalInstanceStep step = instanceStepRepo.findByInstanceIdAndStatus(instance.getId(), "PENDING").orElse(null);
-            if (step == null || !employeeId.equals(step.getApproverEmployeeId())) {
-                continue;
+            for (ApprovalInstanceStep step : instanceStepRepo.findAllByInstanceIdAndStatus(instance.getId(), "PENDING")) {
+                if (employeeId.equals(step.getApproverEmployeeId())) {
+                    out.add(toTask(instance, step));
+                }
             }
-            out.add(toTask(instance, step));
         }
         return out;
     }
@@ -228,22 +245,29 @@ public class ApprovalService {
         return dto;
     }
 
-    private UUID resolveApproverEmployee(ApprovalWorkflowStep step, UUID employeeId, UUID projectId) {
+    private List<UUID> resolveApproverEmployees(ApprovalWorkflowStep step, UUID employeeId, UUID projectId) {
         String type = step.getApproverType() == null ? "" : step.getApproverType().toUpperCase(Locale.ROOT);
         if ("SPECIFIC_EMPLOYEE".equals(type)) {
-            return require(step.getApproverEmployeeId(), "Specific approval employee is not configured.");
+            return List.of(require(step.getApproverEmployeeId(), "Specific approval employee is not configured."));
         }
         if ("SUPERVISOR".equals(type)) {
             Employee employee = employeeRepo.findById(employeeId)
                     .orElseThrow(() -> new ResourceNotFoundException("Employee not found: " + employeeId));
-            return require(employee.getSupervisorEmployeeId(), "Employee has no supervisor configured for approval.");
+            return List.of(require(employee.getSupervisorEmployeeId(), "Employee has no supervisor configured for approval."));
         }
         if ("PROJECT_ROLE".equals(type)) {
             List<ProjectApprovalRole> rows = projectApprovalRoleRepo.findByCompanyIdAndProjectIdAndRoleCodeAndStatus(
                     TenantContext.requireCompanyId(), projectId, step.getApproverRoleCode(), "ACTIVE");
-            return rows.stream().map(ProjectApprovalRole::getEmployeeId).findFirst()
-                    .orElseThrow(() -> new BusinessRuleException("approval.project.role.required",
-                            "No active " + step.getApproverRoleCode() + " approver is assigned to this project."));
+            List<UUID> approvers = rows.stream()
+                    .map(ProjectApprovalRole::getEmployeeId)
+                    .filter(id -> id != null && !id.equals(employeeId))
+                    .distinct()
+                    .toList();
+            if (approvers.isEmpty()) {
+                throw new BusinessRuleException("approval.project.role.required",
+                        "No active non-self " + step.getApproverRoleCode() + " approver is assigned to this project.");
+            }
+            return approvers;
         }
         throw new BusinessRuleException("approval.approver.type", "Unknown approver type: " + step.getApproverType());
     }
