@@ -143,14 +143,26 @@ public class ApprovalService {
     }
 
     public boolean approveTimesheetStep(UUID timesheetId) {
-        return approveStep(TIMESHEET_ENTITY, timesheetId);
+        return approveStep(TIMESHEET_ENTITY, timesheetId, null);
     }
 
     public boolean approveLeaveStep(UUID leaveRequestId) {
-        return approveStep(LEAVE_ENTITY, leaveRequestId);
+        return approveStep(LEAVE_ENTITY, leaveRequestId, null);
     }
 
-    private boolean approveStep(String entityType, UUID entityId) {
+    public boolean approveLeaveStep(UUID leaveRequestId, String remarks) {
+        return approveStep(LEAVE_ENTITY, leaveRequestId, remarks);
+    }
+
+    public void rejectLeaveApproval(UUID leaveRequestId, String remarks) {
+        closeWithDecision(LEAVE_ENTITY, leaveRequestId, "REJECTED", remarks, true);
+    }
+
+    public void returnLeaveApproval(UUID leaveRequestId, String remarks) {
+        closeWithDecision(LEAVE_ENTITY, leaveRequestId, "RETURNED", remarks, true);
+    }
+
+    private boolean approveStep(String entityType, UUID entityId, String remarks) {
         UUID companyId = TenantContext.requireCompanyId();
         ApprovalInstance instance = instanceRepo.findFirstByCompanyIdAndEntityTypeAndEntityIdAndStatusIn(
                         companyId, entityType, entityId, List.of("PENDING"))
@@ -169,6 +181,7 @@ public class ApprovalService {
         current.setStatus("APPROVED");
         current.setDecidedAt(Instant.now());
         current.setDecidedBy(currentUsername());
+        current.setRemarks(normalizeRemarks(remarks));
         instanceStepRepo.save(current);
         for (ApprovalInstanceStep peer : pendingSteps) {
             if (!peer.getId().equals(current.getId()) && peer.getStepOrder() == current.getStepOrder()) {
@@ -202,6 +215,44 @@ public class ApprovalService {
         instanceRepo.save(instance);
         nextSteps.forEach(next -> notificationService.notifyPending(instance, next));
         return false;
+    }
+
+    private void closeWithDecision(String entityType, UUID entityId, String decision, String remarks, boolean requireRemarks) {
+        if (requireRemarks && (remarks == null || remarks.isBlank())) {
+            throw new BusinessRuleException("approval.remarks.required", "Remarks are required for " + decision + ".");
+        }
+        UUID companyId = TenantContext.requireCompanyId();
+        ApprovalInstance instance = instanceRepo.findFirstByCompanyIdAndEntityTypeAndEntityIdAndStatusIn(
+                        companyId, entityType, entityId, List.of("PENDING"))
+                .orElseThrow(() -> new BusinessRuleException("approval.instance.required",
+                        "This item has no pending approval workflow."));
+        UUID currentEmployeeId = currentEmployeeId();
+        List<ApprovalInstanceStep> pendingSteps = instanceStepRepo.findAllByInstanceIdAndStatus(instance.getId(), "PENDING");
+        ApprovalInstanceStep current = pendingSteps.stream()
+                .filter(s -> currentEmployeeId != null && currentEmployeeId.equals(s.getApproverEmployeeId()))
+                .findFirst()
+                .orElse(null);
+        if (current == null) {
+            throw new BusinessRuleException("approval.step.unauthorized",
+                    "This approval is waiting for another approver.");
+        }
+        current.setStatus(decision);
+        current.setDecidedAt(Instant.now());
+        current.setDecidedBy(currentUsername());
+        current.setRemarks(normalizeRemarks(remarks));
+        instanceStepRepo.save(current);
+        for (ApprovalInstanceStep step : instanceStepRepo.findByInstanceIdOrderByStepOrderAsc(instance.getId())) {
+            if (!step.getId().equals(current.getId())
+                    && ("PENDING".equals(step.getStatus()) || "WAITING".equals(step.getStatus()))) {
+                step.setStatus("VOID");
+                step.setDecidedAt(Instant.now());
+                step.setDecidedBy(currentUsername());
+                instanceStepRepo.save(step);
+            }
+        }
+        instance.setStatus(decision);
+        instance.setCompletedAt(Instant.now());
+        instanceRepo.save(instance);
     }
 
     public void voidTimesheetApproval(UUID timesheetId) {
@@ -290,10 +341,45 @@ public class ApprovalService {
                 dto.setLeaveReturnDate(leave.getReturnDate());
                 dto.setLeaveTotalDays(leave.getTotalDays());
                 dto.setLeaveStatus(leave.getStatus());
+                dto.setLeaveReason(leave.getReason());
+                dto.setLeaveRequiresTicket(leave.isRequiresTicket());
+                dto.setLeaveTicketFrom(leave.getTicketFrom());
+                dto.setLeaveTicketTo(leave.getTicketTo());
+                dto.setLeaveTravelDate(leave.getTravelDate());
+                dto.setLeaveReturnTravelDate(leave.getReturnTravelDate());
+                dto.setLeaveDestination(leave.getDestination());
+                dto.setLeavePassportNumber(leave.getPassportNumber());
+                dto.setLeaveDependentCount(leave.getDependentCount());
+                dto.setLeaveTravelRemarks(leave.getTravelRemarks());
+                dto.setLeaveContactPhone(leave.getContactPhone());
+                dto.setLeaveContactEmail(leave.getContactEmail());
+                dto.setLeaveAddressDuringLeave(leave.getAddressDuringLeave());
+                dto.setLeaveEmergencyContactName(leave.getEmergencyContactName());
+                dto.setLeaveEmergencyContactPhone(leave.getEmergencyContactPhone());
                 leaveTypeRepo.findById(leave.getLeaveTypeId()).ifPresent(type -> {
                     dto.setLeaveTypeCode(type.getCode());
                     dto.setLeaveTypeName(type.getName());
                 });
+            });
+        }
+        dto.setHistory(instanceStepRepo.findByInstanceIdOrderByStepOrderAsc(instance.getId()).stream()
+                .map(this::toHistory)
+                .toList());
+        return dto;
+    }
+
+    private ApprovalTaskDto.StepHistoryDto toHistory(ApprovalInstanceStep step) {
+        ApprovalTaskDto.StepHistoryDto dto = new ApprovalTaskDto.StepHistoryDto();
+        dto.setStepOrder(step.getStepOrder());
+        dto.setStepName(step.getName());
+        dto.setStatus(step.getStatus());
+        dto.setDecidedBy(step.getDecidedBy());
+        dto.setDecidedAt(step.getDecidedAt());
+        dto.setRemarks(step.getRemarks());
+        if (step.getApproverEmployeeId() != null) {
+            employeeRepo.findById(step.getApproverEmployeeId()).ifPresent(e -> {
+                dto.setApproverNumber(e.getEmployeeNumber());
+                dto.setApproverName((safe(e.getFirstName()) + " " + safe(e.getLastName())).trim());
             });
         }
         return dto;
@@ -350,5 +436,9 @@ public class ApprovalService {
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private String normalizeRemarks(String remarks) {
+        return remarks == null || remarks.isBlank() ? null : remarks.trim();
     }
 }

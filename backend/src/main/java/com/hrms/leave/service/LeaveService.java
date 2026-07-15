@@ -265,6 +265,43 @@ public class LeaveService {
         return toDto(saved);
     }
 
+    public LeaveRequestDto approveRequest(UUID id, String remarks) {
+        LeaveRequest row = getRequest(id);
+        assertProjectAllowed(row.getEmployeeId());
+        LeaveType type = getType(row.getLeaveTypeId());
+        boolean completed = approvalService.approveLeaveStep(id, remarks);
+        if (!completed) {
+            row.setStatus("SUBMITTED");
+            return toDto(requestRepo.save(row));
+        }
+        row.setStatus("APPROVED");
+        row.setHrApprovedAt(Instant.now());
+        row.setHrApprovedBy(currentUsername());
+        LeaveRequest saved = requestRepo.save(row);
+        timesheetService.syncLeaveRequest(saved, type);
+        ticketService.syncLeaveTicket(saved);
+        return toDto(saved);
+    }
+
+    public LeaveRequestDto rejectRequest(UUID id, String remarks) {
+        LeaveRequest row = getRequest(id);
+        assertProjectAllowed(row.getEmployeeId());
+        approvalService.rejectLeaveApproval(id, remarks);
+        row.setStatus("REJECTED");
+        LeaveRequest saved = requestRepo.save(row);
+        timesheetService.syncLeaveRequest(saved, getType(saved.getLeaveTypeId()));
+        ticketService.syncLeaveTicket(saved);
+        return toDto(saved);
+    }
+
+    public LeaveRequestDto returnRequest(UUID id, String remarks) {
+        LeaveRequest row = getRequest(id);
+        assertProjectAllowed(row.getEmployeeId());
+        approvalService.returnLeaveApproval(id, remarks);
+        row.setStatus("RETURNED");
+        return toDto(requestRepo.save(row));
+    }
+
     @Transactional(readOnly = true)
     public List<LeaveAdjustmentDto> listAdjustments(UUID employeeId) {
         UUID companyId = TenantContext.requireCompanyId();

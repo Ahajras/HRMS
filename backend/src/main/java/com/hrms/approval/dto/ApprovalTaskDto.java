@@ -2,6 +2,8 @@ package com.hrms.approval.dto;
 
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import java.math.BigDecimal;
 
@@ -34,6 +36,22 @@ public class ApprovalTaskDto {
     private String leaveStatus;
     private String leaveTypeCode;
     private String leaveTypeName;
+    private String leaveReason;
+    private boolean leaveRequiresTicket;
+    private String leaveTicketFrom;
+    private String leaveTicketTo;
+    private LocalDate leaveTravelDate;
+    private LocalDate leaveReturnTravelDate;
+    private String leaveDestination;
+    private String leavePassportNumber;
+    private Integer leaveDependentCount;
+    private String leaveTravelRemarks;
+    private String leaveContactPhone;
+    private String leaveContactEmail;
+    private String leaveAddressDuringLeave;
+    private String leaveEmergencyContactName;
+    private String leaveEmergencyContactPhone;
+    private List<StepHistoryDto> history = new ArrayList<>();
 
     public UUID getInstanceId() { return instanceId; }
     public void setInstanceId(UUID instanceId) { this.instanceId = instanceId; }
@@ -91,4 +109,64 @@ public class ApprovalTaskDto {
     public void setLeaveTypeCode(String leaveTypeCode) { this.leaveTypeCode = leaveTypeCode; }
     public String getLeaveTypeName() { return leaveTypeName; }
     public void setLeaveTypeName(String leaveTypeName) { this.leaveTypeName = leaveTypeName; }
+    public String getLeaveReason() { return leaveReason; }
+    public void setLeaveReason(String leaveReason) { this.leaveReason = leaveReason; }
+    public boolean isLeaveRequiresTicket() { return leaveRequiresTicket; }
+    public void setLeaveRequiresTicket(boolean leaveRequiresTicket) { this.leaveRequiresTicket = leaveRequiresTicket; }
+    public String getLeaveTicketFrom() { return leaveTicketFrom; }
+    public void setLeaveTicketFrom(String leaveTicketFrom) { this.leaveTicketFrom = leaveTicketFrom; }
+    public String getLeaveTicketTo() { return leaveTicketTo; }
+    public void setLeaveTicketTo(String leaveTicketTo) { this.leaveTicketTo = leaveTicketTo; }
+    public LocalDate getLeaveTravelDate() { return leaveTravelDate; }
+    public void setLeaveTravelDate(LocalDate leaveTravelDate) { this.leaveTravelDate = leaveTravelDate; }
+    public LocalDate getLeaveReturnTravelDate() { return leaveReturnTravelDate; }
+    public void setLeaveReturnTravelDate(LocalDate leaveReturnTravelDate) { this.leaveReturnTravelDate = leaveReturnTravelDate; }
+    public String getLeaveDestination() { return leaveDestination; }
+    public void setLeaveDestination(String leaveDestination) { this.leaveDestination = leaveDestination; }
+    public String getLeavePassportNumber() { return leavePassportNumber; }
+    public void setLeavePassportNumber(String leavePassportNumber) { this.leavePassportNumber = leavePassportNumber; }
+    public Integer getLeaveDependentCount() { return leaveDependentCount; }
+    public void setLeaveDependentCount(Integer leaveDependentCount) { this.leaveDependentCount = leaveDependentCount; }
+    public String getLeaveTravelRemarks() { return leaveTravelRemarks; }
+    public void setLeaveTravelRemarks(String leaveTravelRemarks) { this.leaveTravelRemarks = leaveTravelRemarks; }
+    public String getLeaveContactPhone() { return leaveContactPhone; }
+    public void setLeaveContactPhone(String leaveContactPhone) { this.leaveContactPhone = leaveContactPhone; }
+    public String getLeaveContactEmail() { return leaveContactEmail; }
+    public void setLeaveContactEmail(String leaveContactEmail) { this.leaveContactEmail = leaveContactEmail; }
+    public String getLeaveAddressDuringLeave() { return leaveAddressDuringLeave; }
+    public void setLeaveAddressDuringLeave(String leaveAddressDuringLeave) { this.leaveAddressDuringLeave = leaveAddressDuringLeave; }
+    public String getLeaveEmergencyContactName() { return leaveEmergencyContactName; }
+    public void setLeaveEmergencyContactName(String leaveEmergencyContactName) { this.leaveEmergencyContactName = leaveEmergencyContactName; }
+    public String getLeaveEmergencyContactPhone() { return leaveEmergencyContactPhone; }
+    public void setLeaveEmergencyContactPhone(String leaveEmergencyContactPhone) { this.leaveEmergencyContactPhone = leaveEmergencyContactPhone; }
+    public List<StepHistoryDto> getHistory() { return history; }
+    public void setHistory(List<StepHistoryDto> history) { this.history = history; }
+
+    public static class StepHistoryDto {
+        private int stepOrder;
+        private String stepName;
+        private String status;
+        private String approverNumber;
+        private String approverName;
+        private String decidedBy;
+        private Instant decidedAt;
+        private String remarks;
+
+        public int getStepOrder() { return stepOrder; }
+        public void setStepOrder(int stepOrder) { this.stepOrder = stepOrder; }
+        public String getStepName() { return stepName; }
+        public void setStepName(String stepName) { this.stepName = stepName; }
+        public String getStatus() { return status; }
+        public void setStatus(String status) { this.status = status; }
+        public String getApproverNumber() { return approverNumber; }
+        public void setApproverNumber(String approverNumber) { this.approverNumber = approverNumber; }
+        public String getApproverName() { return approverName; }
+        public void setApproverName(String approverName) { this.approverName = approverName; }
+        public String getDecidedBy() { return decidedBy; }
+        public void setDecidedBy(String decidedBy) { this.decidedBy = decidedBy; }
+        public Instant getDecidedAt() { return decidedAt; }
+        public void setDecidedAt(Instant decidedAt) { this.decidedAt = decidedAt; }
+        public String getRemarks() { return remarks; }
+        public void setRemarks(String remarks) { this.remarks = remarks; }
+    }
 }

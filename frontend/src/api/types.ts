@@ -125,6 +125,33 @@ export interface ApprovalTask {
   leaveStatus?: string;
   leaveTypeCode?: string;
   leaveTypeName?: string;
+  leaveReason?: string;
+  leaveRequiresTicket?: boolean;
+  leaveTicketFrom?: string;
+  leaveTicketTo?: string;
+  leaveTravelDate?: string;
+  leaveReturnTravelDate?: string;
+  leaveDestination?: string;
+  leavePassportNumber?: string;
+  leaveDependentCount?: number;
+  leaveTravelRemarks?: string;
+  leaveContactPhone?: string;
+  leaveContactEmail?: string;
+  leaveAddressDuringLeave?: string;
+  leaveEmergencyContactName?: string;
+  leaveEmergencyContactPhone?: string;
+  history?: ApprovalStepHistory[];
+}
+
+export interface ApprovalStepHistory {
+  stepOrder: number;
+  stepName: string;
+  status: string;
+  approverNumber?: string;
+  approverName?: string;
+  decidedBy?: string;
+  decidedAt?: string;
+  remarks?: string;
 }
 
 export interface ApprovalWorkflowStep {

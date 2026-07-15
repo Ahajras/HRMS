@@ -3,6 +3,10 @@ import {
   Box,
   Button,
   Chip,
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
   Divider,
   LinearProgress,
   MenuItem,
@@ -17,7 +21,10 @@ import {
   Typography,
 } from "@mui/material";
 import CheckIcon from "@mui/icons-material/Check";
+import CloseIcon from "@mui/icons-material/Close";
 import DoneAllIcon from "@mui/icons-material/DoneAll";
+import EditNoteIcon from "@mui/icons-material/EditNote";
+import VisibilityIcon from "@mui/icons-material/Visibility";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { approvalApi } from "../api/resources";
@@ -52,9 +59,9 @@ function approvalStatus(task: ApprovalTask) {
   return task.entityType === "LEAVE_REQUEST" ? task.leaveStatus ?? task.status : task.timesheetStatus ?? task.status;
 }
 
-async function approveTask(task: ApprovalTask) {
+async function approveTask(task: ApprovalTask, remarks?: string) {
   if (task.entityType === "LEAVE_REQUEST") {
-    return approvalApi.approveLeaveRequest(task.entityId);
+    return approvalApi.approveLeaveRequest(task.entityId, remarks);
   }
   return approvalApi.approveTimesheet(task.entityId);
 }
@@ -65,6 +72,10 @@ export default function MyApprovalsPage() {
   const [project, setProject] = useState("ALL");
   const [period, setPeriod] = useState("ALL");
   const [page, setPage] = useState(0);
+  const [detailTask, setDetailTask] = useState<ApprovalTask | null>(null);
+  const [decisionTask, setDecisionTask] = useState<ApprovalTask | null>(null);
+  const [decision, setDecision] = useState<"APPROVE" | "REJECT" | "RETURN">("APPROVE");
+  const [remarks, setRemarks] = useState("");
   const { data: tasks = [], isLoading } = useQuery({ queryKey: ["myApprovalTasks"], queryFn: approvalApi.myTasks });
   const approve = useMutation({
     mutationFn: (task: ApprovalTask) => approveTask(task),
@@ -73,6 +84,22 @@ export default function MyApprovalsPage() {
       qc.invalidateQueries({ queryKey: ["timesheets"] });
       qc.invalidateQueries({ queryKey: ["timesheet"] });
       qc.invalidateQueries({ queryKey: ["leaveRequests"] });
+    },
+  });
+  const leaveDecision = useMutation({
+    mutationFn: async () => {
+      if (!decisionTask) return;
+      if (decision === "REJECT") return approvalApi.rejectLeaveRequest(decisionTask.entityId, remarks);
+      if (decision === "RETURN") return approvalApi.returnLeaveRequest(decisionTask.entityId, remarks);
+      return approvalApi.approveLeaveRequest(decisionTask.entityId, remarks);
+    },
+    onSuccess: () => {
+      setDecisionTask(null);
+      setRemarks("");
+      qc.invalidateQueries({ queryKey: ["myApprovalTasks"] });
+      qc.invalidateQueries({ queryKey: ["leaveRequests"] });
+      qc.invalidateQueries({ queryKey: ["timesheets"] });
+      qc.invalidateQueries({ queryKey: ["timesheet"] });
     },
   });
 
@@ -110,7 +137,7 @@ export default function MyApprovalsPage() {
   const visible = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   const approveMany = async (rows: ApprovalTask[]) => {
-    for (const task of rows.filter((t) => t.entityType === "TIMESHEET" || t.entityType === "LEAVE_REQUEST")) {
+    for (const task of rows.filter((t) => t.entityType === "TIMESHEET")) {
       await approveTask(task);
     }
     await qc.invalidateQueries({ queryKey: ["myApprovalTasks"] });
@@ -121,7 +148,15 @@ export default function MyApprovalsPage() {
 
   const approveVisible = useMutation({ mutationFn: () => approveMany(visible) });
   const approveFiltered = useMutation({ mutationFn: () => approveMany(filtered) });
-  const busy = approve.isPending || approveVisible.isPending || approveFiltered.isPending;
+  const busy = approve.isPending || approveVisible.isPending || approveFiltered.isPending || leaveDecision.isPending;
+  const visibleTimesheets = visible.filter((t) => t.entityType === "TIMESHEET").length;
+  const filteredTimesheets = filtered.filter((t) => t.entityType === "TIMESHEET").length;
+
+  const openDecision = (task: ApprovalTask, next: "APPROVE" | "REJECT" | "RETURN") => {
+    setDecisionTask(task);
+    setDecision(next);
+    setRemarks("");
+  };
 
   return (
     <Box>
@@ -136,18 +171,18 @@ export default function MyApprovalsPage() {
           <Button
             variant="outlined"
             startIcon={<DoneAllIcon />}
-            disabled={busy || visible.length === 0}
+            disabled={busy || visibleTimesheets === 0}
             onClick={() => approveVisible.mutate()}
           >
-            Approve visible ({visible.length})
+            Approve visible timesheets ({visibleTimesheets})
           </Button>
           <Button
             variant="contained"
             startIcon={<DoneAllIcon />}
-            disabled={busy || filtered.length === 0}
+            disabled={busy || filteredTimesheets === 0}
             onClick={() => approveFiltered.mutate()}
           >
-            Approve all filtered ({filtered.length})
+            Approve all filtered timesheets ({filteredTimesheets})
           </Button>
         </Stack>
       </Stack>
@@ -159,6 +194,11 @@ export default function MyApprovalsPage() {
       {(approveVisible.isError || approveFiltered.isError) && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {((approveVisible.error || approveFiltered.error) as any)?.response?.data?.message ?? "Could not approve all selected tasks."}
+        </Alert>
+      )}
+      {leaveDecision.isError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {(leaveDecision.error as any)?.response?.data?.message ?? "Could not submit this leave decision."}
         </Alert>
       )}
       <Stack direction={{ xs: "column", md: "row" }} gap={2} mb={2}>
@@ -257,7 +297,15 @@ export default function MyApprovalsPage() {
                 </TableCell>
                 <TableCell>{task.submittedAt ? new Date(task.submittedAt).toLocaleString() : ""}</TableCell>
                 <TableCell align="right">
-                  {(task.entityType === "TIMESHEET" || task.entityType === "LEAVE_REQUEST") && (
+                  <Stack direction="row" gap={0.5} justifyContent="flex-end" flexWrap="wrap">
+                    <Button
+                      size="small"
+                      startIcon={<VisibilityIcon />}
+                      onClick={() => setDetailTask(task)}
+                    >
+                      Details
+                    </Button>
+                  {task.entityType === "TIMESHEET" && (
                     <Button
                       size="small"
                       color="success"
@@ -268,6 +316,20 @@ export default function MyApprovalsPage() {
                       Approve
                     </Button>
                   )}
+                  {task.entityType === "LEAVE_REQUEST" && (
+                    <>
+                      <Button size="small" color="success" startIcon={<CheckIcon />} onClick={() => openDecision(task, "APPROVE")}>
+                        Approve
+                      </Button>
+                      <Button size="small" color="warning" startIcon={<EditNoteIcon />} onClick={() => openDecision(task, "RETURN")}>
+                        Return
+                      </Button>
+                      <Button size="small" color="error" startIcon={<CloseIcon />} onClick={() => openDecision(task, "REJECT")}>
+                        Reject
+                      </Button>
+                    </>
+                  )}
+                  </Stack>
                 </TableCell>
               </TableRow>
             ))}
@@ -301,6 +363,133 @@ export default function MyApprovalsPage() {
           </Stack>
         </Stack>
       </Paper>
+      <LeaveDetailsDialog task={detailTask} onClose={() => setDetailTask(null)} />
+      <Dialog open={!!decisionTask} onClose={() => setDecisionTask(null)} maxWidth="sm" fullWidth>
+        <DialogTitle>{decision === "APPROVE" ? "Approve leave" : decision === "REJECT" ? "Reject leave" : "Return leave for correction"}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={1.5} mt={1}>
+            <Typography variant="body2">
+              {decisionTask?.employeeNumber} - {decisionTask?.employeeName}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {decisionTask?.leaveTypeCode} - {decisionTask?.leaveTypeName} | {periodOrDates(decisionTask ?? {} as ApprovalTask)} | {num(decisionTask?.leaveTotalDays)} day(s)
+            </Typography>
+            <TextField
+              label={decision === "APPROVE" ? "Comment optional" : "Comment required"}
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              multiline
+              minRows={4}
+              fullWidth
+              required={decision !== "APPROVE"}
+              error={decision !== "APPROVE" && !remarks.trim()}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDecisionTask(null)}>Cancel</Button>
+          <Button
+            variant="contained"
+            color={decision === "REJECT" ? "error" : decision === "RETURN" ? "warning" : "success"}
+            disabled={leaveDecision.isPending || (decision !== "APPROVE" && !remarks.trim())}
+            onClick={() => leaveDecision.mutate()}
+          >
+            Confirm
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
+  );
+}
+
+function LeaveDetailsDialog({ task, onClose }: { task: ApprovalTask | null; onClose: () => void }) {
+  if (!task) return null;
+  const isLeave = task.entityType === "LEAVE_REQUEST";
+  return (
+    <Dialog open={!!task} onClose={onClose} maxWidth="md" fullWidth>
+      <DialogTitle>Approval details</DialogTitle>
+      <DialogContent>
+        <Stack spacing={2} mt={1}>
+          <Stack direction={{ xs: "column", md: "row" }} gap={1.5} flexWrap="wrap">
+            <Info label="Process" value={task.processCode} />
+            <Info label="Project" value={task.projectCode ?? "-"} />
+            <Info label="Employee" value={`${task.employeeNumber ?? ""} - ${task.employeeName ?? ""}`} />
+            <Info label="Step" value={`${task.stepOrder} - ${task.stepName}`} />
+          </Stack>
+          {isLeave && (
+            <>
+              <Divider />
+              <Stack direction={{ xs: "column", md: "row" }} gap={1.5} flexWrap="wrap">
+                <Info label="Leave type" value={`${task.leaveTypeCode ?? "-"} - ${task.leaveTypeName ?? ""}`} />
+                <Info label="Dates" value={periodOrDates(task)} />
+                <Info label="Return date" value={task.leaveReturnDate ?? "-"} />
+                <Info label="Days" value={num(task.leaveTotalDays)} />
+                <Info label="Status" value={task.leaveStatus ?? "-"} />
+              </Stack>
+              <Info label="Reason" value={task.leaveReason ?? "-"} wide />
+              {task.leaveRequiresTicket && (
+                <>
+                  <Divider />
+                  <Typography variant="subtitle2">Ticket</Typography>
+                  <Stack direction={{ xs: "column", md: "row" }} gap={1.5} flexWrap="wrap">
+                    <Info label="Route" value={`${task.leaveTicketFrom ?? "-"} -> ${task.leaveTicketTo ?? "-"}`} />
+                    <Info label="Departure" value={task.leaveTravelDate ?? "-"} />
+                    <Info label="Return flight" value={task.leaveReturnTravelDate ?? "-"} />
+                    <Info label="Passport" value={task.leavePassportNumber ?? "-"} />
+                    <Info label="Dependents" value={num(task.leaveDependentCount)} />
+                  </Stack>
+                  <Info label="Ticket remarks" value={task.leaveTravelRemarks ?? "-"} wide />
+                </>
+              )}
+              <Divider />
+              <Typography variant="subtitle2">Contact during leave</Typography>
+              <Stack direction={{ xs: "column", md: "row" }} gap={1.5} flexWrap="wrap">
+                <Info label="Phone" value={task.leaveContactPhone ?? "-"} />
+                <Info label="Email" value={task.leaveContactEmail ?? "-"} />
+                <Info label="Emergency contact" value={task.leaveEmergencyContactName ?? "-"} />
+                <Info label="Emergency phone" value={task.leaveEmergencyContactPhone ?? "-"} />
+              </Stack>
+              <Info label="Address" value={task.leaveAddressDuringLeave ?? "-"} wide />
+            </>
+          )}
+          <Divider />
+          <Typography variant="subtitle2">Approval history</Typography>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Step</TableCell>
+                <TableCell>Approver</TableCell>
+                <TableCell>Status</TableCell>
+                <TableCell>Decision</TableCell>
+                <TableCell>Remarks</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {(task.history ?? []).map((row) => (
+                <TableRow key={`${row.stepOrder}-${row.approverNumber ?? row.stepName}`}>
+                  <TableCell>{row.stepOrder} - {row.stepName}</TableCell>
+                  <TableCell>{row.approverNumber ?? "-"} {row.approverName ? `- ${row.approverName}` : ""}</TableCell>
+                  <TableCell>{row.status}</TableCell>
+                  <TableCell>{row.decidedAt ? new Date(row.decidedAt).toLocaleString() : "-"}</TableCell>
+                  <TableCell>{row.remarks ?? "-"}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </Stack>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
+function Info({ label, value, wide = false }: { label: string; value: string | number; wide?: boolean }) {
+  return (
+    <Paper variant="outlined" sx={{ p: 1.25, borderRadius: 1.5, minWidth: wide ? "100%" : 180, flex: wide ? "1 1 100%" : "1 1 180px" }}>
+      <Typography variant="caption" color="text.secondary">{label}</Typography>
+      <Typography variant="body2">{value}</Typography>
+    </Paper>
   );
 }

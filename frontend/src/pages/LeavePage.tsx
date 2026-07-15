@@ -109,14 +109,6 @@ export default function LeavePage() {
       setRequest(emptyRequest);
     },
   });
-  const status = useMutation({
-    mutationFn: ({ id, next }: { id: string; next: string }) => leaveApi.setRequestStatus(id, next),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["leaveRequests"] });
-      qc.invalidateQueries({ queryKey: ["leaveProjectSummary"] });
-    },
-  });
-
   return (
     <Box>
       <Typography variant="h5" mb={2}>Leave</Typography>
@@ -190,7 +182,7 @@ export default function LeavePage() {
           <Grid item xs={6} md={2}>
             <TextField select fullWidth size="small" label="Status" value={request.status ?? "DRAFT"}
               onChange={(e) => setRequest({ ...request, status: e.target.value })}>
-              {["DRAFT", "SUBMITTED"].map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+              {["DRAFT", "SUBMITTED", "RETURNED"].map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
             </TextField>
           </Grid>
           <Grid item xs={12} md={8}>
@@ -308,7 +300,7 @@ export default function LeavePage() {
             <TextField select size="small" fullWidth label="Status" value={statusFilter}
               onChange={(e) => { setStatusFilter(e.target.value); setPage(0); }}>
               <MenuItem value="">All statuses</MenuItem>
-              {["DRAFT", "SUBMITTED", "APPROVED", "REJECTED"].map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+              {["DRAFT", "SUBMITTED", "RETURNED", "APPROVED", "REJECTED"].map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
             </TextField>
           </Grid>
           <Grid item xs={12} md={3}>
@@ -357,8 +349,6 @@ export default function LeavePage() {
                   <TableCell>{row.status}</TableCell>
                   <TableCell align="right">
                     <Button size="small" onClick={() => setRequest(row)}>Edit</Button>
-                    {row.id && row.status !== "APPROVED" && <Button size="small" onClick={() => status.mutate({ id: row.id!, next: "APPROVED" })}>Approve</Button>}
-                    {row.id && row.status !== "REJECTED" && <Button size="small" color="error" onClick={() => status.mutate({ id: row.id!, next: "REJECTED" })}>Reject</Button>}
                   </TableCell>
                 </TableRow>
               ))}

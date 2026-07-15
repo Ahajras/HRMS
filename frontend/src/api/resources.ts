@@ -124,8 +124,12 @@ export const approvalApi = {
   myTasks: () => api.get<ApprovalTask[]>("/approvals/my-tasks").then((r) => r.data),
   approveTimesheet: (timesheetId: string) =>
     api.post<Timesheet>(`/timesheets/${timesheetId}/approve`).then((r) => r.data),
-  approveLeaveRequest: (leaveRequestId: string) =>
-    api.post<LeaveRequest>(`/leave/requests/${leaveRequestId}/status`, null, { params: { status: "APPROVED" } }).then((r) => r.data),
+  approveLeaveRequest: (leaveRequestId: string, remarks?: string) =>
+    api.post<LeaveRequest>(`/approvals/leave/${leaveRequestId}/approve`, { remarks }).then((r) => r.data),
+  rejectLeaveRequest: (leaveRequestId: string, remarks: string) =>
+    api.post<LeaveRequest>(`/approvals/leave/${leaveRequestId}/reject`, { remarks }).then((r) => r.data),
+  returnLeaveRequest: (leaveRequestId: string, remarks: string) =>
+    api.post<LeaveRequest>(`/approvals/leave/${leaveRequestId}/return`, { remarks }).then((r) => r.data),
 };
 
 export const approvalWorkflowApi = {
