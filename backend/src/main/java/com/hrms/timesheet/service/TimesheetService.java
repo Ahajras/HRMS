@@ -1453,8 +1453,24 @@ public class TimesheetService {
     public void delete(UUID id) {
         Timesheet ts = getEntity(id);
         assertEditable(ts);
+        assertNoProcessedPayrollForDelete(ts);
         approvalService.voidTimesheetApproval(ts.getId());
         timesheetRepo.delete(ts);
+    }
+
+    private void assertNoProcessedPayrollForDelete(Timesheet ts) {
+        UUID projectId = employeeProject(ts.getEmployeeId());
+        String group = normalizePayGroup(payGroup(ts.getEmployeeId()));
+        if (ts.getPeriodId() == null) {
+            return;
+        }
+        boolean processed = projectId == null
+                ? payrollRunRepo.existsProcessedForPeriod(ts.getCompanyId(), ts.getPeriodId())
+                : payrollRunRepo.existsProcessedForScope(ts.getCompanyId(), ts.getPeriodId(), projectId, group);
+        if (processed) {
+            throw new BusinessRuleException("timesheet.delete.payroll_processed",
+                    "This timesheet is already included in a processed payroll run. Delete the payroll run first, then delete or regenerate the timesheet.");
+        }
     }
 
     private void assertTimesheetNotPaid(Timesheet ts) {
