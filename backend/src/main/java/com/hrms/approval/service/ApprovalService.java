@@ -117,7 +117,8 @@ public class ApprovalService {
                 }
             }
         }
-        firstPending.forEach(step -> notificationService.notifyPending(instance, step));
+        ApprovalInstance savedInstance = instance;
+        firstPending.forEach(step -> notificationService.notifyPending(savedInstance, step));
     }
 
     public boolean approveTimesheetStep(UUID timesheetId) {
