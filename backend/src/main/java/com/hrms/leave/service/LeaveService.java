@@ -4,6 +4,7 @@ import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
 import com.hrms.common.web.PageResponse;
+import com.hrms.approval.service.ApprovalService;
 import com.hrms.benefits.service.TicketService;
 import com.hrms.employee.domain.Assignment;
 import com.hrms.employee.domain.Employee;
@@ -68,6 +69,7 @@ public class LeaveService {
     private final AppUserRepository appUserRepo;
     private final TicketService ticketService;
     private final LeaveBalanceService leaveBalanceService;
+    private final ApprovalService approvalService;
 
     public LeaveService(LeaveTypeRepository typeRepo, LeaveRequestRepository requestRepo,
                         LeaveAdjustmentRepository adjustmentRepo, EmployeeRepository employeeRepo,
@@ -77,7 +79,7 @@ public class LeaveService {
                         RulePackageRepository rulePackageRepo, RuleRepository ruleRepo,
                         TimesheetService timesheetService, TimekeeperService timekeeperService,
                         AppUserRepository appUserRepo, TicketService ticketService,
-                        LeaveBalanceService leaveBalanceService) {
+                        LeaveBalanceService leaveBalanceService, ApprovalService approvalService) {
         this.typeRepo = typeRepo;
         this.requestRepo = requestRepo;
         this.adjustmentRepo = adjustmentRepo;
@@ -93,6 +95,7 @@ public class LeaveService {
         this.appUserRepo = appUserRepo;
         this.ticketService = ticketService;
         this.leaveBalanceService = leaveBalanceService;
+        this.approvalService = approvalService;
     }
 
     @Transactional(readOnly = true)
@@ -172,7 +175,9 @@ public class LeaveService {
         requireEmployee(companyId, dto.getEmployeeId());
         assertProjectAllowed(dto.getEmployeeId());
         LeaveType type = getType(dto.getLeaveTypeId());
-        LeaveRequest row = dto.getId() != null ? getRequest(dto.getId()) : new LeaveRequest();
+        boolean isNew = dto.getId() == null;
+        LeaveRequest row = !isNew ? getRequest(dto.getId()) : new LeaveRequest();
+        String oldStatus = row.getStatus();
         if (dto.getEndDate().isBefore(dto.getStartDate())) {
             throw new BusinessRuleException("leave.date.order", "Leave end date must be after start date.");
         }
@@ -184,7 +189,7 @@ public class LeaveService {
         row.setReturnDate(dto.getReturnDate());
         row.setTotalDays(daysInclusive(dto.getStartDate(), dto.getEndDate()));
         row.setReason(dto.getReason());
-        row.setStatus(dto.getStatus() != null ? dto.getStatus() : "DRAFT");
+        row.setStatus(normalizeStatus(dto.getStatus(), "DRAFT"));
         row.setRequiresTicket(dto.isRequiresTicket() || type.isRequiresTicketDefault());
         if (row.isRequiresTicket()) {
             row.setTicketFrom(dto.getTicketFrom());
@@ -215,6 +220,13 @@ public class LeaveService {
             row.setHrApprovedBy(currentUsername());
         }
         LeaveRequest saved = requestRepo.save(row);
+        if ("SUBMITTED".equals(saved.getStatus()) && (isNew || !"SUBMITTED".equalsIgnoreCase(oldStatus))) {
+            approvalService.startLeaveApproval(saved.getId(), saved.getEmployeeId(), employeeProject(saved.getEmployeeId()),
+                    employeePayGroup(saved.getEmployeeId()));
+        }
+        if ("REJECTED".equals(saved.getStatus()) || "CANCELLED".equals(saved.getStatus()) || "DRAFT".equals(saved.getStatus())) {
+            approvalService.voidLeaveApproval(saved.getId());
+        }
         timesheetService.syncLeaveRequest(saved, type);
         ticketService.syncLeaveTicket(saved);
         return toDto(saved);
@@ -223,13 +235,32 @@ public class LeaveService {
     public LeaveRequestDto setRequestStatus(UUID id, String status) {
         LeaveRequest row = getRequest(id);
         assertProjectAllowed(row.getEmployeeId());
-        row.setStatus(status != null ? status.toUpperCase() : "DRAFT");
-        if ("APPROVED".equals(row.getStatus())) {
+        String targetStatus = normalizeStatus(status, "DRAFT");
+        LeaveType type = getType(row.getLeaveTypeId());
+        if ("SUBMITTED".equals(targetStatus)) {
+            row.setStatus("SUBMITTED");
+            LeaveRequest saved = requestRepo.save(row);
+            approvalService.startLeaveApproval(saved.getId(), saved.getEmployeeId(), employeeProject(saved.getEmployeeId()),
+                    employeePayGroup(saved.getEmployeeId()));
+            return toDto(saved);
+        }
+        if ("APPROVED".equals(targetStatus)) {
+            boolean completed = approvalService.approveLeaveStep(id);
+            if (!completed) {
+                row.setStatus("SUBMITTED");
+                return toDto(requestRepo.save(row));
+            }
+            row.setStatus("APPROVED");
             row.setHrApprovedAt(Instant.now());
             row.setHrApprovedBy(currentUsername());
+        } else {
+            row.setStatus(targetStatus);
+            if ("REJECTED".equals(targetStatus) || "CANCELLED".equals(targetStatus) || "DRAFT".equals(targetStatus)) {
+                approvalService.voidLeaveApproval(id);
+            }
         }
         LeaveRequest saved = requestRepo.save(row);
-        timesheetService.syncLeaveRequest(saved, getType(saved.getLeaveTypeId()));
+        timesheetService.syncLeaveRequest(saved, type);
         ticketService.syncLeaveTicket(saved);
         return toDto(saved);
     }
@@ -345,6 +376,14 @@ public class LeaveService {
                 .findFirst()
                 .map(Assignment::getProjectId)
                 .orElse(null);
+    }
+
+    private String employeePayGroup(UUID employeeId) {
+        return employeeRepo.findById(employeeId).map(Employee::getPayStatus).orElse("ALL");
+    }
+
+    private String normalizeStatus(String status, String fallback) {
+        return status == null || status.isBlank() ? fallback : status.trim().toUpperCase();
     }
 
     private static long asLong(Object[] row, int idx) {

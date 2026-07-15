@@ -4,6 +4,9 @@ import com.hrms.approval.domain.ApprovalInstance;
 import com.hrms.approval.domain.ApprovalInstanceStep;
 import com.hrms.employee.domain.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
+import com.hrms.leave.domain.LeaveRequest;
+import com.hrms.leave.repository.LeaveRequestRepository;
+import com.hrms.leave.repository.LeaveTypeRepository;
 import com.hrms.security.domain.AppUser;
 import com.hrms.security.repository.AppUserRepository;
 import com.hrms.timesheet.domain.Timesheet;
@@ -30,17 +33,23 @@ public class ApprovalNotificationService {
     private final AppUserRepository appUserRepo;
     private final EmployeeRepository employeeRepo;
     private final TimesheetRepository timesheetRepo;
+    private final LeaveRequestRepository leaveRequestRepo;
+    private final LeaveTypeRepository leaveTypeRepo;
 
     public ApprovalNotificationService(JavaMailSender mailSender,
                                        Environment environment,
                                        AppUserRepository appUserRepo,
                                        EmployeeRepository employeeRepo,
-                                       TimesheetRepository timesheetRepo) {
+                                       TimesheetRepository timesheetRepo,
+                                       LeaveRequestRepository leaveRequestRepo,
+                                       LeaveTypeRepository leaveTypeRepo) {
         this.mailSender = mailSender;
         this.environment = environment;
         this.appUserRepo = appUserRepo;
         this.employeeRepo = employeeRepo;
         this.timesheetRepo = timesheetRepo;
+        this.leaveRequestRepo = leaveRequestRepo;
+        this.leaveTypeRepo = leaveTypeRepo;
     }
 
     public void notifyPending(ApprovalInstance instance, ApprovalInstanceStep step) {
@@ -78,6 +87,11 @@ public class ApprovalNotificationService {
                     .map(ts -> "HRMS approval required: Timesheet " + periodLabel(ts))
                     .orElse("HRMS approval required");
         }
+        if (ApprovalService.LEAVE_ENTITY.equals(instance.getEntityType())) {
+            return leaveRequestRepo.findById(instance.getEntityId())
+                    .map(leave -> "HRMS approval required: Leave " + leave.getStartDate() + " - " + leave.getEndDate())
+                    .orElse("HRMS approval required");
+        }
         return "HRMS approval required: " + instance.getProcessCode();
     }
 
@@ -85,17 +99,32 @@ public class ApprovalNotificationService {
         String employee = employeeRepo.findById(instance.getEmployeeId())
                 .map(e -> safe(e.getEmployeeNumber()) + " - " + (safe(e.getFirstName()) + " " + safe(e.getLastName())).trim())
                 .orElse(String.valueOf(instance.getEmployeeId()));
-        String period = timesheetRepo.findById(instance.getEntityId()).map(this::periodLabel).orElse("-");
+        String details = approvalDetails(instance);
         return """
                 A new approval task is waiting for you.
 
                 Process: %s
                 Step: %s
                 Employee: %s
-                Period: %s
+                %s
 
                 Please open HRMS > My Approvals to review and approve.
-                """.formatted(instance.getProcessCode(), step.getName(), employee, period);
+                """.formatted(instance.getProcessCode(), step.getName(), employee, details);
+    }
+
+    private String approvalDetails(ApprovalInstance instance) {
+        if (ApprovalService.LEAVE_ENTITY.equals(instance.getEntityType())) {
+            return leaveRequestRepo.findById(instance.getEntityId()).map(this::leaveDetails).orElse("Leave request: -");
+        }
+        return "Period: " + timesheetRepo.findById(instance.getEntityId()).map(this::periodLabel).orElse("-");
+    }
+
+    private String leaveDetails(LeaveRequest leave) {
+        String type = leaveTypeRepo.findById(leave.getLeaveTypeId())
+                .map(t -> safe(t.getCode()) + " - " + safe(t.getName()))
+                .orElse("-");
+        return "Leave type: " + type + "\nDates: " + leave.getStartDate() + " - " + leave.getEndDate()
+                + "\nDays: " + leave.getTotalDays();
     }
 
     private String periodLabel(Timesheet timesheet) {

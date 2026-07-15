@@ -1,6 +1,7 @@
 package com.hrms.approval.dto;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.UUID;
 import java.math.BigDecimal;
 
@@ -26,6 +27,13 @@ public class ApprovalTaskDto {
     private BigDecimal totalWorkedHours;
     private BigDecimal totalOtHours;
     private BigDecimal totalAbsenceDays;
+    private LocalDate leaveStartDate;
+    private LocalDate leaveEndDate;
+    private LocalDate leaveReturnDate;
+    private BigDecimal leaveTotalDays;
+    private String leaveStatus;
+    private String leaveTypeCode;
+    private String leaveTypeName;
 
     public UUID getInstanceId() { return instanceId; }
     public void setInstanceId(UUID instanceId) { this.instanceId = instanceId; }
@@ -69,4 +77,18 @@ public class ApprovalTaskDto {
     public void setTotalOtHours(BigDecimal totalOtHours) { this.totalOtHours = totalOtHours; }
     public BigDecimal getTotalAbsenceDays() { return totalAbsenceDays; }
     public void setTotalAbsenceDays(BigDecimal totalAbsenceDays) { this.totalAbsenceDays = totalAbsenceDays; }
+    public LocalDate getLeaveStartDate() { return leaveStartDate; }
+    public void setLeaveStartDate(LocalDate leaveStartDate) { this.leaveStartDate = leaveStartDate; }
+    public LocalDate getLeaveEndDate() { return leaveEndDate; }
+    public void setLeaveEndDate(LocalDate leaveEndDate) { this.leaveEndDate = leaveEndDate; }
+    public LocalDate getLeaveReturnDate() { return leaveReturnDate; }
+    public void setLeaveReturnDate(LocalDate leaveReturnDate) { this.leaveReturnDate = leaveReturnDate; }
+    public BigDecimal getLeaveTotalDays() { return leaveTotalDays; }
+    public void setLeaveTotalDays(BigDecimal leaveTotalDays) { this.leaveTotalDays = leaveTotalDays; }
+    public String getLeaveStatus() { return leaveStatus; }
+    public void setLeaveStatus(String leaveStatus) { this.leaveStatus = leaveStatus; }
+    public String getLeaveTypeCode() { return leaveTypeCode; }
+    public void setLeaveTypeCode(String leaveTypeCode) { this.leaveTypeCode = leaveTypeCode; }
+    public String getLeaveTypeName() { return leaveTypeName; }
+    public void setLeaveTypeName(String leaveTypeName) { this.leaveTypeName = leaveTypeName; }
 }

@@ -190,7 +190,7 @@ export default function LeavePage() {
           <Grid item xs={6} md={2}>
             <TextField select fullWidth size="small" label="Status" value={request.status ?? "DRAFT"}
               onChange={(e) => setRequest({ ...request, status: e.target.value })}>
-              {["DRAFT", "SUBMITTED", "APPROVED", "REJECTED"].map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+              {["DRAFT", "SUBMITTED"].map((s) => <MenuItem key={s} value={s}>{s}</MenuItem>)}
             </TextField>
           </Grid>
           <Grid item xs={12} md={8}>

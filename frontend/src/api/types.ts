@@ -118,6 +118,13 @@ export interface ApprovalTask {
   totalWorkedHours?: number;
   totalOtHours?: number;
   totalAbsenceDays?: number;
+  leaveStartDate?: string;
+  leaveEndDate?: string;
+  leaveReturnDate?: string;
+  leaveTotalDays?: number;
+  leaveStatus?: string;
+  leaveTypeCode?: string;
+  leaveTypeName?: string;
 }
 
 export interface ApprovalWorkflowStep {

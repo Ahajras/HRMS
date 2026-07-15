@@ -35,7 +35,28 @@ function num(value?: number) {
 }
 
 function approvalKey(task: ApprovalTask) {
+  if (task.entityType === "LEAVE_REQUEST") {
+    return task.leaveStartDate ? `LEAVE-${task.leaveStartDate.slice(0, 7)}` : "LEAVE";
+  }
   return `${task.periodYear ?? ""}-${task.periodMonth ?? ""}`;
+}
+
+function periodOrDates(task: ApprovalTask) {
+  if (task.entityType === "LEAVE_REQUEST") {
+    return task.leaveStartDate && task.leaveEndDate ? `${task.leaveStartDate} - ${task.leaveEndDate}` : "-";
+  }
+  return monthLabel(task.periodYear, task.periodMonth);
+}
+
+function approvalStatus(task: ApprovalTask) {
+  return task.entityType === "LEAVE_REQUEST" ? task.leaveStatus ?? task.status : task.timesheetStatus ?? task.status;
+}
+
+async function approveTask(task: ApprovalTask) {
+  if (task.entityType === "LEAVE_REQUEST") {
+    return approvalApi.approveLeaveRequest(task.entityId);
+  }
+  return approvalApi.approveTimesheet(task.entityId);
 }
 
 export default function MyApprovalsPage() {
@@ -46,11 +67,12 @@ export default function MyApprovalsPage() {
   const [page, setPage] = useState(0);
   const { data: tasks = [], isLoading } = useQuery({ queryKey: ["myApprovalTasks"], queryFn: approvalApi.myTasks });
   const approve = useMutation({
-    mutationFn: (timesheetId: string) => approvalApi.approveTimesheet(timesheetId),
+    mutationFn: (task: ApprovalTask) => approveTask(task),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["myApprovalTasks"] });
       qc.invalidateQueries({ queryKey: ["timesheets"] });
       qc.invalidateQueries({ queryKey: ["timesheet"] });
+      qc.invalidateQueries({ queryKey: ["leaveRequests"] });
     },
   });
 
@@ -60,8 +82,8 @@ export default function MyApprovalsPage() {
 
   const periods = useMemo(() => {
     return Array.from(new Map(tasks
-      .filter((t) => t.periodYear && t.periodMonth)
-      .map((t) => [approvalKey(t), monthLabel(t.periodYear, t.periodMonth)])
+      .filter((t) => (t.periodYear && t.periodMonth) || t.leaveStartDate)
+      .map((t) => [approvalKey(t), t.entityType === "LEAVE_REQUEST" && t.leaveStartDate ? t.leaveStartDate.slice(0, 7) : monthLabel(t.periodYear, t.periodMonth)])
     ).entries());
   }, [tasks]);
 
@@ -74,6 +96,8 @@ export default function MyApprovalsPage() {
         task.projectCode,
         task.processCode,
         task.payGroup,
+        task.leaveTypeCode,
+        task.leaveTypeName,
       ].join(" ").toLowerCase();
       return (project === "ALL" || task.projectCode === project)
         && (period === "ALL" || approvalKey(task) === period)
@@ -86,12 +110,13 @@ export default function MyApprovalsPage() {
   const visible = filtered.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   const approveMany = async (rows: ApprovalTask[]) => {
-    for (const task of rows.filter((t) => t.entityType === "TIMESHEET")) {
-      await approvalApi.approveTimesheet(task.entityId);
+    for (const task of rows.filter((t) => t.entityType === "TIMESHEET" || t.entityType === "LEAVE_REQUEST")) {
+      await approveTask(task);
     }
     await qc.invalidateQueries({ queryKey: ["myApprovalTasks"] });
     await qc.invalidateQueries({ queryKey: ["timesheets"] });
     await qc.invalidateQueries({ queryKey: ["timesheet"] });
+    await qc.invalidateQueries({ queryKey: ["leaveRequests"] });
   };
 
   const approveVisible = useMutation({ mutationFn: () => approveMany(visible) });
@@ -195,6 +220,7 @@ export default function MyApprovalsPage() {
               <TableCell align="right">Worked</TableCell>
               <TableCell align="right">OT</TableCell>
               <TableCell align="right">Absence</TableCell>
+              <TableCell align="right">Leave days</TableCell>
               <TableCell>Status</TableCell>
               <TableCell>Step</TableCell>
               <TableCell>Submitted</TableCell>
@@ -205,14 +231,24 @@ export default function MyApprovalsPage() {
             {visible.map((task) => (
               <TableRow key={task.stepId} hover>
                 <TableCell><Chip size="small" label={task.processCode} /></TableCell>
-                <TableCell>{monthLabel(task.periodYear, task.periodMonth)}</TableCell>
+                <TableCell>{periodOrDates(task)}</TableCell>
                 <TableCell>{task.projectCode ?? "-"}</TableCell>
-                <TableCell>{task.employeeNumber} - {task.employeeName}</TableCell>
+                <TableCell>
+                  <Stack spacing={0.25}>
+                    <Typography variant="body2">{task.employeeNumber} - {task.employeeName}</Typography>
+                    {task.entityType === "LEAVE_REQUEST" && (
+                      <Typography variant="caption" color="text.secondary">
+                        {task.leaveTypeCode ?? "-"} {task.leaveTypeName ? `- ${task.leaveTypeName}` : ""}
+                      </Typography>
+                    )}
+                  </Stack>
+                </TableCell>
                 <TableCell>{task.payGroup ?? "-"}</TableCell>
-                <TableCell align="right">{num(task.totalWorkedHours)}</TableCell>
-                <TableCell align="right">{num(task.totalOtHours)}</TableCell>
-                <TableCell align="right">{num(task.totalAbsenceDays)}</TableCell>
-                <TableCell><Chip size="small" color="warning" variant="outlined" label={task.timesheetStatus ?? task.status} /></TableCell>
+                <TableCell align="right">{task.entityType === "TIMESHEET" ? num(task.totalWorkedHours) : "-"}</TableCell>
+                <TableCell align="right">{task.entityType === "TIMESHEET" ? num(task.totalOtHours) : "-"}</TableCell>
+                <TableCell align="right">{task.entityType === "TIMESHEET" ? num(task.totalAbsenceDays) : "-"}</TableCell>
+                <TableCell align="right">{task.entityType === "LEAVE_REQUEST" ? num(task.leaveTotalDays) : "-"}</TableCell>
+                <TableCell><Chip size="small" color="warning" variant="outlined" label={approvalStatus(task)} /></TableCell>
                 <TableCell>
                   <Stack spacing={0.25}>
                     <Typography variant="body2">{task.stepName}</Typography>
@@ -221,13 +257,13 @@ export default function MyApprovalsPage() {
                 </TableCell>
                 <TableCell>{task.submittedAt ? new Date(task.submittedAt).toLocaleString() : ""}</TableCell>
                 <TableCell align="right">
-                  {task.entityType === "TIMESHEET" && (
+                  {(task.entityType === "TIMESHEET" || task.entityType === "LEAVE_REQUEST") && (
                     <Button
                       size="small"
                       color="success"
                       startIcon={<CheckIcon />}
                       disabled={approve.isPending}
-                      onClick={() => approve.mutate(task.entityId)}
+                      onClick={() => approve.mutate(task)}
                     >
                       Approve
                     </Button>
@@ -237,14 +273,14 @@ export default function MyApprovalsPage() {
             ))}
             {!isLoading && tasks.length === 0 && (
               <TableRow>
-                <TableCell colSpan={12}>
+                <TableCell colSpan={13}>
                   <Typography variant="body2" color="text.secondary" p={1}>No pending approvals.</Typography>
                 </TableCell>
               </TableRow>
             )}
             {!isLoading && tasks.length > 0 && filtered.length === 0 && (
               <TableRow>
-                <TableCell colSpan={12}>
+                <TableCell colSpan={13}>
                   <Typography variant="body2" color="text.secondary" p={1}>No approvals match the selected filters.</Typography>
                 </TableCell>
               </TableRow>

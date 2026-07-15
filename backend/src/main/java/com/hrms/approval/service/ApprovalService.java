@@ -14,6 +14,8 @@ import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
 import com.hrms.employee.domain.Employee;
 import com.hrms.employee.repository.EmployeeRepository;
+import com.hrms.leave.repository.LeaveRequestRepository;
+import com.hrms.leave.repository.LeaveTypeRepository;
 import com.hrms.project.domain.ProjectApprovalRole;
 import com.hrms.project.repository.ProjectApprovalRoleRepository;
 import com.hrms.project.repository.ProjectRepository;
@@ -36,6 +38,8 @@ import java.util.UUID;
 public class ApprovalService {
     public static final String TIMESHEET_PROCESS = "TIMESHEET_SUBMIT";
     public static final String TIMESHEET_ENTITY = "TIMESHEET";
+    public static final String LEAVE_PROCESS = "LEAVE_REQUEST";
+    public static final String LEAVE_ENTITY = "LEAVE_REQUEST";
 
     private final ApprovalWorkflowRepository workflowRepo;
     private final ApprovalWorkflowStepRepository workflowStepRepo;
@@ -45,6 +49,8 @@ public class ApprovalService {
     private final ProjectApprovalRoleRepository projectApprovalRoleRepo;
     private final ProjectRepository projectRepo;
     private final TimesheetRepository timesheetRepo;
+    private final LeaveRequestRepository leaveRequestRepo;
+    private final LeaveTypeRepository leaveTypeRepo;
     private final ApprovalNotificationService notificationService;
 
     public ApprovalService(ApprovalWorkflowRepository workflowRepo,
@@ -55,6 +61,8 @@ public class ApprovalService {
                            ProjectApprovalRoleRepository projectApprovalRoleRepo,
                            ProjectRepository projectRepo,
                            TimesheetRepository timesheetRepo,
+                           LeaveRequestRepository leaveRequestRepo,
+                           LeaveTypeRepository leaveTypeRepo,
                            ApprovalNotificationService notificationService) {
         this.workflowRepo = workflowRepo;
         this.workflowStepRepo = workflowStepRepo;
@@ -64,22 +72,35 @@ public class ApprovalService {
         this.projectApprovalRoleRepo = projectApprovalRoleRepo;
         this.projectRepo = projectRepo;
         this.timesheetRepo = timesheetRepo;
+        this.leaveRequestRepo = leaveRequestRepo;
+        this.leaveTypeRepo = leaveTypeRepo;
         this.notificationService = notificationService;
     }
 
     public void startTimesheetApproval(UUID timesheetId, UUID employeeId, UUID projectId, String payGroup) {
+        startApproval(TIMESHEET_PROCESS, TIMESHEET_ENTITY, timesheetId, employeeId, projectId, payGroup,
+                "Define an active timesheet approval workflow for this project before submitting.");
+    }
+
+    public void startLeaveApproval(UUID leaveRequestId, UUID employeeId, UUID projectId, String payGroup) {
+        startApproval(LEAVE_PROCESS, LEAVE_ENTITY, leaveRequestId, employeeId, projectId, payGroup,
+                "Define an active leave approval workflow for this project before submitting.");
+    }
+
+    private void startApproval(String processCode, String entityType, UUID entityId, UUID employeeId, UUID projectId,
+                               String payGroup, String missingWorkflowMessage) {
         UUID companyId = TenantContext.requireCompanyId();
         if (instanceRepo.findFirstByCompanyIdAndEntityTypeAndEntityIdAndStatusIn(
-                companyId, TIMESHEET_ENTITY, timesheetId, List.of("PENDING", "APPROVED")).isPresent()) {
+                companyId, entityType, entityId, List.of("PENDING", "APPROVED")).isPresent()) {
             return;
         }
         ApprovalWorkflow workflow = workflowRepo
                 .findFirstByCompanyIdAndProcessCodeAndProjectIdAndPayGroupAndStatus(
-                        companyId, TIMESHEET_PROCESS, projectId, normalizePayGroup(payGroup), "ACTIVE")
+                        companyId, processCode, projectId, normalizePayGroup(payGroup), "ACTIVE")
                 .or(() -> workflowRepo.findFirstByCompanyIdAndProcessCodeAndProjectIdAndPayGroupAndStatus(
-                        companyId, TIMESHEET_PROCESS, projectId, "ALL", "ACTIVE"))
+                        companyId, processCode, projectId, "ALL", "ACTIVE"))
                 .orElseThrow(() -> new BusinessRuleException("approval.workflow.required",
-                        "Define an active timesheet approval workflow for this project before submitting."));
+                        missingWorkflowMessage));
         List<ApprovalWorkflowStep> steps = workflowStepRepo.findByWorkflowIdAndStatusOrderByStepOrderAsc(workflow.getId(), "ACTIVE");
         if (steps.isEmpty()) {
             throw new BusinessRuleException("approval.workflow.steps.required", "Approval workflow has no active steps.");
@@ -88,9 +109,9 @@ public class ApprovalService {
         ApprovalInstance instance = new ApprovalInstance();
         instance.setCompanyId(companyId);
         instance.setWorkflowId(workflow.getId());
-        instance.setProcessCode(TIMESHEET_PROCESS);
-        instance.setEntityType(TIMESHEET_ENTITY);
-        instance.setEntityId(timesheetId);
+        instance.setProcessCode(processCode);
+        instance.setEntityType(entityType);
+        instance.setEntityId(entityId);
         instance.setProjectId(projectId);
         instance.setEmployeeId(employeeId);
         instance.setStatus("PENDING");
@@ -122,11 +143,19 @@ public class ApprovalService {
     }
 
     public boolean approveTimesheetStep(UUID timesheetId) {
+        return approveStep(TIMESHEET_ENTITY, timesheetId);
+    }
+
+    public boolean approveLeaveStep(UUID leaveRequestId) {
+        return approveStep(LEAVE_ENTITY, leaveRequestId);
+    }
+
+    private boolean approveStep(String entityType, UUID entityId) {
         UUID companyId = TenantContext.requireCompanyId();
         ApprovalInstance instance = instanceRepo.findFirstByCompanyIdAndEntityTypeAndEntityIdAndStatusIn(
-                        companyId, TIMESHEET_ENTITY, timesheetId, List.of("PENDING"))
+                        companyId, entityType, entityId, List.of("PENDING"))
                 .orElseThrow(() -> new BusinessRuleException("approval.instance.required",
-                        "This timesheet has no pending approval workflow."));
+                        "This item has no pending approval workflow."));
         UUID currentEmployeeId = currentEmployeeId();
         List<ApprovalInstanceStep> pendingSteps = instanceStepRepo.findAllByInstanceIdAndStatus(instance.getId(), "PENDING");
         ApprovalInstanceStep current = pendingSteps.stream()
@@ -176,9 +205,17 @@ public class ApprovalService {
     }
 
     public void voidTimesheetApproval(UUID timesheetId) {
+        voidApproval(TIMESHEET_ENTITY, timesheetId);
+    }
+
+    public void voidLeaveApproval(UUID leaveRequestId) {
+        voidApproval(LEAVE_ENTITY, leaveRequestId);
+    }
+
+    private void voidApproval(String entityType, UUID entityId) {
         UUID companyId = TenantContext.requireCompanyId();
         instanceRepo.findFirstByCompanyIdAndEntityTypeAndEntityIdAndStatusIn(
-                companyId, TIMESHEET_ENTITY, timesheetId, List.of("PENDING", "APPROVED")).ifPresent(instance -> {
+                companyId, entityType, entityId, List.of("PENDING", "APPROVED")).ifPresent(instance -> {
             instance.setStatus("VOID");
             instance.setCompletedAt(Instant.now());
             instanceRepo.save(instance);
@@ -201,6 +238,9 @@ public class ApprovalService {
         List<ApprovalTaskDto> out = new ArrayList<>();
         for (ApprovalInstance instance : instanceRepo.findByCompanyIdAndStatus(companyId, "PENDING")) {
             if (TIMESHEET_ENTITY.equals(instance.getEntityType()) && timesheetRepo.findById(instance.getEntityId()).isEmpty()) {
+                continue;
+            }
+            if (LEAVE_ENTITY.equals(instance.getEntityType()) && leaveRequestRepo.findById(instance.getEntityId()).isEmpty()) {
                 continue;
             }
             for (ApprovalInstanceStep step : instanceStepRepo.findAllByInstanceIdAndStatus(instance.getId(), "PENDING")) {
@@ -241,6 +281,19 @@ public class ApprovalService {
                 dto.setTotalWorkedHours(ts.getTotalWorkedHours());
                 dto.setTotalOtHours(ts.getTotalOtHours());
                 dto.setTotalAbsenceDays(ts.getTotalAbsenceDays());
+            });
+        }
+        if (LEAVE_ENTITY.equals(instance.getEntityType())) {
+            leaveRequestRepo.findById(instance.getEntityId()).ifPresent(leave -> {
+                dto.setLeaveStartDate(leave.getStartDate());
+                dto.setLeaveEndDate(leave.getEndDate());
+                dto.setLeaveReturnDate(leave.getReturnDate());
+                dto.setLeaveTotalDays(leave.getTotalDays());
+                dto.setLeaveStatus(leave.getStatus());
+                leaveTypeRepo.findById(leave.getLeaveTypeId()).ifPresent(type -> {
+                    dto.setLeaveTypeCode(type.getCode());
+                    dto.setLeaveTypeName(type.getName());
+                });
             });
         }
         return dto;
