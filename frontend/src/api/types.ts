@@ -96,6 +96,23 @@ export interface ProjectApprovalRole {
   status?: string;
 }
 
+export interface ApprovalTask {
+  instanceId: string;
+  stepId: string;
+  processCode: string;
+  entityType: string;
+  entityId: string;
+  employeeId?: string;
+  employeeNumber?: string;
+  employeeName?: string;
+  projectId?: string;
+  projectCode?: string;
+  stepOrder: number;
+  stepName: string;
+  status: string;
+  submittedAt?: string;
+}
+
 export interface CompanyProfile {
   id?: string;
   companyId?: string;

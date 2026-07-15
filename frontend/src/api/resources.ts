@@ -29,6 +29,7 @@ import type {
   EmployeeCostBreakdown,
   Project,
   ProjectApprovalRole,
+  ApprovalTask,
   RoleEmployeeCandidate,
   CostCode,
   PublicHoliday,
@@ -116,6 +117,12 @@ export const projectApprovalRoleApi = {
     api.get<RoleEmployeeCandidate[]>("/project-approval-roles/candidates", { params: { roleCode } }).then((r) => r.data),
   create: (d: ProjectApprovalRole) => api.post<ProjectApprovalRole>("/project-approval-roles", d).then((r) => r.data),
   remove: (id: string) => api.delete(`/project-approval-roles/${id}`).then(() => undefined),
+};
+
+export const approvalApi = {
+  myTasks: () => api.get<ApprovalTask[]>("/approvals/my-tasks").then((r) => r.data),
+  approveTimesheet: (timesheetId: string) =>
+    api.post<boolean>("/approvals/timesheet/approve", null, { params: { timesheetId } }).then((r) => r.data),
 };
 
 export const costCodeApi = {

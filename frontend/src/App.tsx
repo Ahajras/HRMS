@@ -12,6 +12,7 @@ import TicketsPage from "./pages/TicketsPage";
 import DayZeroPage from "./pages/DayZeroPage";
 import AuditToolsPage from "./pages/AuditToolsPage";
 import MyPortalPage from "./pages/MyPortalPage";
+import MyApprovalsPage from "./pages/MyApprovalsPage";
 import SifExportPage from "./pages/SifExportPage";
 import DashboardPage from "./pages/DashboardPage";
 import PayrollRunsPage from "./pages/PayrollRunsPage";
@@ -73,6 +74,7 @@ export default function App() {
         <Route path="/day-zero" element={<DayZeroPage />} />
         <Route path="/audit-tools" element={<AuditToolsPage />} />
         <Route path="/my-portal" element={<MyPortalPage />} />
+        <Route path="/my-approvals" element={<MyApprovalsPage />} />
         <Route path="/sif-export" element={<SifExportPage />} />
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="/payroll-rules" element={<PayrollRulesPage />} />

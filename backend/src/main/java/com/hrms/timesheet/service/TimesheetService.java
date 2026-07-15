@@ -4,6 +4,7 @@ import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
 import com.hrms.common.web.PageResponse;
+import com.hrms.approval.service.ApprovalService;
 import com.hrms.crew.domain.CrewMember;
 import com.hrms.crew.repository.CrewMemberRepository;
 import com.hrms.crew.service.TimekeeperService;
@@ -128,6 +129,7 @@ public class TimesheetService {
     private final com.hrms.payroll.repository.PayrollRunRepository payrollRunRepo;
     private final com.hrms.payroll.repository.PayrollAdjustmentRepository payrollAdjustmentRepo;
     private final com.hrms.payroll.service.PayrollRunService payrollRunService;
+    private final ApprovalService approvalService;
     private final TransactionTemplate transactionTemplate;
 
     public TimesheetService(TimesheetRepository timesheetRepo, TimesheetDayRepository dayRepo,
@@ -147,6 +149,7 @@ public class TimesheetService {
                             com.hrms.payroll.repository.PayrollRunRepository payrollRunRepo,
                             com.hrms.payroll.repository.PayrollAdjustmentRepository payrollAdjustmentRepo,
                             com.hrms.payroll.service.PayrollRunService payrollRunService,
+                            ApprovalService approvalService,
                             TransactionTemplate transactionTemplate) {
         this.timesheetRepo = timesheetRepo;
         this.dayRepo = dayRepo;
@@ -172,6 +175,7 @@ public class TimesheetService {
         this.payrollRunRepo = payrollRunRepo;
         this.payrollAdjustmentRepo = payrollAdjustmentRepo;
         this.payrollRunService = payrollRunService;
+        this.approvalService = approvalService;
         this.transactionTemplate = transactionTemplate;
     }
 
@@ -989,9 +993,16 @@ public class TimesheetService {
                     missingCost + " draft timesheet(s) have payable hours without a project/cost code.");
         }
         progress.onProgress(0, total);
-        int submitted = allowed != null && projectId == null
-                ? timesheetRepo.submitDraftsByProjects(companyId, year, month, allowed, Instant.now())
-                : timesheetRepo.submitDraftsByProject(companyId, year, month, projectId, Instant.now());
+        int submitted = 0;
+        Map<UUID, UUID> projectByEmployee = employeeProjectMap(companyId);
+        for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month)) {
+            UUID empProject = projectByEmployee.get(t.getEmployeeId());
+            if (DRAFT.equals(t.getStatus()) && matchesProjectScope(empProject, projectId, allowed)) {
+                submit(t.getId());
+                submitted++;
+                progress.onProgress(submitted, total);
+            }
+        }
         progress.onProgress(submitted, total);
         return Map.of("submitted", submitted);
     }
@@ -1019,11 +1030,16 @@ public class TimesheetService {
                     missingCost + " submitted timesheet(s) have payable hours without a project/cost code.");
         }
         progress.onProgress(0, total);
-        Instant approvedAt = Instant.now();
-        String approvedBy = currentUsername();
-        int approved = allowed != null && projectId == null
-                ? timesheetRepo.approveSubmittedByProjects(companyId, year, month, allowed, approvedAt, approvedBy)
-                : timesheetRepo.approveSubmittedByProject(companyId, year, month, projectId, approvedAt, approvedBy);
+        int approved = 0;
+        Map<UUID, UUID> projectByEmployee = employeeProjectMap(companyId);
+        for (Timesheet t : timesheetRepo.findByCompanyIdAndPeriodYearAndPeriodMonthOrderByEmployeeId(companyId, year, month)) {
+            UUID empProject = projectByEmployee.get(t.getEmployeeId());
+            if (SUBMITTED.equals(t.getStatus()) && matchesProjectScope(empProject, projectId, allowed)) {
+                approve(t.getId());
+                approved++;
+                progress.onProgress(approved, total);
+            }
+        }
         progress.onProgress(approved, total);
         return Map.of("approved", approved);
     }
@@ -1387,7 +1403,9 @@ public class TimesheetService {
         validateTimesheetAllocations(ts);
         ts.setStatus(SUBMITTED);
         ts.setSubmittedAt(Instant.now());
-        return toFullDto(timesheetRepo.save(ts));
+        ts = timesheetRepo.save(ts);
+        approvalService.startTimesheetApproval(ts.getId(), ts.getEmployeeId(), employeeProject(ts.getEmployeeId()), payGroup(ts.getEmployeeId()));
+        return toFullDto(ts);
     }
 
     public TimesheetDto approve(UUID id) {
@@ -1397,6 +1415,10 @@ public class TimesheetService {
         }
         assertEditable(ts);
         validateTimesheetAllocations(ts);
+        boolean complete = approvalService.approveTimesheetStep(ts.getId());
+        if (!complete) {
+            return toFullDto(ts);
+        }
         ts.setStatus(APPROVED);
         ts.setApprovedAt(Instant.now());
         ts.setApprovedBy(currentUsername());
@@ -1424,6 +1446,7 @@ public class TimesheetService {
         ts.setSubmittedAt(null);
         ts.setApprovedAt(null);
         ts.setApprovedBy(null);
+        approvalService.voidTimesheetApproval(ts.getId());
         return toFullDto(timesheetRepo.save(ts));
     }
 
