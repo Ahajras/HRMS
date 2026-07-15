@@ -30,6 +30,7 @@ import type {
   Project,
   ProjectApprovalRole,
   ApprovalTask,
+  ApprovalWorkflow,
   RoleEmployeeCandidate,
   CostCode,
   PublicHoliday,
@@ -123,6 +124,14 @@ export const approvalApi = {
   myTasks: () => api.get<ApprovalTask[]>("/approvals/my-tasks").then((r) => r.data),
   approveTimesheet: (timesheetId: string) =>
     api.post<Timesheet>(`/timesheets/${timesheetId}/approve`).then((r) => r.data),
+};
+
+export const approvalWorkflowApi = {
+  list: () => api.get<ApprovalWorkflow[]>("/approval-workflows").then((r) => r.data),
+  save: (payload: ApprovalWorkflow) => payload.id
+    ? api.put<ApprovalWorkflow>(`/approval-workflows/${payload.id}`, payload).then((r) => r.data)
+    : api.post<ApprovalWorkflow>("/approval-workflows", payload).then((r) => r.data),
+  remove: (id: string) => api.delete(`/approval-workflows/${id}`).then(() => undefined),
 };
 
 export const costCodeApi = {

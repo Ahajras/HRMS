@@ -88,7 +88,6 @@ const NAV_GROUPS: NavGroup[] = [
     label: "My Portal",
     items: [
       { to: "/my-portal", label: "My Payslips, Timesheet & Leave", icon: <AccountCircleIcon />, authority: "self.payslip.read" },
-      { to: "/my-approvals", label: "My Approvals", icon: <FactCheckIcon />, authority: "employee.read" },
     ],
   },
   {
@@ -129,13 +128,20 @@ const NAV_GROUPS: NavGroup[] = [
     label: "Configuration",
     items: [
       { to: "/projects", label: "Projects", icon: <WorkIcon />, authority: "reference.read" },
-      { to: "/project-approval-roles", label: "Project Approval Roles", icon: <SecurityIcon />, authority: "employee.read" },
       { to: "/company-profile", label: "Company Profile", icon: <BusinessIcon />, authority: "reference.read" },
       { to: "/org-unit-types", label: "Org Levels", icon: <LayersIcon />, authority: "organization.read" },
       { to: "/countries", label: "Countries", icon: <PublicIcon />, authority: "reference.read" },
       { to: "/country-law", label: "Country Law", icon: <GavelIcon />, authority: "reference.read" },
       { to: "/overtime-categories", label: "Overtime Categories", icon: <TimerIcon />, authority: "reference.read" },
       { to: "/currencies", label: "Currencies", icon: <AttachMoneyIcon />, authority: "reference.read" },
+    ],
+  },
+  {
+    label: "Workflow",
+    items: [
+      { to: "/my-approvals", label: "My Approvals", icon: <FactCheckIcon />, authority: "employee.read" },
+      { to: "/approval-workflows", label: "Approval Workflows", icon: <FactCheckIcon />, authority: "employee.read" },
+      { to: "/project-approval-roles", label: "Project Approval Roles", icon: <SecurityIcon />, authority: "employee.read" },
     ],
   },
   {

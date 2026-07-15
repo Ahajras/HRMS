@@ -12,5 +12,7 @@ public interface ApprovalWorkflowRepository extends JpaRepository<ApprovalWorkfl
             UUID companyId, String processCode, UUID projectId, String payGroup, String status);
     Optional<ApprovalWorkflow> findFirstByCompanyIdAndProcessCodeAndProjectIdAndPayGroupAndStatusOrderByCreatedAtDesc(
             UUID companyId, String processCode, UUID projectId, String payGroup, String status);
+    Optional<ApprovalWorkflow> findByCompanyIdAndProcessCodeAndProjectIdAndPayGroup(
+            UUID companyId, String processCode, UUID projectId, String payGroup);
     List<ApprovalWorkflow> findByCompanyIdOrderByProcessCodeAscProjectIdAscPayGroupAsc(UUID companyId);
 }

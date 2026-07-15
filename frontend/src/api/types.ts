@@ -113,6 +113,29 @@ export interface ApprovalTask {
   submittedAt?: string;
 }
 
+export interface ApprovalWorkflowStep {
+  id?: string;
+  stepOrder: number;
+  name: string;
+  approverType: "SUPERVISOR" | "PROJECT_ROLE" | "SPECIFIC_EMPLOYEE" | string;
+  approverRoleCode?: string;
+  approverEmployeeId?: string;
+  approverEmployeeNumber?: string;
+  approverEmployeeName?: string;
+  status?: string;
+}
+
+export interface ApprovalWorkflow {
+  id?: string;
+  processCode: string;
+  projectId: string;
+  projectCode?: string;
+  payGroup: string;
+  name: string;
+  status?: string;
+  steps: ApprovalWorkflowStep[];
+}
+
 export interface CompanyProfile {
   id?: string;
   companyId?: string;
