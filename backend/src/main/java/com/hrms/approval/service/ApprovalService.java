@@ -18,6 +18,7 @@ import com.hrms.project.domain.ProjectApprovalRole;
 import com.hrms.project.repository.ProjectApprovalRoleRepository;
 import com.hrms.project.repository.ProjectRepository;
 import com.hrms.security.AuthenticatedUser;
+import com.hrms.timesheet.repository.TimesheetRepository;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -43,6 +44,8 @@ public class ApprovalService {
     private final EmployeeRepository employeeRepo;
     private final ProjectApprovalRoleRepository projectApprovalRoleRepo;
     private final ProjectRepository projectRepo;
+    private final TimesheetRepository timesheetRepo;
+    private final ApprovalNotificationService notificationService;
 
     public ApprovalService(ApprovalWorkflowRepository workflowRepo,
                            ApprovalWorkflowStepRepository workflowStepRepo,
@@ -50,7 +53,9 @@ public class ApprovalService {
                            ApprovalInstanceStepRepository instanceStepRepo,
                            EmployeeRepository employeeRepo,
                            ProjectApprovalRoleRepository projectApprovalRoleRepo,
-                           ProjectRepository projectRepo) {
+                           ProjectRepository projectRepo,
+                           TimesheetRepository timesheetRepo,
+                           ApprovalNotificationService notificationService) {
         this.workflowRepo = workflowRepo;
         this.workflowStepRepo = workflowStepRepo;
         this.instanceRepo = instanceRepo;
@@ -58,6 +63,8 @@ public class ApprovalService {
         this.employeeRepo = employeeRepo;
         this.projectApprovalRoleRepo = projectApprovalRoleRepo;
         this.projectRepo = projectRepo;
+        this.timesheetRepo = timesheetRepo;
+        this.notificationService = notificationService;
     }
 
     public void startTimesheetApproval(UUID timesheetId, UUID employeeId, UUID projectId, String payGroup) {
@@ -92,6 +99,7 @@ public class ApprovalService {
         instance.setSubmittedAt(Instant.now());
         instance = instanceRepo.save(instance);
 
+        ApprovalInstanceStep firstPending = null;
         for (int i = 0; i < steps.size(); i++) {
             ApprovalWorkflowStep src = steps.get(i);
             ApprovalInstanceStep step = new ApprovalInstanceStep();
@@ -102,7 +110,13 @@ public class ApprovalService {
             step.setApproverRoleCode(src.getApproverRoleCode());
             step.setApproverEmployeeId(resolveApproverEmployee(src, employeeId, projectId));
             step.setStatus(i == 0 ? "PENDING" : "WAITING");
-            instanceStepRepo.save(step);
+            step = instanceStepRepo.save(step);
+            if (i == 0) {
+                firstPending = step;
+            }
+        }
+        if (firstPending != null) {
+            notificationService.notifyPending(instance, firstPending);
         }
     }
 
@@ -139,6 +153,7 @@ public class ApprovalService {
         instanceStepRepo.save(next);
         instance.setCurrentStepOrder(next.getStepOrder());
         instanceRepo.save(instance);
+        notificationService.notifyPending(instance, next);
         return false;
     }
 
@@ -167,6 +182,9 @@ public class ApprovalService {
         }
         List<ApprovalTaskDto> out = new ArrayList<>();
         for (ApprovalInstance instance : instanceRepo.findByCompanyIdAndStatus(companyId, "PENDING")) {
+            if (TIMESHEET_ENTITY.equals(instance.getEntityType()) && timesheetRepo.findById(instance.getEntityId()).isEmpty()) {
+                continue;
+            }
             ApprovalInstanceStep step = instanceStepRepo.findByInstanceIdAndStatus(instance.getId(), "PENDING").orElse(null);
             if (step == null || !employeeId.equals(step.getApproverEmployeeId())) {
                 continue;
@@ -192,9 +210,20 @@ public class ApprovalService {
         employeeRepo.findById(instance.getEmployeeId()).ifPresent(e -> {
             dto.setEmployeeNumber(e.getEmployeeNumber());
             dto.setEmployeeName((safe(e.getFirstName()) + " " + safe(e.getLastName())).trim());
+            dto.setPayGroup(e.getPayStatus());
         });
         if (instance.getProjectId() != null) {
             projectRepo.findById(instance.getProjectId()).ifPresent(p -> dto.setProjectCode(p.getCode()));
+        }
+        if (TIMESHEET_ENTITY.equals(instance.getEntityType())) {
+            timesheetRepo.findById(instance.getEntityId()).ifPresent(ts -> {
+                dto.setPeriodYear(ts.getPeriodYear());
+                dto.setPeriodMonth(ts.getPeriodMonth());
+                dto.setTimesheetStatus(ts.getStatus());
+                dto.setTotalWorkedHours(ts.getTotalWorkedHours());
+                dto.setTotalOtHours(ts.getTotalOtHours());
+                dto.setTotalAbsenceDays(ts.getTotalAbsenceDays());
+            });
         }
         return dto;
     }

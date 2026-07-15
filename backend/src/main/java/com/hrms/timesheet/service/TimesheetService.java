@@ -1453,6 +1453,7 @@ public class TimesheetService {
     public void delete(UUID id) {
         Timesheet ts = getEntity(id);
         assertEditable(ts);
+        approvalService.voidTimesheetApproval(ts.getId());
         timesheetRepo.delete(ts);
     }
 

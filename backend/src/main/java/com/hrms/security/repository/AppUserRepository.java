@@ -14,4 +14,6 @@ public interface AppUserRepository extends JpaRepository<AppUser, UUID> {
     boolean existsByUsername(String username);
 
     List<AppUser> findByCompanyId(UUID companyId);
+
+    List<AppUser> findByCompanyIdAndEmployeeIdAndStatus(UUID companyId, UUID employeeId, String status);
 }

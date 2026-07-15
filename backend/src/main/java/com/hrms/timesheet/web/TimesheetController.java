@@ -17,6 +17,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -132,12 +133,14 @@ public class TimesheetController {
     }
 
     @PostMapping("/approve-all")
+    @PreAuthorize("hasRole('PROJECT_MANAGER') or hasRole('MANAGER') or hasRole('COMPANY_ADMIN') or hasRole('SUPER_ADMIN')")
     public Map<String, Integer> approveAll(@RequestParam int year, @RequestParam int month,
                                            @RequestParam(required = false) UUID projectId) {
         return service.approveAll(year, month, projectId);
     }
 
     @PostMapping("/approve-all-jobs")
+    @PreAuthorize("hasRole('PROJECT_MANAGER') or hasRole('MANAGER') or hasRole('COMPANY_ADMIN') or hasRole('SUPER_ADMIN')")
     @ResponseStatus(HttpStatus.ACCEPTED)
     public BulkStatusJobDto startApproveAll(@RequestParam int year, @RequestParam int month,
                                             @RequestParam(required = false) UUID projectId) {

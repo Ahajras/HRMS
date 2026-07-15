@@ -22,6 +22,7 @@ import PrintIcon from "@mui/icons-material/Print";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { costCodeApi, crewApi, payrollRunApi, periodApi, periodLockApi, projectApi, shiftApi, timeTypeApi, timesheetApi } from "../api/resources";
 import type { PayrollRun, Timesheet, TimesheetDay, TimesheetDayCost } from "../api/types";
+import { useAuth } from "../auth/AuthContext";
 
 const STATUS_COLOR: Record<string, "default" | "info" | "success" | "warning"> = {
   DRAFT: "default",
@@ -174,6 +175,7 @@ function escapeHtml(value: string) {
 
 export default function TimesheetPage() {
   const qc = useQueryClient();
+  const { hasAuthority } = useAuth();
   const [periodId, setPeriodId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -392,6 +394,8 @@ export default function TimesheetPage() {
   const isSubmittingBulk = submitAll.isPending || submitJob?.status === "RUNNING";
   const isApprovingBulk = approveAll.isPending || approveJob?.status === "RUNNING";
   const isLockingBulk = lockProject.isPending || lockJob?.status === "RUNNING";
+  const canApproveAll = ["ROLE_PROJECT_MANAGER", "ROLE_MANAGER", "ROLE_COMPANY_ADMIN", "ROLE_SUPER_ADMIN"]
+    .some(hasAuthority);
   const filtered = rows;
 
   return (
@@ -473,9 +477,11 @@ export default function TimesheetPage() {
                 <Button size="small" variant="outlined" disabled={!periodEditable || rows.every((t) => t.status !== "DRAFT") || isSubmittingBulk} onClick={() => submitAll.mutate()}>
                   Submit all drafts
                 </Button>
-                <Button size="small" variant="outlined" color="success" disabled={!periodEditable || rows.every((t) => t.status !== "SUBMITTED") || isApprovingBulk} onClick={() => approveAll.mutate()}>
-                  Approve all submitted
-                </Button>
+                {canApproveAll && (
+                  <Button size="small" variant="outlined" color="success" disabled={!periodEditable || rows.every((t) => t.status !== "SUBMITTED") || isApprovingBulk} onClick={() => approveAll.mutate()}>
+                    Approve all submitted
+                  </Button>
+                )}
                 <Button
                   size="small"
                   variant="outlined"

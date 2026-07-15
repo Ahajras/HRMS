@@ -111,6 +111,13 @@ export interface ApprovalTask {
   stepName: string;
   status: string;
   submittedAt?: string;
+  periodYear?: number;
+  periodMonth?: number;
+  payGroup?: string;
+  timesheetStatus?: string;
+  totalWorkedHours?: number;
+  totalOtHours?: number;
+  totalAbsenceDays?: number;
 }
 
 export interface ApprovalWorkflowStep {
