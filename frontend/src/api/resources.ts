@@ -122,7 +122,7 @@ export const projectApprovalRoleApi = {
 export const approvalApi = {
   myTasks: () => api.get<ApprovalTask[]>("/approvals/my-tasks").then((r) => r.data),
   approveTimesheet: (timesheetId: string) =>
-    api.post<boolean>("/approvals/timesheet/approve", null, { params: { timesheetId } }).then((r) => r.data),
+    api.post<Timesheet>(`/timesheets/${timesheetId}/approve`).then((r) => r.data),
 };
 
 export const costCodeApi = {
