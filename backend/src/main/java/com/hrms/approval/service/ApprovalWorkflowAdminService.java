@@ -3,6 +3,7 @@ package com.hrms.approval.service;
 import com.hrms.approval.domain.ApprovalWorkflow;
 import com.hrms.approval.domain.ApprovalWorkflowStep;
 import com.hrms.approval.dto.ApprovalWorkflowDto;
+import com.hrms.approval.repository.ApprovalInstanceRepository;
 import com.hrms.approval.repository.ApprovalWorkflowRepository;
 import com.hrms.approval.repository.ApprovalWorkflowStepRepository;
 import com.hrms.common.exception.BusinessRuleException;
@@ -25,15 +26,18 @@ import java.util.UUID;
 public class ApprovalWorkflowAdminService {
     private final ApprovalWorkflowRepository workflowRepo;
     private final ApprovalWorkflowStepRepository stepRepo;
+    private final ApprovalInstanceRepository instanceRepo;
     private final ProjectRepository projectRepo;
     private final EmployeeRepository employeeRepo;
 
     public ApprovalWorkflowAdminService(ApprovalWorkflowRepository workflowRepo,
                                         ApprovalWorkflowStepRepository stepRepo,
+                                        ApprovalInstanceRepository instanceRepo,
                                         ProjectRepository projectRepo,
                                         EmployeeRepository employeeRepo) {
         this.workflowRepo = workflowRepo;
         this.stepRepo = stepRepo;
+        this.instanceRepo = instanceRepo;
         this.projectRepo = projectRepo;
         this.employeeRepo = employeeRepo;
     }
@@ -41,7 +45,7 @@ public class ApprovalWorkflowAdminService {
     @Transactional(readOnly = true)
     public List<ApprovalWorkflowDto> findAll() {
         UUID companyId = TenantContext.requireCompanyId();
-        return workflowRepo.findByCompanyIdOrderByProcessCodeAscProjectIdAscPayGroupAsc(companyId)
+        return workflowRepo.findByCompanyIdAndStatusOrderByProcessCodeAscProjectIdAscPayGroupAsc(companyId, "ACTIVE")
                 .stream().map(this::toDto).toList();
     }
 
@@ -95,8 +99,18 @@ public class ApprovalWorkflowAdminService {
     }
 
     public void delete(UUID id) {
-        workflowRepo.delete(workflowRepo.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Workflow not found: " + id)));
+        ApprovalWorkflow workflow = workflowRepo.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Workflow not found: " + id));
+        if (instanceRepo.countByWorkflowId(id) == 0) {
+            workflowRepo.delete(workflow);
+            return;
+        }
+        workflow.setStatus("INACTIVE");
+        workflowRepo.save(workflow);
+        stepRepo.findByWorkflowIdAndStatusOrderByStepOrderAsc(id, "ACTIVE").forEach(step -> {
+            step.setStatus("INACTIVE");
+            stepRepo.save(step);
+        });
     }
 
     private void validateStep(ApprovalWorkflowStep row) {

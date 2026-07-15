@@ -11,4 +11,5 @@ public interface ApprovalInstanceRepository extends JpaRepository<ApprovalInstan
     Optional<ApprovalInstance> findFirstByCompanyIdAndEntityTypeAndEntityIdAndStatusIn(
             UUID companyId, String entityType, UUID entityId, List<String> statuses);
     List<ApprovalInstance> findByCompanyIdAndStatus(UUID companyId, String status);
+    long countByWorkflowId(UUID workflowId);
 }

@@ -120,6 +120,7 @@ export default function ApprovalWorkflowsPage() {
                 <TableRow>
                   <TableCell>Project</TableCell>
                   <TableCell>Process</TableCell>
+                  <TableCell>Pay group</TableCell>
                   <TableCell>Steps</TableCell>
                 </TableRow>
               </TableHead>
@@ -128,11 +129,12 @@ export default function ApprovalWorkflowsPage() {
                   <TableRow key={row.id} hover selected={row.id === selectedId} onClick={() => setSelectedId(row.id ?? "")} sx={{ cursor: "pointer" }}>
                     <TableCell>{row.projectCode ?? "Project"}</TableCell>
                     <TableCell>{row.processCode}</TableCell>
+                    <TableCell>{row.payGroup ?? "ALL"}</TableCell>
                     <TableCell>{row.steps?.length ?? 0}</TableCell>
                   </TableRow>
                 ))}
                 {workflows.length === 0 && (
-                  <TableRow><TableCell colSpan={3}><Typography variant="body2" color="text.secondary" p={1}>No workflows yet.</Typography></TableCell></TableRow>
+                  <TableRow><TableCell colSpan={4}><Typography variant="body2" color="text.secondary" p={1}>No workflows yet.</Typography></TableCell></TableRow>
                 )}
               </TableBody>
             </Table>
@@ -199,6 +201,7 @@ export default function ApprovalWorkflowsPage() {
             </Stack>
 
             {save.isError && <Alert severity="error" sx={{ mt: 2 }}>{(save.error as any)?.response?.data?.message ?? "Could not save workflow."}</Alert>}
+            {remove.isError && <Alert severity="error" sx={{ mt: 2 }}>{(remove.error as any)?.response?.data?.message ?? "Could not delete workflow."}</Alert>}
             <Stack direction="row" spacing={1} mt={2}>
               <Button startIcon={<AddIcon />} onClick={addStep}>Add step</Button>
               <Button variant="contained" startIcon={<SaveIcon />} disabled={save.isPending || !form.projectId || form.steps.length === 0} onClick={() => save.mutate(form)}>
