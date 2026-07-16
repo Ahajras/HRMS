@@ -5,8 +5,10 @@ import com.hrms.employee.domain.Assignment;
 import com.hrms.employee.repository.AssignmentRepository;
 import com.hrms.employee.repository.EmployeeRepository;
 import com.hrms.payroll.dto.DashboardDto;
+import com.hrms.payroll.domain.ProvisionRun;
 import com.hrms.payroll.repository.PayrollResultLineRepository;
 import com.hrms.payroll.repository.PayrollResultRepository;
+import com.hrms.payroll.repository.ProvisionRunRepository;
 import com.hrms.project.domain.Project;
 import com.hrms.project.repository.ProjectRepository;
 import com.hrms.timesheet.domain.PayrollPeriod;
@@ -18,9 +20,12 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.Month;
+import java.time.format.TextStyle;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
 
@@ -44,11 +49,13 @@ public class DashboardService {
     private final AssignmentRepository assignmentRepo;
     private final PayrollResultRepository resultRepo;
     private final PayrollResultLineRepository lineRepo;
+    private final ProvisionRunRepository provisionRunRepo;
 
     public DashboardService(EmployeeRepository employeeRepo, ProjectRepository projectRepo,
                             PayrollPeriodRepository periodRepo, TimesheetDayRepository dayRepo,
                             TimesheetDayCostRepository dayCostRepo, AssignmentRepository assignmentRepo,
-                            PayrollResultRepository resultRepo, PayrollResultLineRepository lineRepo) {
+                            PayrollResultRepository resultRepo, PayrollResultLineRepository lineRepo,
+                            ProvisionRunRepository provisionRunRepo) {
         this.employeeRepo = employeeRepo;
         this.projectRepo = projectRepo;
         this.periodRepo = periodRepo;
@@ -57,6 +64,7 @@ public class DashboardService {
         this.assignmentRepo = assignmentRepo;
         this.resultRepo = resultRepo;
         this.lineRepo = lineRepo;
+        this.provisionRunRepo = provisionRunRepo;
     }
 
     /** @param periodId the period to show; null means "the current
@@ -118,8 +126,44 @@ public class DashboardService {
 
             dto.getProjectStats().addAll(buildProjectStats(companyId, period));
         }
+        int year = period != null ? period.getPeriodYear() : today.getYear();
+        dto.getProvisionMonths().addAll(buildProvisionMonths(companyId, year));
 
         return dto;
+    }
+
+    private List<DashboardDto.ProvisionMonthStat> buildProvisionMonths(UUID companyId, int year) {
+        Map<Integer, DashboardDto.ProvisionMonthStat> stats = new LinkedHashMap<>();
+        for (int month = 1; month <= 12; month++) {
+            DashboardDto.ProvisionMonthStat stat = new DashboardDto.ProvisionMonthStat();
+            stat.setYear(year);
+            stat.setMonth(month);
+            stat.setLabel(Month.of(month).getDisplayName(TextStyle.SHORT, Locale.ENGLISH));
+            stats.put(month, stat);
+        }
+
+        for (PayrollPeriod period : periodRepo.findByCompanyIdAndPeriodYearOrderByPeriodMonth(companyId, year)) {
+            DashboardDto.ProvisionMonthStat stat = stats.get(period.getPeriodMonth());
+            if (stat == null) {
+                continue;
+            }
+            List<ProvisionRun> runs = provisionRunRepo.findByCompanyIdAndPeriodIdAndStatusInOrderByCreatedAtDesc(
+                    companyId, period.getId(), List.of("CALCULATED", "APPROVED"));
+            for (ProvisionRun run : runs) {
+                BigDecimal provision = toBigDecimal(run.getTotalProvisionAmount());
+                stat.setRunCount(stat.getRunCount() + 1);
+                stat.setEmployeeCount(stat.getEmployeeCount() + run.getEmployeeCount());
+                stat.setAccrualAmount(stat.getAccrualAmount().add(toBigDecimal(run.getTotalEligibleAmount())));
+                stat.setProvisionAmount(stat.getProvisionAmount().add(provision));
+                switch ((run.getProvisionType() == null ? "OTHER" : run.getProvisionType()).toUpperCase(Locale.ROOT)) {
+                    case "LEAVE" -> stat.setLeaveProvision(stat.getLeaveProvision().add(provision));
+                    case "EOS" -> stat.setEosProvision(stat.getEosProvision().add(provision));
+                    case "TICKET" -> stat.setTicketProvision(stat.getTicketProvision().add(provision));
+                    default -> stat.setOtherProvision(stat.getOtherProvision().add(provision));
+                }
+            }
+        }
+        return List.copyOf(stats.values());
     }
 
     private List<DashboardDto.ProjectStat> buildProjectStats(UUID companyId, PayrollPeriod period) {

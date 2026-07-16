@@ -31,6 +31,7 @@ public class DashboardDto {
 
     private List<ProjectStat> projectStats = new ArrayList<>();
     private List<CategoryStat> categoryStats = new ArrayList<>();
+    private List<ProvisionMonthStat> provisionMonths = new ArrayList<>();
 
     public static class ProjectStat {
         private String projectCode;
@@ -59,6 +60,43 @@ public class DashboardDto {
         public void setCategory(String category) { this.category = category; }
         public BigDecimal getAmount() { return amount; }
         public void setAmount(BigDecimal amount) { this.amount = amount; }
+    }
+
+    public static class ProvisionMonthStat {
+        private int year;
+        private int month;
+        private String label;
+        private int runCount;
+        private int employeeCount;
+        private BigDecimal accrualAmount = BigDecimal.ZERO;
+        private BigDecimal provisionAmount = BigDecimal.ZERO;
+        private BigDecimal leaveProvision = BigDecimal.ZERO;
+        private BigDecimal eosProvision = BigDecimal.ZERO;
+        private BigDecimal ticketProvision = BigDecimal.ZERO;
+        private BigDecimal otherProvision = BigDecimal.ZERO;
+
+        public int getYear() { return year; }
+        public void setYear(int year) { this.year = year; }
+        public int getMonth() { return month; }
+        public void setMonth(int month) { this.month = month; }
+        public String getLabel() { return label; }
+        public void setLabel(String label) { this.label = label; }
+        public int getRunCount() { return runCount; }
+        public void setRunCount(int runCount) { this.runCount = runCount; }
+        public int getEmployeeCount() { return employeeCount; }
+        public void setEmployeeCount(int employeeCount) { this.employeeCount = employeeCount; }
+        public BigDecimal getAccrualAmount() { return accrualAmount; }
+        public void setAccrualAmount(BigDecimal accrualAmount) { this.accrualAmount = accrualAmount; }
+        public BigDecimal getProvisionAmount() { return provisionAmount; }
+        public void setProvisionAmount(BigDecimal provisionAmount) { this.provisionAmount = provisionAmount; }
+        public BigDecimal getLeaveProvision() { return leaveProvision; }
+        public void setLeaveProvision(BigDecimal leaveProvision) { this.leaveProvision = leaveProvision; }
+        public BigDecimal getEosProvision() { return eosProvision; }
+        public void setEosProvision(BigDecimal eosProvision) { this.eosProvision = eosProvision; }
+        public BigDecimal getTicketProvision() { return ticketProvision; }
+        public void setTicketProvision(BigDecimal ticketProvision) { this.ticketProvision = ticketProvision; }
+        public BigDecimal getOtherProvision() { return otherProvision; }
+        public void setOtherProvision(BigDecimal otherProvision) { this.otherProvision = otherProvision; }
     }
 
     public int getProjectCount() { return projectCount; }
@@ -99,4 +137,6 @@ public class DashboardDto {
     public void setProjectStats(List<ProjectStat> projectStats) { this.projectStats = projectStats; }
     public List<CategoryStat> getCategoryStats() { return categoryStats; }
     public void setCategoryStats(List<CategoryStat> categoryStats) { this.categoryStats = categoryStats; }
+    public List<ProvisionMonthStat> getProvisionMonths() { return provisionMonths; }
+    public void setProvisionMonths(List<ProvisionMonthStat> provisionMonths) { this.provisionMonths = provisionMonths; }
 }

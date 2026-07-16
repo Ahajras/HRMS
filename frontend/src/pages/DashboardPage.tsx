@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Box, MenuItem, Stack, TextField, Typography } from "@mui/material";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 import { dashboardApi, periodApi } from "../api/resources";
 
 const INK = "#151A21";
@@ -135,6 +135,22 @@ function CategoryDonut({ data }: { data: { category: string; amount: number }[] 
   );
 }
 
+function ProvisionYearChart({ data }: { data: { label: string; accrualAmount: number; provisionAmount: number }[] }) {
+  return (
+    <ResponsiveContainer width="100%" height={260}>
+      <BarChart data={data} margin={{ left: -5, right: 10 }}>
+        <CartesianGrid stroke={PANEL_BORDER} vertical={false} />
+        <XAxis dataKey="label" tick={{ fill: SLATE, fontSize: 11 }} axisLine={{ stroke: PANEL_BORDER }} tickLine={false} />
+        <YAxis tick={{ fill: SLATE, fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => fmt(Number(v))} />
+        <Tooltip {...chartTooltipStyle} cursor={{ fill: "#ffffff08" }} formatter={(value: number, name: string) => [`${fmt(value)} QAR`, name === "accrualAmount" ? "Accrual" : "Provision"]} />
+        <Legend wrapperStyle={{ color: SLATE, fontSize: 12 }} formatter={(value) => value === "accrualAmount" ? "Accrual / eligible" : "Provision"} />
+        <Bar dataKey="accrualAmount" fill="#7C93F2" radius={[3, 3, 0, 0]} />
+        <Bar dataKey="provisionAmount" fill={TEAL} radius={[3, 3, 0, 0]} />
+      </BarChart>
+    </ResponsiveContainer>
+  );
+}
+
 export default function DashboardPage() {
   const [periodId, setPeriodId] = useState<string>("");
   const { data: periods = [] } = useQuery({ queryKey: ["periodsForDashboard"], queryFn: () => periodApi.list() });
@@ -145,6 +161,8 @@ export default function DashboardPage() {
 
   const today = new Date();
   const dateStr = today.toLocaleDateString(undefined, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const provisionYearTotal = (data?.provisionMonths ?? []).reduce((sum, row) => sum + Number(row.provisionAmount ?? 0), 0);
+  const accrualYearTotal = (data?.provisionMonths ?? []).reduce((sum, row) => sum + Number(row.accrualAmount ?? 0), 0);
 
   if (isLoading || !data) {
     return (
@@ -223,6 +241,40 @@ export default function DashboardPage() {
           </Stack>
         </Box>
       </Stack>
+
+      <Box sx={{ bgcolor: PANEL, border: `1px solid ${PANEL_BORDER}`, borderTop: `3px solid #7C93F2`, borderRadius: "4px", p: 2.5, mb: 1.5 }}>
+        <Stack direction={{ xs: "column", md: "row" }} justifyContent="space-between" gap={2} mb={2}>
+          <Box>
+            <Eyebrow color="#7C93F2">{data.periodYear || today.getFullYear()} Accrual & Provision</Eyebrow>
+            <Typography sx={{ color: SLATE, fontSize: 12, mt: 0.5 }}>
+              Monthly totals from calculated provision runs for the selected year.
+            </Typography>
+          </Box>
+          <Stack direction="row" spacing={4}>
+            <Box>
+              <Typography sx={{ ...mono, color: "#7C93F2", fontSize: 18, fontWeight: 700 }}>{fmt(accrualYearTotal)}</Typography>
+              <Typography sx={{ color: SLATE, fontSize: 12 }}>accrual / eligible QAR</Typography>
+            </Box>
+            <Box>
+              <Typography sx={{ ...mono, color: TEAL, fontSize: 18, fontWeight: 700 }}>{fmt(provisionYearTotal)}</Typography>
+              <Typography sx={{ color: SLATE, fontSize: 12 }}>provision QAR</Typography>
+            </Box>
+          </Stack>
+        </Stack>
+        {(data.provisionMonths ?? []).some((row) => row.accrualAmount > 0 || row.provisionAmount > 0)
+          ? <ProvisionYearChart data={data.provisionMonths} />
+          : <Typography sx={{ color: SLATE, fontSize: 13, py: 5, textAlign: "center" }}>No calculated provision runs for this year yet.</Typography>}
+        <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap mt={2}>
+          {(data.provisionMonths ?? []).map((row) => (
+            <Box key={`${row.year}-${row.month}`} sx={{ minWidth: 132, flex: "1 1 132px", border: `1px solid ${PANEL_BORDER}`, borderRadius: "4px", p: 1.25 }}>
+              <Typography sx={{ ...mono, color: PAPER, fontSize: 13, fontWeight: 700 }}>{row.label}</Typography>
+              <Typography sx={{ color: SLATE, fontSize: 11 }}>{row.runCount} run(s) / {fmt(row.employeeCount)} emp.</Typography>
+              <Typography sx={{ ...mono, color: TEAL, fontSize: 14, fontWeight: 700, mt: 0.75 }}>{fmt(row.provisionAmount)}</Typography>
+              <Typography sx={{ color: SLATE, fontSize: 11 }}>LEAVE {fmt(row.leaveProvision)} | EOS {fmt(row.eosProvision)} | TICKET {fmt(row.ticketProvision)}</Typography>
+            </Box>
+          ))}
+        </Stack>
+      </Box>
 
       {/* Charts */}
       <Stack direction={{ xs: "column", md: "row" }} spacing={1.5}>

@@ -1348,6 +1348,20 @@ export interface DashboardCategoryStat {
   amount: number;
 }
 
+export interface DashboardProvisionMonth {
+  year: number;
+  month: number;
+  label: string;
+  runCount: number;
+  employeeCount: number;
+  accrualAmount: number;
+  provisionAmount: number;
+  leaveProvision: number;
+  eosProvision: number;
+  ticketProvision: number;
+  otherProvision: number;
+}
+
 export interface DashboardSummary {
   projectCount: number;
   activeEmployeeCount: number;
@@ -1368,4 +1382,5 @@ export interface DashboardSummary {
   periodLocked: boolean;
   projectStats: DashboardProjectStat[];
   categoryStats: DashboardCategoryStat[];
+  provisionMonths: DashboardProvisionMonth[];
 }
