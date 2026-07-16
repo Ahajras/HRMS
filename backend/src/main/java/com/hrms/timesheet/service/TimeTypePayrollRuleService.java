@@ -70,7 +70,7 @@ public class TimeTypePayrollRuleService {
             initializeLateDefaults(companyId, timeTypeId);
             return findByTimeType(timeTypeId);
         }
-        boolean unpaid = "U".equalsIgnoreCase(timeType.getCode());
+        boolean unpaid = !timeType.isPaid() || "U".equalsIgnoreCase(timeType.getCode());
         String defaultAction = unpaid ? "DEDUCT" : "PAY";
         for (PayrollComponent component : payrollComponentRepository.findByCompanyIdOrderByPriority(companyId)) {
             if (!"ACTIVE".equalsIgnoreCase(component.getStatus())) {
