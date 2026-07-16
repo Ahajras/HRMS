@@ -1404,6 +1404,7 @@ public class TimesheetService {
         ts.setStatus(SUBMITTED);
         ts.setSubmittedAt(Instant.now());
         ts = timesheetRepo.save(ts);
+        approvalService.voidTimesheetApproval(ts.getId());
         approvalService.startTimesheetApproval(ts.getId(), ts.getEmployeeId(), employeeProject(ts.getEmployeeId()), payGroup(ts.getEmployeeId()));
         return toFullDto(ts);
     }
