@@ -400,12 +400,12 @@ public class ApprovalService {
                     TenantContext.requireCompanyId(), projectId, step.getApproverRoleCode(), "ACTIVE");
             List<UUID> approvers = rows.stream()
                     .map(ProjectApprovalRole::getEmployeeId)
-                    .filter(id -> id != null && !id.equals(employeeId))
+                    .filter(id -> id != null)
                     .distinct()
                     .toList();
             if (approvers.isEmpty()) {
                 throw new BusinessRuleException("approval.project.role.required",
-                        "No active non-self " + step.getApproverRoleCode() + " approver is assigned to this project.");
+                        "No active " + step.getApproverRoleCode() + " approver is assigned to this project.");
             }
             return approvers;
         }
