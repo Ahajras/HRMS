@@ -4,6 +4,7 @@ import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
 import com.hrms.common.web.PageResponse;
+import com.hrms.approval.service.ApprovalNotificationService;
 import com.hrms.approval.service.ApprovalService;
 import com.hrms.benefits.service.TicketService;
 import com.hrms.employee.domain.Assignment;
@@ -70,6 +71,7 @@ public class LeaveService {
     private final TicketService ticketService;
     private final LeaveBalanceService leaveBalanceService;
     private final ApprovalService approvalService;
+    private final ApprovalNotificationService approvalNotificationService;
 
     public LeaveService(LeaveTypeRepository typeRepo, LeaveRequestRepository requestRepo,
                         LeaveAdjustmentRepository adjustmentRepo, EmployeeRepository employeeRepo,
@@ -79,7 +81,8 @@ public class LeaveService {
                         RulePackageRepository rulePackageRepo, RuleRepository ruleRepo,
                         TimesheetService timesheetService, TimekeeperService timekeeperService,
                         AppUserRepository appUserRepo, TicketService ticketService,
-                        LeaveBalanceService leaveBalanceService, ApprovalService approvalService) {
+                        LeaveBalanceService leaveBalanceService, ApprovalService approvalService,
+                        ApprovalNotificationService approvalNotificationService) {
         this.typeRepo = typeRepo;
         this.requestRepo = requestRepo;
         this.adjustmentRepo = adjustmentRepo;
@@ -96,6 +99,7 @@ public class LeaveService {
         this.ticketService = ticketService;
         this.leaveBalanceService = leaveBalanceService;
         this.approvalService = approvalService;
+        this.approvalNotificationService = approvalNotificationService;
     }
 
     @Transactional(readOnly = true)
@@ -299,7 +303,9 @@ public class LeaveService {
         assertProjectAllowed(row.getEmployeeId());
         approvalService.returnLeaveApproval(id, remarks);
         row.setStatus("RETURNED");
-        return toDto(requestRepo.save(row));
+        LeaveRequest saved = requestRepo.save(row);
+        approvalNotificationService.notifyLeaveReturned(saved, remarks);
+        return toDto(saved);
     }
 
     @Transactional(readOnly = true)

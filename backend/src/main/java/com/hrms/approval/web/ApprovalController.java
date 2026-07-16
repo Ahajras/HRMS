@@ -35,27 +35,27 @@ public class ApprovalController {
     }
 
     @PostMapping("/timesheet/approve")
-    @PreAuthorize("hasAuthority('employee.write')")
+    @PreAuthorize("hasAuthority('employee.read')")
     public boolean approveTimesheet(@RequestParam UUID timesheetId) {
         return service.approveTimesheetStep(timesheetId);
     }
 
     @PostMapping("/leave/{leaveRequestId}/approve")
-    @PreAuthorize("hasAuthority('employee.write')")
+    @PreAuthorize("hasAuthority('employee.read')")
     public LeaveRequestDto approveLeave(@PathVariable UUID leaveRequestId,
                                         @RequestBody(required = false) ApprovalDecisionDto decision) {
         return leaveService.approveRequest(leaveRequestId, remarks(decision));
     }
 
     @PostMapping("/leave/{leaveRequestId}/reject")
-    @PreAuthorize("hasAuthority('employee.write')")
+    @PreAuthorize("hasAuthority('employee.read')")
     public LeaveRequestDto rejectLeave(@PathVariable UUID leaveRequestId,
                                        @RequestBody ApprovalDecisionDto decision) {
         return leaveService.rejectRequest(leaveRequestId, remarks(decision));
     }
 
     @PostMapping("/leave/{leaveRequestId}/return")
-    @PreAuthorize("hasAuthority('employee.write')")
+    @PreAuthorize("hasAuthority('employee.read')")
     public LeaveRequestDto returnLeave(@PathVariable UUID leaveRequestId,
                                        @RequestBody ApprovalDecisionDto decision) {
         return leaveService.returnRequest(leaveRequestId, remarks(decision));

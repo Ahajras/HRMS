@@ -72,7 +72,38 @@ public class ApprovalNotificationService {
         }
     }
 
+    public void notifyLeaveReturned(LeaveRequest leave, String remarks) {
+        String host = environment.getProperty("spring.mail.host");
+        if (!StringUtils.hasText(host) || leave.getEmployeeId() == null) {
+            return;
+        }
+        String recipient = employeeEmail(leave.getCompanyId(), leave.getEmployeeId());
+        if (!StringUtils.hasText(recipient)) {
+            return;
+        }
+        try {
+            SimpleMailMessage message = new SimpleMailMessage();
+            message.setTo(recipient);
+            message.setSubject("HRMS leave request returned for correction");
+            message.setText("""
+                    Your leave request was returned for correction.
+
+                    %s
+                    Remarks: %s
+
+                    Please open HRMS > Leave and update/resubmit the request.
+                    """.formatted(leaveDetails(leave), StringUtils.hasText(remarks) ? remarks.trim() : "-"));
+            mailSender.send(message);
+        } catch (Exception ex) {
+            log.warn("Could not send leave return notification for request {}", leave.getId(), ex);
+        }
+    }
+
     private String approverEmail(UUID companyId, UUID employeeId) {
+        return employeeEmail(companyId, employeeId);
+    }
+
+    private String employeeEmail(UUID companyId, UUID employeeId) {
         return appUserRepo.findByCompanyIdAndEmployeeIdAndStatus(companyId, employeeId, "ACTIVE").stream()
                 .map(AppUser::getEmail)
                 .filter(StringUtils::hasText)
