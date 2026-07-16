@@ -19,6 +19,7 @@ import {
 } from "@mui/material";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { selfApi } from "../api/resources";
+import type { LeaveRequest } from "../api/types";
 
 const money = (v?: number) => Number(v ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -171,9 +172,20 @@ function MyTimesheetTab() {
 
 function MyLeaveTab() {
   const qc = useQueryClient();
-  const [form, setForm] = useState<{ leaveTypeId: string; startDate: string; endDate: string; reason: string }>({
-    leaveTypeId: "", startDate: "", endDate: "", reason: "",
-  });
+  const emptyForm = {
+    id: "",
+    leaveTypeId: "",
+    startDate: "",
+    endDate: "",
+    returnDate: "",
+    reason: "",
+    contactPhone: "",
+    contactEmail: "",
+    addressDuringLeave: "",
+    emergencyContactName: "",
+    emergencyContactPhone: "",
+  };
+  const [form, setForm] = useState(emptyForm);
   const [message, setMessage] = useState<string | null>(null);
 
   const { data: types = [] } = useQuery({ queryKey: ["myLeaveTypes"], queryFn: () => selfApi.leaveTypes() });
@@ -181,16 +193,45 @@ function MyLeaveTab() {
   const { data: balances = [] } = useQuery({ queryKey: ["myLeaveBalance"], queryFn: () => selfApi.leaveBalance() });
 
   const submit = useMutation({
-    mutationFn: () => selfApi.submitLeaveRequest({
-      leaveTypeId: form.leaveTypeId, startDate: form.startDate, endDate: form.endDate, reason: form.reason,
-    }),
+    mutationFn: () => {
+      const payload = {
+        leaveTypeId: form.leaveTypeId,
+        startDate: form.startDate,
+        endDate: form.endDate,
+        returnDate: form.returnDate || undefined,
+        reason: form.reason,
+        contactPhone: form.contactPhone,
+        contactEmail: form.contactEmail,
+        addressDuringLeave: form.addressDuringLeave,
+        emergencyContactName: form.emergencyContactName,
+        emergencyContactPhone: form.emergencyContactPhone,
+      };
+      return form.id ? selfApi.updateLeaveRequest(form.id, payload) : selfApi.submitLeaveRequest(payload);
+    },
     onSuccess: () => {
-      setMessage("Request submitted — awaiting manager approval.");
-      setForm({ leaveTypeId: "", startDate: "", endDate: "", reason: "" });
+      setMessage("Request submitted - awaiting manager approval.");
+      setForm(emptyForm);
       qc.invalidateQueries({ queryKey: ["myLeaveRequests"] });
     },
     onError: (e: any) => setMessage(e?.response?.data?.message ?? "Could not submit the request."),
   });
+
+  const editReturned = (request: LeaveRequest) => {
+    setForm({
+      id: request.id ?? "",
+      leaveTypeId: request.leaveTypeId,
+      startDate: request.startDate,
+      endDate: request.endDate,
+      returnDate: request.returnDate ?? "",
+      reason: request.reason ?? "",
+      contactPhone: request.contactPhone ?? "",
+      contactEmail: request.contactEmail ?? "",
+      addressDuringLeave: request.addressDuringLeave ?? "",
+      emergencyContactName: request.emergencyContactName ?? "",
+      emergencyContactPhone: request.emergencyContactPhone ?? "",
+    });
+    setMessage("Update the returned request and submit it again.");
+  };
 
   return (
     <Stack spacing={2}>
@@ -219,7 +260,9 @@ function MyLeaveTab() {
       </Paper>
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
-        <Typography variant="subtitle1" fontWeight={700} mb={1}>Submit a leave request</Typography>
+        <Typography variant="subtitle1" fontWeight={700} mb={1}>
+          {form.id ? "Edit returned leave request" : "Submit a leave request"}
+        </Typography>
         {message && <Alert severity="info" sx={{ mb: 1 }} onClose={() => setMessage(null)}>{message}</Alert>}
         <Stack direction="row" spacing={2} flexWrap="wrap" useFlexGap>
           <TextField select size="small" label="Leave type" value={form.leaveTypeId}
@@ -230,12 +273,25 @@ function MyLeaveTab() {
             value={form.startDate} onChange={(e) => setForm((f) => ({ ...f, startDate: e.target.value }))} />
           <TextField size="small" type="date" label="End date" InputLabelProps={{ shrink: true }}
             value={form.endDate} onChange={(e) => setForm((f) => ({ ...f, endDate: e.target.value }))} />
+          <TextField size="small" type="date" label="Return date" InputLabelProps={{ shrink: true }}
+            value={form.returnDate} onChange={(e) => setForm((f) => ({ ...f, returnDate: e.target.value }))} />
           <TextField size="small" label="Reason" value={form.reason}
             onChange={(e) => setForm((f) => ({ ...f, reason: e.target.value }))} sx={{ minWidth: 240 }} />
+          <TextField size="small" label="Address during leave" value={form.addressDuringLeave}
+            onChange={(e) => setForm((f) => ({ ...f, addressDuringLeave: e.target.value }))} sx={{ minWidth: 280 }} />
+          <TextField size="small" label="Contact phone" value={form.contactPhone}
+            onChange={(e) => setForm((f) => ({ ...f, contactPhone: e.target.value }))} sx={{ minWidth: 180 }} />
+          <TextField size="small" label="Contact email" value={form.contactEmail}
+            onChange={(e) => setForm((f) => ({ ...f, contactEmail: e.target.value }))} sx={{ minWidth: 220 }} />
+          <TextField size="small" label="Emergency contact" value={form.emergencyContactName}
+            onChange={(e) => setForm((f) => ({ ...f, emergencyContactName: e.target.value }))} sx={{ minWidth: 220 }} />
+          <TextField size="small" label="Emergency phone" value={form.emergencyContactPhone}
+            onChange={(e) => setForm((f) => ({ ...f, emergencyContactPhone: e.target.value }))} sx={{ minWidth: 180 }} />
           <Button variant="contained" disabled={!form.leaveTypeId || !form.startDate || !form.endDate || submit.isPending}
             onClick={() => submit.mutate()}>
-            Submit
+            {form.id ? "Resubmit" : "Submit"}
           </Button>
+          {form.id && <Button onClick={() => { setForm(emptyForm); setMessage(null); }}>Cancel edit</Button>}
         </Stack>
       </Paper>
 
@@ -248,19 +304,23 @@ function MyLeaveTab() {
               <TableCell>Dates</TableCell>
               <TableCell align="right">Days</TableCell>
               <TableCell>Status</TableCell>
+              <TableCell align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {requests.map((r) => (
               <TableRow key={r.id} hover>
                 <TableCell>{r.leaveTypeCode}</TableCell>
-                <TableCell>{r.startDate} → {r.endDate}</TableCell>
+                <TableCell>{r.startDate} - {r.endDate}</TableCell>
                 <TableCell align="right">{r.totalDays}</TableCell>
                 <TableCell><Chip size="small" label={r.status} color={r.status === "APPROVED" ? "success" : r.status === "REJECTED" ? "error" : "default"} /></TableCell>
+                <TableCell align="right">
+                  {r.status === "RETURNED" && <Button size="small" onClick={() => editReturned(r)}>Edit & resubmit</Button>}
+                </TableCell>
               </TableRow>
             ))}
             {requests.length === 0 && (
-              <TableRow><TableCell colSpan={4}><Typography variant="body2" color="text.secondary" p={1}>No requests yet.</Typography></TableCell></TableRow>
+              <TableRow><TableCell colSpan={5}><Typography variant="body2" color="text.secondary" p={1}>No requests yet.</Typography></TableCell></TableRow>
             )}
           </TableBody>
         </Table>

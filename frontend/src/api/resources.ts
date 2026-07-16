@@ -628,6 +628,8 @@ export const selfApi = {
   leaveBalance: () => api.get<import("./types").LeaveBalance[]>("/me/leave-balance").then((r) => r.data),
   submitLeaveRequest: (dto: Partial<import("./types").LeaveRequest>) =>
     api.post<import("./types").LeaveRequest>("/me/leave-requests", dto).then((r) => r.data),
+  updateLeaveRequest: (id: string, dto: Partial<import("./types").LeaveRequest>) =>
+    api.put<import("./types").LeaveRequest>(`/me/leave-requests/${id}`, dto).then((r) => r.data),
 };
 
 export const sponsorApi = {

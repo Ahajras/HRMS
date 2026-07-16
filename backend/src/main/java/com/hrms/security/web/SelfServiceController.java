@@ -13,6 +13,7 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -98,5 +99,11 @@ public class SelfServiceController {
         dto.setEmployeeId(EmployeeContext.requireEmployeeId());
         dto.setStatus("SUBMITTED");
         return leaveService.saveRequest(dto);
+    }
+
+    @PutMapping("/leave-requests/{id}")
+    @PreAuthorize("hasAuthority('self.leave.write')")
+    public LeaveRequestDto resubmitLeaveRequest(@PathVariable UUID id, @RequestBody LeaveRequestDto dto) {
+        return leaveService.resubmitOwnRequest(EmployeeContext.requireEmployeeId(), id, dto);
     }
 }

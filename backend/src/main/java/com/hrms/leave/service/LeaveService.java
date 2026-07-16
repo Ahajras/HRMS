@@ -269,6 +269,21 @@ public class LeaveService {
         return toDto(saved);
     }
 
+    public LeaveRequestDto resubmitOwnRequest(UUID employeeId, UUID requestId, LeaveRequestDto dto) {
+        LeaveRequest existing = getRequest(requestId);
+        if (!employeeId.equals(existing.getEmployeeId())) {
+            throw new ResourceNotFoundException("Leave request not found: " + requestId);
+        }
+        if (!"RETURNED".equalsIgnoreCase(existing.getStatus()) && !"DRAFT".equalsIgnoreCase(existing.getStatus())) {
+            throw new BusinessRuleException("leave.self.edit.status",
+                    "Only returned or draft leave requests can be edited and resubmitted.");
+        }
+        dto.setId(requestId);
+        dto.setEmployeeId(employeeId);
+        dto.setStatus("SUBMITTED");
+        return saveRequest(dto);
+    }
+
     public LeaveRequestDto approveRequest(UUID id, String remarks) {
         LeaveRequest row = getRequest(id);
         assertProjectAllowed(row.getEmployeeId());
