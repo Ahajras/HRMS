@@ -149,8 +149,10 @@ public interface TimesheetDayRepository extends JpaRepository<TimesheetDay, UUID
             select
               count(distinct case when tt.counts_as_worked then td.timesheet_id end) as present,
               count(distinct case when not tt.counts_as_worked
-                    and upper(coalesce(tt.category,'')) not in ('REST','HOLIDAY','UNPAID') then td.timesheet_id end) as on_leave,
-              count(distinct case when upper(coalesce(tt.category,'')) = 'UNPAID' then td.timesheet_id end) as absent,
+                    and coalesce(tt.paid, true)
+                    and upper(coalesce(tt.category,'')) not in ('REST','HOLIDAY','ABSENCE','ABSENT','APPSENT','UNPAID') then td.timesheet_id end) as on_leave,
+              count(distinct case when not coalesce(tt.paid, true)
+                    or upper(coalesce(tt.category,'')) in ('ABSENCE','ABSENT','APPSENT','UNPAID') then td.timesheet_id end) as absent,
               count(distinct td.timesheet_id) as marked
             from timesheet_day td
             join timesheet t on t.id = td.timesheet_id
@@ -165,8 +167,10 @@ public interface TimesheetDayRepository extends JpaRepository<TimesheetDay, UUID
             select
               count(case when tt.counts_as_worked then 1 end) as present_days,
               count(case when not tt.counts_as_worked
-                    and upper(coalesce(tt.category,'')) not in ('REST','HOLIDAY','UNPAID') then 1 end) as leave_days,
-              count(case when upper(coalesce(tt.category,'')) = 'UNPAID' then 1 end) as absent_days
+                    and coalesce(tt.paid, true)
+                    and upper(coalesce(tt.category,'')) not in ('REST','HOLIDAY','ABSENCE','ABSENT','APPSENT','UNPAID') then 1 end) as leave_days,
+              count(case when not coalesce(tt.paid, true)
+                    or upper(coalesce(tt.category,'')) in ('ABSENCE','ABSENT','APPSENT','UNPAID') then 1 end) as absent_days
             from timesheet_day td
             join timesheet t on t.id = td.timesheet_id
             join time_type tt on tt.id = td.time_type_id

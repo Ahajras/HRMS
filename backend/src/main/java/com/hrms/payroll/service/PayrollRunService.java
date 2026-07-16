@@ -1360,7 +1360,10 @@ public class PayrollRunService {
     }
 
     private static boolean isUnpaidCategory(String category) {
-        return "UNPAID".equalsIgnoreCase(category);
+        return category != null && switch (category.trim().toUpperCase()) {
+            case "UNPAID", "ABSENCE", "ABSENT", "APPSENT" -> true;
+            default -> false;
+        };
     }
 
     private static boolean isDailyRule(PayrollRule rule) {

@@ -259,7 +259,9 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
               select td.timesheet_id,
                      coalesce(sum(td.worked_hours), 0) as worked,
                      coalesce(sum(td.ot_hours), 0) as ot,
-                     coalesce(sum(case when tt.category = 'ABSENCE' then 1 else 0 end), 0) as absence
+                     coalesce(sum(case when not coalesce(tt.paid, true)
+                       or upper(coalesce(tt.category, '')) in ('ABSENCE','ABSENT','APPSENT','UNPAID')
+                       then 1 else 0 end), 0) as absence
               from timesheet_day td
               join scoped s on s.id = td.timesheet_id
               left join time_type tt on tt.id = td.time_type_id
@@ -301,7 +303,9 @@ public interface TimesheetRepository extends JpaRepository<Timesheet, UUID> {
               select td.timesheet_id,
                      coalesce(sum(td.worked_hours), 0) as worked,
                      coalesce(sum(td.ot_hours), 0) as ot,
-                     coalesce(sum(case when tt.category = 'ABSENCE' then 1 else 0 end), 0) as absence
+                     coalesce(sum(case when not coalesce(tt.paid, true)
+                       or upper(coalesce(tt.category, '')) in ('ABSENCE','ABSENT','APPSENT','UNPAID')
+                       then 1 else 0 end), 0) as absence
               from timesheet_day td
               join scoped s on s.id = td.timesheet_id
               left join time_type tt on tt.id = td.time_type_id
