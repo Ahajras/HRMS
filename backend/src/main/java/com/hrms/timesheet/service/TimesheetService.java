@@ -1546,8 +1546,14 @@ public class TimesheetService {
         BigDecimal normal;
         BigDecimal ot;
         if ("REST".equals(category) || "HOLIDAY".equals(category)) {
-            // Weekend/holiday are paid time types. Any hours actually worked on the
-            // day are premium overtime.
+            // Weekend/holiday are paid time types for monthly employees. They only
+            // become premium overtime when the employee actually has clock times;
+            // otherwise a manually reclassified N day must not carry stale worked
+            // hours into OT.
+            if (day.getActualIn() == null || day.getActualOut() == null) {
+                worked = BigDecimal.ZERO;
+                day.setWorkedHours(BigDecimal.ZERO);
+            }
             normal = paid && isMonthly ? sampleNormal : BigDecimal.ZERO;
             ot = worked;
         } else if (isNonWorking(category)) {
