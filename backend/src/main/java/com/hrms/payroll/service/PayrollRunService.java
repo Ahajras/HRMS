@@ -430,7 +430,7 @@ public class PayrollRunService {
 
         PayableBreakdown breakdown = payableBreakdown(simulatedDays, rule, shiftHours, ctx.timeTypes());
         PayrollPolicyContext policy = payrollPolicyContext(ctx, ts, emp, rule, shiftHours, simulatedDays);
-        PayrollResult simResult = buildResult(run, ts, emp, rule, breakdown);
+        PayrollResult simResult = buildResult(run, ts, emp, rule, breakdown, shiftHours, periodDays);
         UUID dummyResultId = UUID.randomUUID();
 
         List<String> lines = new ArrayList<>();
@@ -507,7 +507,7 @@ public class PayrollRunService {
             List<TimesheetDay> tsDays = ctx.daysByTimesheet().getOrDefault(ts.getId(), List.of());
             PayableBreakdown breakdown = payableBreakdown(tsDays, rule, shiftHours, ctx.timeTypes());
             PayrollPolicyContext policy = payrollPolicyContext(ctx, ts, emp, rule, shiftHours, tsDays);
-            PayrollResult result = buildResult(run, ts, emp, rule, breakdown);
+            PayrollResult result = buildResult(run, ts, emp, rule, breakdown, shiftHours, periodDays);
             result = resultRepo.save(result);
             BigDecimal earnings = BigDecimal.ZERO;
             BigDecimal deductions = BigDecimal.ZERO;
@@ -641,17 +641,19 @@ public class PayrollRunService {
         return value.length() <= 500 ? value : value.substring(value.length() - 500);
     }
 
-    private PayrollResult buildResult(PayrollRun run, Timesheet ts, Employee emp, PayrollRule rule, PayableBreakdown breakdown) {
+    private PayrollResult buildResult(PayrollRun run, Timesheet ts, Employee emp, PayrollRule rule,
+                                      PayableBreakdown breakdown, BigDecimal shiftHours, int periodDays) {
         PayrollResult result = new PayrollResult();
         result.setCompanyId(run.getCompanyId());
         result.setRunId(run.getId());
         result.setEmployeeId(emp.getId());
         result.setPayStatus(emp.getPayStatus());
         result.setRateBasis(isDailyRule(rule) ? "ACTUAL_DAYS" : "MONTH_DIVISOR");
-        result.setDivisor(safeMonthDivisor(rule));
-        result.setNormalHours(breakdown.regularPaidHours());
+        BigDecimal resultDivisor = resultDivisor(rule, periodDays);
+        result.setDivisor(resultDivisor);
+        result.setNormalHours(isDailyRule(rule) ? breakdown.regularPaidHours() : resultDivisor.multiply(shiftHours));
         result.setOtHours(z(breakdown.normalOtHours()).add(z(breakdown.restOtHours())));
-        result.setWorkedDays(breakdown.payableDays());
+        result.setWorkedDays(isDailyRule(rule) ? breakdown.payableDays() : resultDivisor);
         return result;
     }
 
@@ -1415,6 +1417,13 @@ public class PayrollRunService {
                 ? z(policy.monthDivisor())
                 : safeMonthDivisor(rule);
         return divisor.compareTo(BigDecimal.ZERO) > 0 ? divisor : new BigDecimal("30.00");
+    }
+
+    private BigDecimal resultDivisor(PayrollRule rule, int periodDays) {
+        if (rule != null && "ACTUAL_MONTH".equalsIgnoreCase(rule.getDivisorMode())) {
+            return BigDecimal.valueOf(periodDays > 0 ? periodDays : 30);
+        }
+        return safeMonthDivisor(rule);
     }
 
     private static String normalizeCategoryBasis(String basis) {
