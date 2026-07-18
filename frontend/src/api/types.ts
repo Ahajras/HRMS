@@ -948,6 +948,25 @@ export interface PayrollResultLine {
   details?: string;
 }
 
+export interface PayrollTimeTypeSummary {
+  code?: string;
+  name?: string;
+  category?: string;
+  days?: number;
+  paidHours?: number;
+  unpaidHours?: number;
+  normalOtHours?: number;
+  restOtHours?: number;
+}
+
+export interface PayrollCostSummary {
+  projectCode?: string;
+  projectName?: string;
+  costCode?: string;
+  costName?: string;
+  hours?: number;
+}
+
 export interface PayrollResult {
   id?: string;
   employeeId: string;
@@ -966,6 +985,8 @@ export interface PayrollResult {
   periodYear?: number;
   periodMonth?: number;
   lines: PayrollResultLine[];
+  timeTypeSummary?: PayrollTimeTypeSummary[];
+  costSummary?: PayrollCostSummary[];
 }
 
 export interface PayrollRun {

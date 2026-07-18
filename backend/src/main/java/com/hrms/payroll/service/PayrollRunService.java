@@ -24,18 +24,24 @@ import com.hrms.payroll.repository.PayrollResultLineRepository;
 import com.hrms.payroll.repository.PayrollResultRepository;
 import com.hrms.payroll.repository.PayrollRuleRepository;
 import com.hrms.payroll.repository.PayrollRunRepository;
+import com.hrms.project.domain.CostCode;
+import com.hrms.project.domain.Project;
+import com.hrms.project.repository.CostCodeRepository;
+import com.hrms.project.repository.ProjectRepository;
 import com.hrms.timesheet.domain.PayrollPeriod;
 import com.hrms.timesheet.domain.PayrollPeriodProject;
 import com.hrms.timesheet.domain.Shift;
 import com.hrms.timesheet.domain.TimeType;
 import com.hrms.timesheet.domain.Timesheet;
 import com.hrms.timesheet.domain.TimesheetDay;
+import com.hrms.timesheet.domain.TimesheetDayCost;
 import com.hrms.timesheet.domain.TimeTypePayrollRule;
 import com.hrms.timesheet.repository.PayrollPeriodProjectRepository;
 import com.hrms.timesheet.repository.PayrollPeriodRepository;
 import com.hrms.timesheet.repository.ShiftRepository;
 import com.hrms.timesheet.repository.TimeTypeRepository;
 import com.hrms.timesheet.repository.TimeTypePayrollRuleRepository;
+import com.hrms.timesheet.repository.TimesheetDayCostRepository;
 import com.hrms.timesheet.repository.TimesheetDayRepository;
 import com.hrms.timesheet.repository.TimesheetRepository;
 import com.hrms.timesheet.service.TimesheetService;
@@ -74,6 +80,7 @@ public class PayrollRunService {
     private final PayrollPeriodProjectRepository periodProjectRepo;
     private final TimesheetRepository timesheetRepo;
     private final TimesheetDayRepository dayRepo;
+    private final TimesheetDayCostRepository dayCostRepo;
     private final ShiftRepository shiftRepo;
     private final TimeTypeRepository timeTypeRepo;
     private final TimeTypePayrollRuleRepository timeTypePayrollRuleRepo;
@@ -83,6 +90,8 @@ public class PayrollRunService {
     private final PayrollComponentRepository componentRepo;
     private final PayrollCategoryRuleRepository categoryRuleRepo;
     private final PayrollRuleRepository ruleRepo;
+    private final ProjectRepository projectRepo;
+    private final CostCodeRepository costCodeRepo;
     private final com.hrms.payroll.repository.PayrollAdjustmentRepository adjustmentRepo;
 
     public PayrollRunService(PayrollRunRepository runRepo,
@@ -92,6 +101,7 @@ public class PayrollRunService {
                              PayrollPeriodProjectRepository periodProjectRepo,
                              TimesheetRepository timesheetRepo,
                              TimesheetDayRepository dayRepo,
+                             TimesheetDayCostRepository dayCostRepo,
                              ShiftRepository shiftRepo,
                              TimeTypeRepository timeTypeRepo,
                              TimeTypePayrollRuleRepository timeTypePayrollRuleRepo,
@@ -101,6 +111,8 @@ public class PayrollRunService {
                              PayrollComponentRepository componentRepo,
                              PayrollCategoryRuleRepository categoryRuleRepo,
                              PayrollRuleRepository ruleRepo,
+                             ProjectRepository projectRepo,
+                             CostCodeRepository costCodeRepo,
                              com.hrms.payroll.repository.PayrollAdjustmentRepository adjustmentRepo) {
         this.runRepo = runRepo;
         this.resultRepo = resultRepo;
@@ -109,6 +121,7 @@ public class PayrollRunService {
         this.periodProjectRepo = periodProjectRepo;
         this.timesheetRepo = timesheetRepo;
         this.dayRepo = dayRepo;
+        this.dayCostRepo = dayCostRepo;
         this.shiftRepo = shiftRepo;
         this.timeTypeRepo = timeTypeRepo;
         this.timeTypePayrollRuleRepo = timeTypePayrollRuleRepo;
@@ -118,6 +131,8 @@ public class PayrollRunService {
         this.componentRepo = componentRepo;
         this.categoryRuleRepo = categoryRuleRepo;
         this.ruleRepo = ruleRepo;
+        this.projectRepo = projectRepo;
+        this.costCodeRepo = costCodeRepo;
         this.adjustmentRepo = adjustmentRepo;
     }
 
@@ -1833,7 +1848,186 @@ public class PayrollRunService {
         dto.setStatus(result.getStatus());
         dto.setMessage(result.getMessage());
         dto.setLines(lineRepo.findByResultIdOrderBySortOrderAsc(result.getId()).stream().map(this::toDto).toList());
+        enrichPayslipSummaries(dto, result);
         return dto;
+    }
+
+    private void enrichPayslipSummaries(PayrollResultDto dto, PayrollResult result) {
+        PayrollRun run = runRepo.findById(result.getRunId()).orElse(null);
+        if (run == null) {
+            return;
+        }
+        PayrollPeriod period = periodRepo.findById(run.getPeriodId()).orElse(null);
+        if (period == null) {
+            return;
+        }
+        dto.setPeriodYear(period.getPeriodYear());
+        dto.setPeriodMonth(period.getPeriodMonth());
+        Timesheet ts = timesheetRepo.findByCompanyIdAndEmployeeIdAndPeriodYearAndPeriodMonth(
+                result.getCompanyId(), result.getEmployeeId(), period.getPeriodYear(), period.getPeriodMonth()).orElse(null);
+        if (ts == null) {
+            return;
+        }
+
+        List<TimesheetDay> days = dayRepo.findByTimesheetIdOrderByWorkDate(ts.getId());
+        if (days.isEmpty()) {
+            return;
+        }
+
+        Map<UUID, TimeType> typeById = new HashMap<>();
+        Set<UUID> timeTypeIds = new HashSet<>();
+        Set<UUID> shiftIds = new HashSet<>();
+        if (ts.getShiftId() != null) {
+            shiftIds.add(ts.getShiftId());
+        }
+        for (TimesheetDay day : days) {
+            if (day.getTimeTypeId() != null) {
+                timeTypeIds.add(day.getTimeTypeId());
+            }
+            if (day.getShiftId() != null) {
+                shiftIds.add(day.getShiftId());
+            }
+        }
+        if (!timeTypeIds.isEmpty()) {
+            timeTypeRepo.findAllById(timeTypeIds).forEach(t -> typeById.put(t.getId(), t));
+        }
+        Map<UUID, Shift> shiftById = new HashMap<>();
+        if (!shiftIds.isEmpty()) {
+            shiftRepo.findAllById(shiftIds).forEach(s -> shiftById.put(s.getId(), s));
+        }
+        BigDecimal defaultShiftHours = ts.getShiftId() != null && shiftById.get(ts.getShiftId()) != null
+                ? z(shiftById.get(ts.getShiftId()).getStandardHours()) : BigDecimal.ZERO;
+        if (defaultShiftHours.compareTo(BigDecimal.ZERO) <= 0) {
+            defaultShiftHours = BigDecimal.valueOf(8);
+        }
+
+        Map<String, PayrollResultDto.TimeTypeSummaryDto> timeSummary = new LinkedHashMap<>();
+        boolean daily = "DAILY".equalsIgnoreCase(result.getPayStatus());
+        for (TimesheetDay day : days) {
+            TimeType type = day.getTimeTypeId() == null ? null : typeById.get(day.getTimeTypeId());
+            String code = type != null ? type.getCode() : "";
+            String name = type != null ? type.getName() : "Unclassified";
+            String category = type != null ? type.getCategory() : "REGULAR";
+            String normalizedCategory = category == null ? "REGULAR" : category.trim().toUpperCase();
+            boolean rest = "REST".equals(normalizedCategory) || "HOLIDAY".equals(normalizedCategory);
+            boolean unpaid = !rest && (isUnpaidCategory(normalizedCategory) || (type != null && !type.isPaid()));
+            BigDecimal standardHours = day.getShiftId() != null && shiftById.get(day.getShiftId()) != null
+                    ? z(shiftById.get(day.getShiftId()).getStandardHours()) : defaultShiftHours;
+            if (standardHours.compareTo(BigDecimal.ZERO) <= 0) {
+                standardHours = defaultShiftHours;
+            }
+
+            PayrollResultDto.TimeTypeSummaryDto row = timeSummary.computeIfAbsent(
+                    code + "|" + name + "|" + normalizedCategory, ignored -> {
+                        PayrollResultDto.TimeTypeSummaryDto dtoRow = new PayrollResultDto.TimeTypeSummaryDto();
+                        dtoRow.setCode(code);
+                        dtoRow.setName(name);
+                        dtoRow.setCategory(normalizedCategory);
+                        return dtoRow;
+                    });
+            row.setDays(z(row.getDays()).add(BigDecimal.ONE));
+            BigDecimal dayHours = rest ? restHours(day, standardHours) : payrollHours(day, standardHours);
+            if (unpaid) {
+                row.setUnpaidHours(z(row.getUnpaidHours()).add(dayHours));
+            } else if (rest) {
+                if (!daily) {
+                    row.setPaidHours(z(row.getPaidHours()).add(dayHours));
+                }
+                row.setRestOtHours(z(row.getRestOtHours()).add(z(day.getOtHours())));
+            } else if (type == null || type.isPaid()) {
+                row.setPaidHours(z(row.getPaidHours()).add(dayHours));
+                row.setNormalOtHours(z(row.getNormalOtHours()).add(z(day.getOtHours())));
+            }
+        }
+        dto.setTimeTypeSummary(new ArrayList<>(timeSummary.values()));
+
+        dto.setCostSummary(costSummaries(days, typeById, shiftById, defaultShiftHours, daily));
+    }
+
+    private List<PayrollResultDto.CostSummaryDto> costSummaries(List<TimesheetDay> days, Map<UUID, TimeType> typeById,
+                                                               Map<UUID, Shift> shiftById, BigDecimal defaultShiftHours,
+                                                               boolean daily) {
+        Set<UUID> dayIds = new HashSet<>();
+        for (TimesheetDay day : days) {
+            dayIds.add(day.getId());
+        }
+        Map<UUID, List<TimesheetDayCost>> costsByDay = new HashMap<>();
+        if (!dayIds.isEmpty()) {
+            for (TimesheetDayCost cost : dayCostRepo.findByTimesheetDayIdIn(dayIds)) {
+                costsByDay.computeIfAbsent(cost.getTimesheetDayId(), ignored -> new ArrayList<>()).add(cost);
+            }
+        }
+
+        Set<UUID> projectIds = new HashSet<>();
+        Set<UUID> costCodeIds = new HashSet<>();
+        Map<String, BigDecimal> hoursByKey = new LinkedHashMap<>();
+        for (TimesheetDay day : days) {
+            List<TimesheetDayCost> costs = costsByDay.get(day.getId());
+            if (costs != null && !costs.isEmpty()) {
+                for (TimesheetDayCost cost : costs) {
+                    if (cost.getProjectId() != null) projectIds.add(cost.getProjectId());
+                    if (cost.getCostCodeId() != null) costCodeIds.add(cost.getCostCodeId());
+                    hoursByKey.merge(summaryKey(cost.getProjectId(), cost.getCostCodeId()), z(cost.getHours()), BigDecimal::add);
+                }
+                continue;
+            }
+            BigDecimal hours = costSummaryHours(day, typeById, shiftById, defaultShiftHours, daily);
+            if (hours.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+            if (day.getProjectId() != null) projectIds.add(day.getProjectId());
+            if (day.getCostCodeId() != null) costCodeIds.add(day.getCostCodeId());
+            hoursByKey.merge(summaryKey(day.getProjectId(), day.getCostCodeId()), hours, BigDecimal::add);
+        }
+
+        Map<UUID, Project> projects = new HashMap<>();
+        if (!projectIds.isEmpty()) {
+            projectRepo.findAllById(projectIds).forEach(p -> projects.put(p.getId(), p));
+        }
+        Map<UUID, CostCode> costCodes = new HashMap<>();
+        if (!costCodeIds.isEmpty()) {
+            costCodeRepo.findAllById(costCodeIds).forEach(c -> costCodes.put(c.getId(), c));
+        }
+
+        List<PayrollResultDto.CostSummaryDto> rows = new ArrayList<>();
+        for (Map.Entry<String, BigDecimal> entry : hoursByKey.entrySet()) {
+            UUID[] ids = parseSummaryKey(entry.getKey());
+            Project project = ids[0] != null ? projects.get(ids[0]) : null;
+            CostCode costCode = ids[1] != null ? costCodes.get(ids[1]) : null;
+            PayrollResultDto.CostSummaryDto row = new PayrollResultDto.CostSummaryDto();
+            row.setProjectCode(project != null ? project.getCode() : null);
+            row.setProjectName(project != null ? project.getName() : "Unassigned");
+            row.setCostCode(costCode != null ? costCode.getCode() : null);
+            row.setCostName(costCode != null ? costCode.getName() : "Unassigned");
+            row.setHours(entry.getValue());
+            rows.add(row);
+        }
+        return rows;
+    }
+
+    private BigDecimal costSummaryHours(TimesheetDay day, Map<UUID, TimeType> typeById,
+                                        Map<UUID, Shift> shiftById, BigDecimal defaultShiftHours, boolean daily) {
+        TimeType type = day.getTimeTypeId() == null ? null : typeById.get(day.getTimeTypeId());
+        String category = type != null && type.getCategory() != null ? type.getCategory().trim().toUpperCase() : "REGULAR";
+        BigDecimal standardHours = day.getShiftId() != null && shiftById.get(day.getShiftId()) != null
+                ? z(shiftById.get(day.getShiftId()).getStandardHours()) : defaultShiftHours;
+        if (!daily && "HOLIDAY".equals(category)) {
+            return restHours(day, standardHours);
+        }
+        return z(day.getNormalHours()).add(z(day.getOtHours()));
+    }
+
+    private static String summaryKey(UUID projectId, UUID costCodeId) {
+        return (projectId == null ? "null" : projectId.toString()) + "|"
+                + (costCodeId == null ? "null" : costCodeId.toString());
+    }
+
+    private static UUID[] parseSummaryKey(String key) {
+        String[] parts = key.split("\\|", -1);
+        return new UUID[]{
+                parts.length > 0 && !"null".equals(parts[0]) ? UUID.fromString(parts[0]) : null,
+                parts.length > 1 && !"null".equals(parts[1]) ? UUID.fromString(parts[1]) : null
+        };
     }
 
     private PayrollResultLineDto toDto(PayrollResultLine line) {

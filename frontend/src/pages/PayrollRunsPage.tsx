@@ -410,6 +410,15 @@ function PayslipPanel({ run, result }: { run: PayrollRun; result: PayrollResult 
           <PayslipMetric label="Total OT" value={qty(result.otHours)} />
         </Grid>
 
+        <Grid container spacing={2} mb={2}>
+          <Grid item xs={12} md={7}>
+            <PayslipTimeTypeSummary rows={result.timeTypeSummary ?? []} />
+          </Grid>
+          <Grid item xs={12} md={5}>
+            <PayslipCostSummary rows={result.costSummary ?? []} />
+          </Grid>
+        </Grid>
+
         <Grid container spacing={2}>
           <Grid item xs={12} md={7}>
             <PayslipBreakdownTable items={componentBreakdown} />
@@ -434,6 +443,87 @@ function PayslipPanel({ run, result }: { run: PayrollRun; result: PayrollResult 
           </Grid>
         </Grid>
       </Box>
+    </Box>
+  );
+}
+
+function PayslipTimeTypeSummary({ rows }: { rows: NonNullable<PayrollResult["timeTypeSummary"]> }) {
+  return (
+    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, overflow: "hidden" }}>
+      <Box sx={{ px: 1.5, py: 1, bgcolor: "grey.100" }}>
+        <Typography variant="subtitle2" fontWeight={800}>Hours by time type</Typography>
+      </Box>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Type</TableCell>
+            <TableCell align="right">Days</TableCell>
+            <TableCell align="right">Paid hours</TableCell>
+            <TableCell align="right">Unpaid hours</TableCell>
+            <TableCell align="right">Normal OT</TableCell>
+            <TableCell align="right">Rest/Holiday OT</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={`${row.code}-${row.name}-${row.category}`}>
+              <TableCell>
+                <Typography variant="body2" fontWeight={700}>{row.code || "-"}</Typography>
+                <Typography variant="caption" color="text.secondary">{row.name}</Typography>
+              </TableCell>
+              <TableCell align="right">{qty(row.days)}</TableCell>
+              <TableCell align="right">{qty(row.paidHours)}</TableCell>
+              <TableCell align="right">{qty(row.unpaidHours)}</TableCell>
+              <TableCell align="right">{qty(row.normalOtHours)}</TableCell>
+              <TableCell align="right">{qty(row.restOtHours)}</TableCell>
+            </TableRow>
+          ))}
+          {rows.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={6} sx={{ color: "text.secondary" }}>No timesheet summary.</TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
+    </Box>
+  );
+}
+
+function PayslipCostSummary({ rows }: { rows: NonNullable<PayrollResult["costSummary"]> }) {
+  return (
+    <Box sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1, overflow: "hidden" }}>
+      <Box sx={{ px: 1.5, py: 1, bgcolor: "grey.100" }}>
+        <Typography variant="subtitle2" fontWeight={800}>Cost allocation</Typography>
+      </Box>
+      <Table size="small">
+        <TableHead>
+          <TableRow>
+            <TableCell>Project</TableCell>
+            <TableCell>Cost code</TableCell>
+            <TableCell align="right">Hours</TableCell>
+          </TableRow>
+        </TableHead>
+        <TableBody>
+          {rows.map((row) => (
+            <TableRow key={`${row.projectCode}-${row.costCode}`}>
+              <TableCell>
+                <Typography variant="body2">{row.projectCode || "-"}</Typography>
+                <Typography variant="caption" color="text.secondary">{row.projectName}</Typography>
+              </TableCell>
+              <TableCell>
+                <Typography variant="body2">{row.costCode || "-"}</Typography>
+                <Typography variant="caption" color="text.secondary">{row.costName}</Typography>
+              </TableCell>
+              <TableCell align="right">{qty(row.hours)}</TableCell>
+            </TableRow>
+          ))}
+          {rows.length === 0 && (
+            <TableRow>
+              <TableCell colSpan={3} sx={{ color: "text.secondary" }}>No cost allocation.</TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
     </Box>
   );
 }
@@ -573,6 +663,15 @@ function printPayslip(run: PayrollRun, result: PayrollResult) {
         </div>
 
         <div class="section">
+          <h2>Hours by time type</h2>
+          ${printTimeTypeSummary(result.timeTypeSummary ?? [])}
+        </div>
+        <div class="section">
+          <h2>Cost allocation</h2>
+          ${printCostSummary(result.costSummary ?? [])}
+        </div>
+
+        <div class="section">
           <h2>Component breakdown</h2>
           <table>
             <thead>
@@ -628,6 +727,60 @@ function printPayslip(run: PayrollRun, result: PayrollResult) {
     </html>
   `;
   openPrintWindow(html);
+}
+
+function printTimeTypeSummary(rows: NonNullable<PayrollResult["timeTypeSummary"]>) {
+  if (rows.length === 0) return `<p class="muted">No timesheet summary.</p>`;
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>Type</th>
+          <th class="right">Days</th>
+          <th class="right">Paid hours</th>
+          <th class="right">Unpaid hours</th>
+          <th class="right">Normal OT</th>
+          <th class="right">Rest/Holiday OT</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => `
+          <tr>
+            <td><strong>${escapeHtml(row.code ?? "-")}</strong><div class="muted">${escapeHtml(row.name ?? "")}</div></td>
+            <td class="right">${qty(row.days)}</td>
+            <td class="right">${qty(row.paidHours)}</td>
+            <td class="right">${qty(row.unpaidHours)}</td>
+            <td class="right">${qty(row.normalOtHours)}</td>
+            <td class="right">${qty(row.restOtHours)}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
+}
+
+function printCostSummary(rows: NonNullable<PayrollResult["costSummary"]>) {
+  if (rows.length === 0) return `<p class="muted">No cost allocation.</p>`;
+  return `
+    <table>
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>Cost code</th>
+          <th class="right">Hours</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => `
+          <tr>
+            <td>${escapeHtml(row.projectCode ?? "-")}<div class="muted">${escapeHtml(row.projectName ?? "")}</div></td>
+            <td>${escapeHtml(row.costCode ?? "-")}<div class="muted">${escapeHtml(row.costName ?? "")}</div></td>
+            <td class="right">${qty(row.hours)}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
 }
 
 function printLineTable(lines: PayrollResultLine[]) {
