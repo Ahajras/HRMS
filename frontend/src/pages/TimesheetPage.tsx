@@ -770,6 +770,25 @@ function TimesheetDetail({
   const setDay = (idx: number, patch: Partial<TimesheetDay>) =>
     setDays((prev) => prev.map((d, i) => (i === idx ? { ...d, ...patch } : d)));
 
+  const setDayTimeType = (idx: number, timeTypeId: string) => {
+    const selectedType = timeTypes.find((t) => t.id === timeTypeId);
+    const code = selectedType?.code?.toUpperCase();
+    const restOrHoliday = code === "W" || code === "H";
+    setDay(idx, {
+      timeTypeId,
+      ...(restOrHoliday ? {
+        actualIn: null,
+        actualOut: null,
+        workedHours: 0,
+        normalHours: 0,
+        otHours: 0,
+        declaredOtHours: 0,
+        undeclaredOtHours: 0,
+        ineligibleOtHours: 0,
+      } : {}),
+    });
+  };
+
   const setCost = (idx: number, ci: number, patch: Partial<TimesheetDayCost>) =>
     setDays((prev) => prev.map((d, i) =>
       i === idx ? { ...d, costs: (d.costs ?? []).map((c, j) => (j === ci ? { ...c, ...patch } : c)) } : d));
@@ -927,7 +946,7 @@ function TimesheetDetail({
                 </TableCell>
                 <TableCell>
                   {dayEditable(d) ? (
-                    <TextField select size="small" value={d.timeTypeId ?? ""} onChange={(e) => setDay(idx, { timeTypeId: e.target.value })} sx={{ minWidth: 220 }}>
+                    <TextField select size="small" value={d.timeTypeId ?? ""} onChange={(e) => setDayTimeType(idx, e.target.value)} sx={{ minWidth: 220 }}>
                       {timeTypes.map((t) => <MenuItem key={t.id} value={t.id}>{t.code} - {t.name}</MenuItem>)}
                     </TextField>
                   ) : (d.timeTypeCode ?? "")}
