@@ -1254,7 +1254,12 @@ public class TimesheetService {
                 saveDayCosts(day.getId(), List.of());
                 continue;
             }
-            if (dto.getTimeTypeId() != null && !dto.getTimeTypeId().equals(day.getTimeTypeId())) {
+            boolean timeTypeChanged = dto.getTimeTypeId() != null && !dto.getTimeTypeId().equals(day.getTimeTypeId());
+            TimeType requestedType = dto.getTimeTypeId() != null
+                    ? typeCache.computeIfAbsent(dto.getTimeTypeId(), id -> timeTypeRepo.findById(id).orElse(null))
+                    : null;
+            boolean changedToRestOrHoliday = timeTypeChanged && isRestOrHoliday(requestedType);
+            if (timeTypeChanged) {
                 day.setLeaveRequestId(null);
             }
             day.setShiftId(dto.getShiftId());
@@ -1266,6 +1271,17 @@ public class TimesheetService {
             }
             if (dto.getWorkedHours() != null) {
                 day.setWorkedHours(dto.getWorkedHours());
+            }
+            if (changedToRestOrHoliday) {
+                day.setPlannedHours(BigDecimal.ZERO);
+                day.setActualIn(null);
+                day.setActualOut(null);
+                day.setWorkedHours(BigDecimal.ZERO);
+                day.setNormalHours(BigDecimal.ZERO);
+                day.setOtHours(BigDecimal.ZERO);
+                day.setDeclaredOtHours(BigDecimal.ZERO);
+                day.setUndeclaredOtHours(BigDecimal.ZERO);
+                day.setIneligibleOtHours(BigDecimal.ZERO);
             }
             day.setProjectId(dto.getProjectId());
             day.setCostCodeId(dto.getCostCodeId());
@@ -1296,6 +1312,15 @@ public class TimesheetService {
         day.setCostCodeId(null);
         day.setLeaveRequestId(null);
         day.setRemarks(null);
+    }
+
+    private static boolean isRestOrHoliday(TimeType type) {
+        if (type == null) {
+            return false;
+        }
+        String code = type.getCode() != null ? type.getCode().toUpperCase() : "";
+        String category = type.getCategory() != null ? type.getCategory().toUpperCase() : "";
+        return "W".equals(code) || "H".equals(code) || "REST".equals(category) || "HOLIDAY".equals(category);
     }
 
     /** A worked day needs a default allocation unless detailed cost splits replace it. */

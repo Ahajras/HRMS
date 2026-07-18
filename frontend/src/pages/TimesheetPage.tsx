@@ -777,6 +777,7 @@ function TimesheetDetail({
     setDay(idx, {
       timeTypeId,
       ...(restOrHoliday ? {
+        plannedHours: 0,
         actualIn: null,
         actualOut: null,
         workedHours: 0,
