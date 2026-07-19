@@ -1006,6 +1006,16 @@ public class PayrollRunService {
                         ? policy.annualPos().get(day.getId())
                         : policy.consecutivePos().get(day.getId());
                 if (pos == null || pos <= explicit.getThresholdDays()) {
+                    if ("DEDUCT".equalsIgnoreCase(explicit.getAction())) {
+                        DayEffect protectedPay = legacyEffect(type, day, rule, policy.shiftHours());
+                        if (protectedPay.payQuantity().compareTo(BigDecimal.ZERO) > 0) {
+                            touched = true;
+                            basis = protectedPay.payBasis();
+                            payQty = payQty.add(protectedPay.payQuantity());
+                            payDetails.add(timeTypeDetail(day, type, "PAY", protectedPay.payBasis(),
+                                    protectedPay.payPercent(), protectedPay.payQuantity()));
+                        }
+                    }
                     continue; // still within the protected window
                 }
             }
