@@ -1035,6 +1035,9 @@ public class PayrollRunService {
         if (explicit == null) {
             return legacyEffect(type, day, rule, shiftHours);
         }
+        if (isRestOrHoliday(type) && isWeeklyRestPaid(rule) && !"DEDUCT".equalsIgnoreCase(explicit.getAction())) {
+            return DayEffect.pay(restHours(day, shiftHours), "HOURS", new BigDecimal("100.00"));
+        }
         if ("DEDUCT".equalsIgnoreCase(explicit.getAction())) {
             DayEffect legacy = legacyEffect(type, day, rule, shiftHours);
             // A daily-rate employee's pay is simply the sum of days actually
@@ -1156,8 +1159,8 @@ public class PayrollRunService {
         boolean daily = isDailyRule(rule);
         BigDecimal standardHours = shiftHours;
         if (rest) {
-            if (!daily && (type == null || type.isPaid() || rule.isWeeklyRestPaid())) {
-            return DayEffect.pay(restHours(day, standardHours), "HOURS", new BigDecimal("100.00"));
+            if (isWeeklyRestPaid(rule)) {
+                return DayEffect.pay(restHours(day, standardHours), "HOURS", new BigDecimal("100.00"));
             }
             return DayEffect.none();
         }
@@ -1278,7 +1281,7 @@ public class PayrollRunService {
             String category = type != null ? type.getCategory() : "REGULAR";
             boolean rest = "REST".equalsIgnoreCase(category) || "HOLIDAY".equalsIgnoreCase(category);
             if (rest) {
-                if (!daily && (type == null || type.isPaid() || rule.isWeeklyRestPaid())) {
+                if (isWeeklyRestPaid(rule)) {
                     restPaidDays = restPaidDays.add(BigDecimal.ONE);
                     BigDecimal hours = restHours(day, standardHours);
                     restPaidHours = restPaidHours.add(hours);
@@ -1385,6 +1388,15 @@ public class PayrollRunService {
 
     private static boolean isDailyRule(PayrollRule rule) {
         return rule != null && "DAILY_RATE".equalsIgnoreCase(rule.getPayItemBasis());
+    }
+
+    private static boolean isWeeklyRestPaid(PayrollRule rule) {
+        return rule != null && rule.isWeeklyRestPaid();
+    }
+
+    private static boolean isRestOrHoliday(TimeType type) {
+        String category = type != null ? type.getCategory() : null;
+        return "REST".equalsIgnoreCase(category) || "HOLIDAY".equalsIgnoreCase(category);
     }
 
     private static boolean isPayItemEarning(PayrollComponent component) {
@@ -1902,7 +1914,8 @@ public class PayrollRunService {
         }
 
         Map<String, PayrollResultDto.TimeTypeSummaryDto> timeSummary = new LinkedHashMap<>();
-        boolean daily = "DAILY".equalsIgnoreCase(result.getPayStatus());
+        PayrollRule summaryRule = payrollRuleForResult(run, result);
+        boolean weeklyRestPaid = isWeeklyRestPaid(summaryRule);
         for (TimesheetDay day : days) {
             TimeType type = day.getTimeTypeId() == null ? null : typeById.get(day.getTimeTypeId());
             String code = type != null ? type.getCode() : "";
@@ -1930,7 +1943,7 @@ public class PayrollRunService {
             if (unpaid) {
                 row.setUnpaidHours(z(row.getUnpaidHours()).add(dayHours));
             } else if (rest) {
-                if (!daily) {
+                if (weeklyRestPaid) {
                     row.setPaidHours(z(row.getPaidHours()).add(dayHours));
                 }
                 row.setRestOtHours(z(row.getRestOtHours()).add(z(day.getOtHours())));
@@ -1941,12 +1954,29 @@ public class PayrollRunService {
         }
         dto.setTimeTypeSummary(new ArrayList<>(timeSummary.values()));
 
-        dto.setCostSummary(costSummaries(days, typeById, shiftById, defaultShiftHours, daily));
+        dto.setCostSummary(costSummaries(days, typeById, shiftById, defaultShiftHours, weeklyRestPaid));
+    }
+
+    private PayrollRule payrollRuleForResult(PayrollRun run, PayrollResult result) {
+        UUID projectId = run.getProjectId();
+        if (projectId == null) {
+            projectId = assignmentRepo.findActiveWithProjectByCompanyIdAndEmployeeIdIn(
+                    run.getCompanyId(), Collections.singleton(result.getEmployeeId())).stream()
+                    .map(Assignment::getProjectId)
+                    .filter(java.util.Objects::nonNull)
+                    .findFirst()
+                    .orElse(null);
+        }
+        if (projectId == null) {
+            return null;
+        }
+        return ruleRepo.findByCompanyIdAndProjectIdAndPayGroupAndStatus(
+                run.getCompanyId(), projectId, normalizePayGroup(result.getPayStatus()), "ACTIVE").orElse(null);
     }
 
     private List<PayrollResultDto.CostSummaryDto> costSummaries(List<TimesheetDay> days, Map<UUID, TimeType> typeById,
                                                                Map<UUID, Shift> shiftById, BigDecimal defaultShiftHours,
-                                                               boolean daily) {
+                                                               boolean weeklyRestPaid) {
         Set<UUID> dayIds = new HashSet<>();
         for (TimesheetDay day : days) {
             dayIds.add(day.getId());
@@ -1971,7 +2001,7 @@ public class PayrollRunService {
                 }
                 continue;
             }
-            BigDecimal hours = costSummaryHours(day, typeById, shiftById, defaultShiftHours, daily);
+            BigDecimal hours = costSummaryHours(day, typeById, shiftById, defaultShiftHours, weeklyRestPaid);
             if (hours.compareTo(BigDecimal.ZERO) <= 0) {
                 continue;
             }
@@ -2006,12 +2036,12 @@ public class PayrollRunService {
     }
 
     private BigDecimal costSummaryHours(TimesheetDay day, Map<UUID, TimeType> typeById,
-                                        Map<UUID, Shift> shiftById, BigDecimal defaultShiftHours, boolean daily) {
+                                        Map<UUID, Shift> shiftById, BigDecimal defaultShiftHours, boolean weeklyRestPaid) {
         TimeType type = day.getTimeTypeId() == null ? null : typeById.get(day.getTimeTypeId());
         String category = type != null && type.getCategory() != null ? type.getCategory().trim().toUpperCase() : "REGULAR";
         BigDecimal standardHours = day.getShiftId() != null && shiftById.get(day.getShiftId()) != null
                 ? z(shiftById.get(day.getShiftId()).getStandardHours()) : defaultShiftHours;
-        if (!daily && "HOLIDAY".equals(category)) {
+        if (weeklyRestPaid && ("REST".equals(category) || "HOLIDAY".equals(category))) {
             return restHours(day, standardHours);
         }
         return z(day.getNormalHours()).add(z(day.getOtHours()));
