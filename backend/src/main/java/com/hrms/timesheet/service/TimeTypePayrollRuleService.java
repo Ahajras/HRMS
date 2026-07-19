@@ -149,7 +149,7 @@ public class TimeTypePayrollRuleService {
             entity.setPayrollComponentId(component.getId());
             entity.setAction(basicSalary ? "DEDUCT" : "PAY");
             entity.setPercent(basicSalary ? new java.math.BigDecimal("50.00") : new java.math.BigDecimal("100.00"));
-            entity.setBasis("HOURS");
+            entity.setBasis(basicSalary ? "PLANNED_SHIFT" : "HOURS");
             entity.setThresholdDays(0);
             entity.setThresholdScope("NONE");
             entity.setYearBasis("CALENDAR");
@@ -157,7 +157,7 @@ public class TimeTypePayrollRuleService {
             entity.setProcessSeparately(false);
             entity.setSortOrder(component.getPriority());
             entity.setRemarks(basicSalary
-                    ? "Initialized sick-half rule: deduct 50% of basic salary from the first SH day."
+                    ? "Initialized sick-half rule: deduct 50% of one planned shift from basic salary for each SH day."
                     : "Initialized sick-half rule: pay this component during SH unless configured otherwise.");
             repository.save(entity);
         }
