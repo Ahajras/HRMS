@@ -70,6 +70,10 @@ public class TimeTypePayrollRuleService {
             initializeLateDefaults(companyId, timeTypeId);
             return findByTimeType(timeTypeId);
         }
+        if ("SH".equalsIgnoreCase(timeType.getCode())) {
+            initializeSickHalfDefaults(companyId, timeTypeId);
+            return findByTimeType(timeTypeId);
+        }
         boolean unpaid = !timeType.isPaid() || "U".equalsIgnoreCase(timeType.getCode());
         String defaultAction = unpaid ? "DEDUCT" : "PAY";
         for (PayrollComponent component : payrollComponentRepository.findByCompanyIdOrderByPriority(companyId)) {
@@ -124,6 +128,37 @@ public class TimeTypePayrollRuleService {
             entity.setRemarks(basicSalary
                     ? "Initialized late rule: pay planned hours and deduct shortage hours from basic salary."
                     : "Initialized late rule: pay planned shift hours; late deduction is handled by basic salary.");
+            repository.save(entity);
+        }
+    }
+
+    private void initializeSickHalfDefaults(UUID companyId, UUID timeTypeId) {
+        for (PayrollComponent component : payrollComponentRepository.findByCompanyIdOrderByPriority(companyId)) {
+            if (!"ACTIVE".equalsIgnoreCase(component.getStatus())) {
+                continue;
+            }
+            TimeTypePayrollRule entity = repository
+                    .findByCompanyIdAndTimeTypeIdAndPayrollComponentId(companyId, timeTypeId, component.getId())
+                    .orElseGet(TimeTypePayrollRule::new);
+            if (entity.getId() != null && !isInitializedRule(entity)) {
+                continue;
+            }
+            boolean basicSalary = isBasicSalaryComponent(component);
+            entity.setCompanyId(companyId);
+            entity.setTimeTypeId(timeTypeId);
+            entity.setPayrollComponentId(component.getId());
+            entity.setAction(basicSalary ? "DEDUCT" : "PAY");
+            entity.setPercent(basicSalary ? new java.math.BigDecimal("50.00") : new java.math.BigDecimal("100.00"));
+            entity.setBasis("HOURS");
+            entity.setThresholdDays(0);
+            entity.setThresholdScope("NONE");
+            entity.setYearBasis("CALENDAR");
+            entity.setAffectsOvertime(false);
+            entity.setProcessSeparately(false);
+            entity.setSortOrder(component.getPriority());
+            entity.setRemarks(basicSalary
+                    ? "Initialized sick-half rule: deduct 50% of basic salary from the first SH day."
+                    : "Initialized sick-half rule: pay this component during SH unless configured otherwise.");
             repository.save(entity);
         }
     }
