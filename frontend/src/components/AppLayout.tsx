@@ -68,44 +68,56 @@ const SIDEBAR_SKIN_STORAGE_KEY = "hrms.sidebarSkin";
 
 const SIDEBAR_SKINS = [
   {
-    key: "navy",
-    label: "Navy",
-    background:
-      "radial-gradient(circle at top left, rgba(37,99,235,.28), transparent 28%), linear-gradient(180deg, #0f172a 0%, #0b1120 52%, #080b12 100%)",
-    surface: "#0b1120",
+    key: "architect",
+    label: "Architect",
+    background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
+    surface: "#ffffff",
     selected: "#2563eb",
     selectedHover: "#1d4ed8",
-    selectedSoft: "rgba(37,99,235,.28)",
+    selectedSoft: "#d8f3ff",
+    text: "#182033",
+    muted: "#9aa8bb",
+    sectionBg: "#eef9ff",
+    border: "#dbe7f3",
   },
   {
-    key: "steel",
-    label: "Steel",
-    background:
-      "radial-gradient(circle at top left, rgba(14,165,233,.22), transparent 30%), linear-gradient(180deg, #172033 0%, #111827 52%, #0b1020 100%)",
-    surface: "#111827",
+    key: "clean",
+    label: "Clean",
+    background: "linear-gradient(180deg, #ffffff 0%, #f4f7fb 100%)",
+    surface: "#ffffff",
     selected: "#0ea5e9",
     selectedHover: "#0284c7",
-    selectedSoft: "rgba(14,165,233,.24)",
+    selectedSoft: "#e0f2fe",
+    text: "#172033",
+    muted: "#96a3b4",
+    sectionBg: "#f1f5f9",
+    border: "#e2e8f0",
   },
   {
     key: "teal",
     label: "Teal",
-    background:
-      "radial-gradient(circle at top left, rgba(20,184,166,.24), transparent 30%), linear-gradient(180deg, #12312f 0%, #0f1f23 54%, #081216 100%)",
-    surface: "#0f1f23",
+    background: "linear-gradient(180deg, #ffffff 0%, #f0fdfa 100%)",
+    surface: "#ffffff",
     selected: "#0f766e",
     selectedHover: "#0d9488",
-    selectedSoft: "rgba(20,184,166,.22)",
+    selectedSoft: "#ccfbf1",
+    text: "#142226",
+    muted: "#89a3a0",
+    sectionBg: "#ecfeff",
+    border: "#ccfbf1",
   },
   {
-    key: "graphite",
-    label: "Graphite",
-    background:
-      "radial-gradient(circle at top left, rgba(148,163,184,.18), transparent 28%), linear-gradient(180deg, #18181b 0%, #111113 55%, #09090b 100%)",
-    surface: "#111113",
+    key: "slate",
+    label: "Slate",
+    background: "linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)",
+    surface: "#f8fafc",
     selected: "#52525b",
     selectedHover: "#3f3f46",
-    selectedSoft: "rgba(148,163,184,.2)",
+    selectedSoft: "#e4e4e7",
+    text: "#18181b",
+    muted: "#8a93a3",
+    sectionBg: "#e2e8f0",
+    border: "#d4d4d8",
   },
 ] as const;
 
@@ -299,8 +311,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         display: "flex",
         flexDirection: "column",
         bgcolor: sidebarSkin.surface,
-        color: "#e5e7eb",
+        color: sidebarSkin.text,
         background: sidebarSkin.background,
+        borderRight: `1px solid ${sidebarSkin.border}`,
       }}
     >
       <Stack
@@ -311,7 +324,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           minHeight: 84,
           px: rail && desktop ? 1.25 : 1.5,
           py: 1.25,
-          borderBottom: "1px solid rgba(148,163,184,.16)",
+          borderBottom: `1px solid ${sidebarSkin.border}`,
         }}
       >
         <Avatar
@@ -323,8 +336,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             bgcolor: "#2563eb",
             color: "common.white",
             fontWeight: 900,
-            boxShadow: "0 14px 30px rgba(37,99,235,.3)",
-            border: "1px solid rgba(255,255,255,.16)",
+            boxShadow: "0 12px 28px rgba(37,99,235,.16)",
+            border: `1px solid ${sidebarSkin.border}`,
           }}
         >
           {companyName.slice(0, 1).toUpperCase()}
@@ -357,57 +370,81 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         sx={{
           flex: 1,
           overflowY: "auto",
-          py: 1.1,
+          py: 1.4,
           scrollbarWidth: "thin",
-          scrollbarColor: "rgba(148,163,184,.34) transparent",
+          scrollbarColor: "rgba(100,116,139,.28) transparent",
           "&::-webkit-scrollbar": { width: 8 },
           "&::-webkit-scrollbar-track": { bgcolor: "transparent" },
-          "&::-webkit-scrollbar-thumb": { bgcolor: "rgba(148,163,184,.34)", borderRadius: 8 },
+          "&::-webkit-scrollbar-thumb": { bgcolor: "rgba(100,116,139,.28)", borderRadius: 8 },
         }}
       >
         {groups.map((group) => {
           const hasActive = group.items.some((i) => location.pathname.startsWith(i.to));
           const isOpen = rail && desktop ? true : (!collapsed[group.label] || hasActive);
           return (
-            <List key={group.label} disablePadding sx={{ px: rail && desktop ? 0.75 : 1.1, mb: rail && desktop ? 0.5 : 0.8 }}>
+            <List key={group.label} disablePadding sx={{ px: rail && desktop ? 0.75 : 2, mb: rail && desktop ? 0.5 : 2.3 }}>
               {!(rail && desktop) && (
-                <ListItemButton
-                  onClick={() => toggle(group.label)}
-                  sx={{
-                    minHeight: 42,
-                    borderRadius: 2,
-                    color: hasActive ? "#e2e8f0" : "#91a0b5",
-                    px: 1.25,
-                    mb: 0.35,
-                    "&:hover": { bgcolor: "rgba(148,163,184,.1)" },
-                  }}
-                >
-                  <ListItemIcon sx={{ minWidth: 31, color: group.accent }}>
-                    <Box
-                      sx={{
-                        width: 25,
-                        height: 25,
-                        borderRadius: 1.5,
-                        display: "grid",
-                        placeItems: "center",
-                        bgcolor: `${group.accent}1f`,
-                        "& svg": { fontSize: 17 },
-                      }}
-                    >
-                      {group.icon}
-                    </Box>
-                  </ListItemIcon>
-                  <ListItemText
-                    primary={group.label}
-                    primaryTypographyProps={{ fontSize: 13, fontWeight: 950, letterSpacing: 0, textTransform: "uppercase" }}
-                  />
-                  <Typography variant="caption" sx={{ color: "#64748b", mr: 0.75, fontWeight: 800 }}>
-                    {group.items.length}
+                <Box>
+                  <Typography
+                    sx={{
+                      color: sidebarSkin.muted,
+                      fontSize: 12.5,
+                      fontWeight: 850,
+                      letterSpacing: 0,
+                      textTransform: "uppercase",
+                      mb: 1.15,
+                      px: 0.75,
+                    }}
+                  >
+                    {group.label}
                   </Typography>
-                  {isOpen ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
-                </ListItemButton>
+                  <ListItemButton
+                    onClick={() => toggle(group.label)}
+                    sx={{
+                      minHeight: 48,
+                      borderRadius: 1,
+                      color: hasActive ? sidebarSkin.selected : sidebarSkin.text,
+                      bgcolor: hasActive ? sidebarSkin.sectionBg : "transparent",
+                      px: 1.25,
+                      mb: 0.3,
+                      "&:hover": { bgcolor: hasActive ? sidebarSkin.sectionBg : "#f1f5f9" },
+                    }}
+                  >
+                    <ListItemIcon sx={{ minWidth: 39, color: hasActive ? sidebarSkin.selected : "#0f172a" }}>
+                      <Box
+                        sx={{
+                          width: 28,
+                          height: 28,
+                          display: "grid",
+                          placeItems: "center",
+                          "& svg": { fontSize: 21 },
+                        }}
+                      >
+                        {group.icon}
+                      </Box>
+                    </ListItemIcon>
+                    <ListItemText
+                      primary={group.label}
+                      primaryTypographyProps={{ fontSize: 15.5, fontWeight: hasActive ? 850 : 600, letterSpacing: 0 }}
+                    />
+                    {isOpen ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
+                  </ListItemButton>
+                </Box>
               )}
-              <Collapse in={isOpen} timeout="auto" unmountOnExit={false}>
+              <Collapse in={isOpen} timeout="auto" unmountOnExit={false} sx={{ position: "relative" }}>
+                {!(rail && desktop) && group.items.length > 1 && (
+                  <Box
+                    sx={{
+                      position: "absolute",
+                      left: 26,
+                      top: 6,
+                      bottom: 6,
+                      width: 3,
+                      borderRadius: 999,
+                      bgcolor: sidebarSkin.border,
+                    }}
+                  />
+                )}
                 {group.items.map((item) => {
                   const selected = location.pathname.startsWith(item.to);
                   const row = (
@@ -418,33 +455,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       selected={selected}
                       onClick={() => setMobileOpen(false)}
                       sx={{
-                        minHeight: rail && desktop ? 46 : 44,
+                        minHeight: rail && desktop ? 46 : 40,
                         justifyContent: rail && desktop ? "center" : "flex-start",
-                        borderRadius: 2,
+                        borderRadius: 1,
                         mb: 0.25,
-                        px: rail && desktop ? 1 : 1.35,
+                        ml: rail && desktop ? 0 : 3.2,
+                        pl: rail && desktop ? 1 : 1.4,
+                        pr: rail && desktop ? 1 : 1,
                         position: "relative",
-                        color: selected ? "#ffffff" : "#cbd5e1",
-                        bgcolor: selected ? sidebarSkin.selected : "transparent",
-                        boxShadow: selected ? `0 10px 24px ${sidebarSkin.selectedSoft}` : "none",
-                        "&.Mui-selected": { bgcolor: sidebarSkin.selected },
-                        "&.Mui-selected:hover": { bgcolor: sidebarSkin.selectedHover },
-                        "&:hover": { bgcolor: selected ? sidebarSkin.selectedHover : "rgba(148,163,184,.12)" },
+                        color: selected ? sidebarSkin.selected : "#1f2937",
+                        bgcolor: selected ? "transparent" : "transparent",
+                        boxShadow: "none",
+                        "&.Mui-selected": { bgcolor: "transparent" },
+                        "&.Mui-selected:hover": { bgcolor: "transparent" },
+                        "&:hover": { bgcolor: "transparent", color: sidebarSkin.selected },
                         "&::before": selected && !(rail && desktop) ? {
                           content: '""',
                           position: "absolute",
-                          left: 7,
-                          top: 10,
-                          bottom: 10,
-                          width: 3,
-                          borderRadius: 999,
-                          bgcolor: "#e0f2fe",
+                          left: -23,
+                          top: "50%",
+                          width: 8,
+                          height: 8,
+                          transform: "translateY(-50%)",
+                          borderRadius: "50%",
+                          bgcolor: sidebarSkin.selected,
                         } : undefined,
                       }}
                     >
                       <ListItemIcon
                         sx={{
-                          minWidth: rail && desktop ? 0 : 36,
+                          minWidth: rail && desktop ? 0 : 0,
+                          display: rail && desktop ? "flex" : "none",
                           color: "inherit",
                           "& svg": { fontSize: rail && desktop ? 24 : 22 },
                         }}
@@ -455,8 +496,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         <ListItemText
                           primary={item.label}
                           primaryTypographyProps={{
-                            fontSize: selected ? 13.5 : 13,
-                            fontWeight: selected ? 850 : 500,
+                            fontSize: selected ? 14.5 : 14,
+                            fontWeight: selected ? 650 : 400,
                             noWrap: true,
                           }}
                         />
@@ -470,11 +511,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           );
         })}
       </Box>
-      <Divider sx={{ borderColor: "rgba(148,163,184,.18)" }} />
+      <Divider sx={{ borderColor: sidebarSkin.border }} />
       <Box sx={{ p: 1.25 }}>
         <Stack direction={rail && desktop ? "column" : "row"} spacing={0.75} alignItems={rail && desktop ? "center" : "center"}>
           <Tooltip title={`Sidebar color: ${sidebarSkin.label}`} placement="right">
-            <IconButton onClick={nextSidebarSkin} sx={{ color: "#cbd5e1" }}>
+            <IconButton onClick={nextSidebarSkin} sx={{ color: sidebarSkin.text }}>
               <PaletteIcon />
             </IconButton>
           </Tooltip>
@@ -493,8 +534,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                     borderRadius: 999,
                     cursor: "pointer",
                     bgcolor: skin.selected,
-                    border: skin.key === sidebarSkin.key ? "2px solid #ffffff" : "1px solid rgba(255,255,255,.22)",
-                    boxShadow: skin.key === sidebarSkin.key ? "0 0 0 2px rgba(255,255,255,.16)" : "none",
+                    border: skin.key === sidebarSkin.key ? "2px solid #0f172a" : "1px solid #cbd5e1",
+                    boxShadow: skin.key === sidebarSkin.key ? "0 0 0 2px rgba(37,99,235,.14)" : "none",
                   }}
                 />
               ))}
@@ -502,7 +543,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           )}
           {desktop && (
             <Tooltip title={rail ? "Expand navigation" : "Collapse navigation"} placement="right">
-              <IconButton onClick={() => setRail((v) => !v)} sx={{ color: "#cbd5e1" }}>
+              <IconButton onClick={() => setRail((v) => !v)} sx={{ color: sidebarSkin.text }}>
               <KeyboardDoubleArrowLeftIcon sx={{ transform: rail ? "rotate(180deg)" : "none" }} />
               </IconButton>
             </Tooltip>
