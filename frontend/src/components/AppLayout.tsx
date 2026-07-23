@@ -68,10 +68,10 @@ const SIDEBAR_SKIN_STORAGE_KEY = "hrms.sidebarSkin";
 
 const SIDEBAR_SKINS = [
   {
-    key: "architect",
-    label: "Architect",
-    background: "linear-gradient(180deg, #ffffff 0%, #f8fbff 100%)",
-    surface: "#ffffff",
+    key: "blue",
+    label: "Blue",
+    background: "linear-gradient(180deg, #eef7ff 0%, #f8fbff 46%, #eaf3ff 100%)",
+    surface: "#eef7ff",
     selected: "#2563eb",
     selectedHover: "#1d4ed8",
     selectedSoft: "#d8f3ff",
@@ -81,23 +81,23 @@ const SIDEBAR_SKINS = [
     border: "#dbe7f3",
   },
   {
-    key: "clean",
-    label: "Clean",
-    background: "linear-gradient(180deg, #ffffff 0%, #f4f7fb 100%)",
-    surface: "#ffffff",
-    selected: "#0ea5e9",
-    selectedHover: "#0284c7",
-    selectedSoft: "#e0f2fe",
-    text: "#172033",
-    muted: "#96a3b4",
-    sectionBg: "#f1f5f9",
-    border: "#e2e8f0",
+    key: "purple",
+    label: "Purple",
+    background: "linear-gradient(180deg, #f6f1ff 0%, #fbf8ff 48%, #f0e8ff 100%)",
+    surface: "#f6f1ff",
+    selected: "#7c3aed",
+    selectedHover: "#6d28d9",
+    selectedSoft: "#ede9fe",
+    text: "#211936",
+    muted: "#9b8caf",
+    sectionBg: "#efe7ff",
+    border: "#ddd6fe",
   },
   {
     key: "teal",
     label: "Teal",
-    background: "linear-gradient(180deg, #ffffff 0%, #f0fdfa 100%)",
-    surface: "#ffffff",
+    background: "linear-gradient(180deg, #ecfdf7 0%, #f7fffc 48%, #ddfbef 100%)",
+    surface: "#ecfdf7",
     selected: "#0f766e",
     selectedHover: "#0d9488",
     selectedSoft: "#ccfbf1",
@@ -107,10 +107,10 @@ const SIDEBAR_SKINS = [
     border: "#ccfbf1",
   },
   {
-    key: "slate",
-    label: "Slate",
-    background: "linear-gradient(180deg, #f8fafc 0%, #eef2f7 100%)",
-    surface: "#f8fafc",
+    key: "graphite",
+    label: "Graphite",
+    background: "linear-gradient(180deg, #f4f4f5 0%, #fbfbfc 48%, #e9e9ec 100%)",
+    surface: "#f4f4f5",
     selected: "#52525b",
     selectedHover: "#3f3f46",
     selectedSoft: "#e4e4e7",
@@ -240,7 +240,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [company, setCompany] = useState(getCompanyId());
   const [mobileOpen, setMobileOpen] = useState(false);
   const [rail, setRail] = useState(false);
-  const [sidebarSkinKey, setSidebarSkinKey] = useState(() => localStorage.getItem(SIDEBAR_SKIN_STORAGE_KEY) || SIDEBAR_SKINS[0].key);
+  const [sidebarSkinKey, setSidebarSkinKey] = useState(() => {
+    const saved = localStorage.getItem(SIDEBAR_SKIN_STORAGE_KEY);
+    return SIDEBAR_SKINS.some((skin) => skin.key === saved) ? saved! : SIDEBAR_SKINS[0].key;
+  });
   const sidebarSkin = SIDEBAR_SKINS.find((skin) => skin.key === sidebarSkinKey) ?? SIDEBAR_SKINS[0];
 
   // Do not carry the previous screen's scroll position into a new page. On
