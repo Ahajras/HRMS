@@ -8,4 +8,5 @@ import java.util.UUID;
 
 public interface ApprovalWorkflowStepRepository extends JpaRepository<ApprovalWorkflowStep, UUID> {
     List<ApprovalWorkflowStep> findByWorkflowIdAndStatusOrderByStepOrderAsc(UUID workflowId, String status);
+    List<ApprovalWorkflowStep> findByWorkflowIdOrderByStepOrderAsc(UUID workflowId);
 }

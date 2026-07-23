@@ -3,15 +3,12 @@ import {
   Alert,
   Box,
   Button,
+  Chip,
+  Divider,
   Grid,
   MenuItem,
   Paper,
   Stack,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
   TextField,
   Typography,
 } from "@mui/material";
@@ -37,6 +34,10 @@ const APPROVER_TYPES = [
 
 const PROJECT_ROLES = ["MANAGER", "HR", "HR_MANAGER", "PROJECT_MANAGER"];
 const PAY_GROUPS = ["ALL", "MONTHLY", "DAILY", "WEEKLY", "BIWEEKLY", "HOURLY"];
+
+function processLabel(value: string) {
+  return PROCESS_OPTIONS.find((p) => p.value === value)?.label ?? value;
+}
 
 function emptyWorkflow(projectId = ""): ApprovalWorkflow {
   return {
@@ -66,6 +67,12 @@ export default function ApprovalWorkflowsPage() {
   }, [form.projectId, projects]);
 
   const selected = useMemo(() => workflows.find((w) => w.id === selectedId), [workflows, selectedId]);
+  const workflowsByProject = useMemo(() => projects.map((project) => ({
+    project,
+    workflows: workflows
+      .filter((workflow) => workflow.projectId === project.id)
+      .sort((a, b) => `${a.processCode}-${a.payGroup}`.localeCompare(`${b.processCode}-${b.payGroup}`)),
+  })), [projects, workflows]);
   useEffect(() => {
     if (selected) setForm({ ...selected, steps: [...selected.steps].sort((a, b) => a.stepOrder - b.stepOrder) });
   }, [selected]);
@@ -114,31 +121,57 @@ export default function ApprovalWorkflowsPage() {
 
       <Grid container spacing={2}>
         <Grid item xs={12} md={4}>
-          <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "hidden" }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Project</TableCell>
-                  <TableCell>Process</TableCell>
-                  <TableCell>Pay group</TableCell>
-                  <TableCell>Steps</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {workflows.map((row) => (
-                  <TableRow key={row.id} hover selected={row.id === selectedId} onClick={() => setSelectedId(row.id ?? "")} sx={{ cursor: "pointer" }}>
-                    <TableCell>{row.projectCode ?? "Project"}</TableCell>
-                    <TableCell>{row.processCode}</TableCell>
-                    <TableCell>{row.payGroup ?? "ALL"}</TableCell>
-                    <TableCell>{row.steps?.length ?? 0}</TableCell>
-                  </TableRow>
-                ))}
-                {workflows.length === 0 && (
-                  <TableRow><TableCell colSpan={4}><Typography variant="body2" color="text.secondary" p={1}>No workflows yet.</Typography></TableCell></TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </Paper>
+          <Stack spacing={1.25}>
+            {workflowsByProject.map(({ project, workflows: projectWorkflows }) => (
+              <Paper key={project.id} variant="outlined" sx={{ borderRadius: 2, overflow: "hidden" }}>
+                <Box sx={{ px: 1.5, py: 1.25, bgcolor: "action.hover" }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
+                    <Box>
+                      <Typography fontWeight={800}>{project.code} - {project.name}</Typography>
+                      <Typography variant="caption" color="text.secondary">Project approval workflow setup</Typography>
+                    </Box>
+                    <Chip size="small" label={`${projectWorkflows.length} workflow${projectWorkflows.length === 1 ? "" : "s"}`} />
+                  </Stack>
+                </Box>
+                <Divider />
+                <Stack spacing={0.75} sx={{ p: 1 }}>
+                  {projectWorkflows.map((row) => (
+                    <Paper
+                      key={row.id}
+                      variant="outlined"
+                      onClick={() => setSelectedId(row.id ?? "")}
+                      sx={{
+                        p: 1,
+                        borderRadius: 2,
+                        cursor: "pointer",
+                        borderColor: row.id === selectedId ? "primary.main" : "divider",
+                        bgcolor: row.id === selectedId ? "rgba(37, 99, 235, 0.08)" : "background.paper",
+                      }}
+                    >
+                      <Stack direction="row" justifyContent="space-between" alignItems="center" gap={1}>
+                        <Box>
+                          <Typography variant="body2" fontWeight={700}>{processLabel(row.processCode)}</Typography>
+                          <Stack direction="row" spacing={0.75} mt={0.5} flexWrap="wrap">
+                            <Chip size="small" label={row.payGroup ?? "ALL"} />
+                            <Chip size="small" variant="outlined" label={`${row.steps?.length ?? 0} steps`} />
+                          </Stack>
+                        </Box>
+                        <Typography variant="caption" color="text.secondary">{row.status ?? "ACTIVE"}</Typography>
+                      </Stack>
+                    </Paper>
+                  ))}
+                  {projectWorkflows.length === 0 && (
+                    <Typography variant="body2" color="text.secondary" p={1}>No workflows for this project yet.</Typography>
+                  )}
+                </Stack>
+              </Paper>
+            ))}
+            {projects.length === 0 && (
+              <Paper variant="outlined" sx={{ borderRadius: 2, p: 2 }}>
+                <Typography variant="body2" color="text.secondary">Create a project first, then add approval workflows.</Typography>
+              </Paper>
+            )}
+          </Stack>
         </Grid>
 
         <Grid item xs={12} md={8}>

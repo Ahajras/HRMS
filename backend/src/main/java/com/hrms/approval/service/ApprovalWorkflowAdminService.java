@@ -61,10 +61,24 @@ public class ApprovalWorkflowAdminService {
         if (!companyId.equals(project.getCompanyId())) {
             throw new ResourceNotFoundException("Project not found: " + dto.getProjectId());
         }
-        ApprovalWorkflow workflow = dto.getId() != null
-                ? workflowRepo.findById(dto.getId()).orElseThrow(() -> new ResourceNotFoundException("Workflow not found: " + dto.getId()))
-                : workflowRepo.findByCompanyIdAndProcessCodeAndProjectIdAndPayGroup(companyId, processCode, dto.getProjectId(), payGroup)
-                    .orElseGet(ApprovalWorkflow::new);
+        ApprovalWorkflow target = workflowRepo.findByCompanyIdAndProcessCodeAndProjectIdAndPayGroup(companyId, processCode, dto.getProjectId(), payGroup)
+                .orElse(null);
+        ApprovalWorkflow workflow;
+        if (dto.getId() == null) {
+            workflow = target == null ? new ApprovalWorkflow() : target;
+        } else {
+            ApprovalWorkflow current = workflowRepo.findById(dto.getId())
+                    .orElseThrow(() -> new ResourceNotFoundException("Workflow not found: " + dto.getId()));
+            if (!companyId.equals(current.getCompanyId())) {
+                throw new ResourceNotFoundException("Workflow not found: " + dto.getId());
+            }
+            if (target != null && !target.getId().equals(current.getId())) {
+                retireWorkflow(current);
+                workflow = target;
+            } else {
+                workflow = current;
+            }
+        }
         workflow.setCompanyId(companyId);
         workflow.setProcessCode(processCode);
         workflow.setProjectId(dto.getProjectId());
@@ -77,7 +91,8 @@ public class ApprovalWorkflowAdminService {
         if (steps.isEmpty()) {
             throw new BusinessRuleException("approval.workflow.steps.required", "Add at least one approval step.");
         }
-        stepRepo.findByWorkflowIdAndStatusOrderByStepOrderAsc(workflow.getId(), "ACTIVE").forEach(stepRepo::delete);
+        stepRepo.deleteAll(stepRepo.findByWorkflowIdOrderByStepOrderAsc(workflow.getId()));
+        stepRepo.flush();
         int order = 1;
         for (ApprovalWorkflowDto.StepDto s : steps.stream().sorted(Comparator.comparingInt(ApprovalWorkflowDto.StepDto::getStepOrder)).toList()) {
             String type = normalize(s.getApproverType(), "");
@@ -111,6 +126,21 @@ public class ApprovalWorkflowAdminService {
             step.setStatus("INACTIVE");
             stepRepo.save(step);
         });
+    }
+
+    private void retireWorkflow(ApprovalWorkflow workflow) {
+        if (instanceRepo.countByWorkflowId(workflow.getId()) == 0) {
+            workflowRepo.delete(workflow);
+        } else {
+            workflow.setStatus("INACTIVE");
+            workflowRepo.save(workflow);
+            stepRepo.findByWorkflowIdAndStatusOrderByStepOrderAsc(workflow.getId(), "ACTIVE").forEach(step -> {
+                step.setStatus("INACTIVE");
+                stepRepo.save(step);
+            });
+        }
+        workflowRepo.flush();
+        stepRepo.flush();
     }
 
     private void validateStep(ApprovalWorkflowStep row) {
