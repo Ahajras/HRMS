@@ -53,6 +53,14 @@ const EMPTY: Shift = {
   days: defaultWeek(),
 };
 
+const requiredFieldSx = (missing: boolean) => missing ? {
+  "& .MuiOutlinedInput-root": {
+    backgroundColor: "#fff7ed",
+    "& fieldset": { borderColor: "#fb923c" },
+  },
+  "& .MuiInputLabel-root": { color: "#c2410c" },
+} : undefined;
+
 export default function ShiftsPage() {
   const qc = useQueryClient();
   const { data = [] } = useQuery({ queryKey: ["shifts"], queryFn: shiftApi.list });
@@ -85,6 +93,12 @@ export default function ShiftsPage() {
     if (!q) return true;
     return `${s.code ?? ""} ${s.name ?? ""} ${s.status ?? ""}`.toLowerCase().includes(q);
   });
+  const missingRequired = [
+    !form.code.trim() ? "Code is required so payroll/timesheet records can identify the shift." : "",
+    !form.name.trim() ? "Name is required so users can recognize the shift." : "",
+    !form.startTime ? "Start time is required for planned attendance." : "",
+    !form.endTime ? "End time is required for planned attendance." : "",
+  ].filter(Boolean);
 
   return (
     <Box>
@@ -204,13 +218,18 @@ export default function ShiftsPage() {
             <Alert severity="info" sx={{ mb: 2 }}>
               Workflow: create or update the shift here, then go to Shift Roster to assign employees before generating timesheets.
             </Alert>
+            {missingRequired.length > 0 && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                Complete required fields: {missingRequired.join(" ")}
+              </Alert>
+            )}
 
             <Grid container spacing={1.5}>
               <Grid item xs={6} sm={3}>
-                <TextField fullWidth size="small" label="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} />
+                <TextField fullWidth required size="small" label="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} sx={requiredFieldSx(!form.code.trim())} />
               </Grid>
               <Grid item xs={6} sm={5}>
-                <TextField fullWidth size="small" label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+                <TextField fullWidth required size="small" label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} sx={requiredFieldSx(!form.name.trim())} />
               </Grid>
               <Grid item xs={12} sm={4}>
                 <TextField select fullWidth size="small" label="Project" value={form.projectId ?? ""} onChange={(e) => setForm({ ...form, projectId: e.target.value || undefined })}>
@@ -219,10 +238,10 @@ export default function ShiftsPage() {
                 </TextField>
               </Grid>
               <Grid item xs={6} sm={3}>
-                <TextField fullWidth size="small" type="time" label="Start" InputLabelProps={{ shrink: true }} value={form.startTime ?? ""} onChange={(e) => setForm({ ...form, startTime: e.target.value })} />
+                <TextField fullWidth required size="small" type="time" label="Start" InputLabelProps={{ shrink: true }} value={form.startTime ?? ""} onChange={(e) => setForm({ ...form, startTime: e.target.value })} sx={requiredFieldSx(!form.startTime)} />
               </Grid>
               <Grid item xs={6} sm={3}>
-                <TextField fullWidth size="small" type="time" label="End" InputLabelProps={{ shrink: true }} value={form.endTime ?? ""} onChange={(e) => setForm({ ...form, endTime: e.target.value })} />
+                <TextField fullWidth required size="small" type="time" label="End" InputLabelProps={{ shrink: true }} value={form.endTime ?? ""} onChange={(e) => setForm({ ...form, endTime: e.target.value })} sx={requiredFieldSx(!form.endTime)} />
               </Grid>
               <Grid item xs={6} sm={3}>
                 <TextField fullWidth size="small" type="number" label="Break (min)" value={form.breakMinutes} onChange={(e) => setForm({ ...form, breakMinutes: Number(e.target.value) })} />
