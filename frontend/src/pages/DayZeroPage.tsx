@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   Alert,
   Box,
   Button,
   Checkbox,
+  Chip,
   MenuItem,
   Paper,
   Stack,
@@ -40,6 +41,22 @@ export default function DayZeroPage() {
     queryFn: () => dayZeroApi.days(employee!.id!),
     enabled: !!employee?.id,
   });
+  const dayGroups = useMemo(() => {
+    const groups = new Map<string, typeof days>();
+    days.forEach((day) => {
+      const key = `${day.periodYear}-${String(day.periodMonth).padStart(2, "0")}`;
+      groups.set(key, [...(groups.get(key) ?? []), day]);
+    });
+    return Array.from(groups.entries()).map(([key, rows]) => ({
+      key,
+      label: new Date(rows[0].periodYear, rows[0].periodMonth - 1, 1).toLocaleString(undefined, {
+        month: "short",
+        year: "numeric",
+      }),
+      rows,
+      selectedCount: rows.filter((row) => row.id in selected).length,
+    }));
+  }, [days, selected]);
 
   const { data: timeTypes = [] } = useQuery({ queryKey: ["timeTypes"], queryFn: () => timeTypeApi.list() });
 
@@ -128,85 +145,106 @@ export default function DayZeroPage() {
               </Table>
             </Paper>
           )}
-          <Paper variant="outlined" sx={{ borderRadius: 2, overflow: "auto", mb: 2 }}>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell padding="checkbox"></TableCell>
-                  <TableCell>Date</TableCell>
-                  <TableCell>Period</TableCell>
-                  <TableCell>Currently paid as</TableCell>
-                  <TableCell>Correct to (optional)</TableCell>
-                  <TableCell>Worked hours (optional)</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {days.map((d) => {
-                  const isSelected = d.id in selected;
-                  const correction = selected[d.id] ?? {};
-                  return (
-                    <TableRow key={d.id} hover selected={isSelected}>
-                      <TableCell padding="checkbox">
-                        <Checkbox
-                          checked={isSelected}
-                          onChange={(e) => {
-                            setSelected((prev) => {
-                              const next = { ...prev };
-                              if (e.target.checked) next[d.id] = {};
-                              else delete next[d.id];
-                              return next;
-                            });
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell>{d.workDate}</TableCell>
-                      <TableCell>{d.periodYear}-{String(d.periodMonth).padStart(2, "0")}</TableCell>
-                      <TableCell>{d.timeTypeName ?? d.timeTypeCode ?? ""}</TableCell>
-                      <TableCell>
-                        <TextField
-                          select
-                          size="small"
-                          disabled={!isSelected}
-                          value={correction.newTimeTypeId ?? ""}
-                          onChange={(e) => setSelected((prev) => ({
-                            ...prev, [d.id]: { ...prev[d.id], newTimeTypeId: e.target.value || undefined },
-                          }))}
-                          sx={{ minWidth: 180 }}
-                        >
-                          <MenuItem value="">(keep current type)</MenuItem>
-                          {timeTypes.map((t) => (
-                            <MenuItem key={t.id} value={t.id}>{t.name} ({t.code})</MenuItem>
-                          ))}
-                        </TextField>
-                      </TableCell>
-                      <TableCell>
-                        <TextField
-                          type="number"
-                          size="small"
-                          disabled={!isSelected}
-                          placeholder="e.g. worked Friday"
-                          value={correction.workedHours ?? ""}
-                          onChange={(e) => setSelected((prev) => ({
-                            ...prev, [d.id]: { ...prev[d.id], workedHours: e.target.value === "" ? undefined : Number(e.target.value) },
-                          }))}
-                          sx={{ width: 140 }}
-                        />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-                {days.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={6}>
-                      <Typography variant="body2" color="text.secondary" p={1}>
-                        No estimated Day Zero days found for this employee (nothing locked past a configured cutoff yet).
+          {dayGroups.length > 0 ? (
+            <Stack spacing={2} mb={2}>
+              {dayGroups.map((group) => (
+                <Paper key={group.key} variant="outlined" sx={{ borderRadius: 2, overflow: "hidden" }}>
+                  <Stack
+                    direction={{ xs: "column", sm: "row" }}
+                    justifyContent="space-between"
+                    alignItems={{ xs: "flex-start", sm: "center" }}
+                    spacing={1}
+                    sx={{ px: 2, py: 1.5, bgcolor: "action.hover" }}
+                  >
+                    <Box>
+                      <Typography variant="subtitle1" fontWeight={800}>{group.label}</Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Period {group.key} · estimated days available for correction
                       </Typography>
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </Paper>
+                    </Box>
+                    <Stack direction="row" spacing={1}>
+                      <Chip size="small" label={`${group.rows.length} day(s)`} />
+                      <Chip size="small" color={group.selectedCount ? "primary" : "default"} label={`${group.selectedCount} selected`} />
+                    </Stack>
+                  </Stack>
+                  <Box sx={{ overflow: "auto" }}>
+                    <Table size="small">
+                      <TableHead>
+                        <TableRow>
+                          <TableCell padding="checkbox"></TableCell>
+                          <TableCell>Date</TableCell>
+                          <TableCell>Currently paid as</TableCell>
+                          <TableCell>Correct to (optional)</TableCell>
+                          <TableCell>Worked hours (optional)</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {group.rows.map((d) => {
+                          const isSelected = d.id in selected;
+                          const correction = selected[d.id] ?? {};
+                          return (
+                            <TableRow key={d.id} hover selected={isSelected}>
+                              <TableCell padding="checkbox">
+                                <Checkbox
+                                  checked={isSelected}
+                                  onChange={(e) => {
+                                    setSelected((prev) => {
+                                      const next = { ...prev };
+                                      if (e.target.checked) next[d.id] = {};
+                                      else delete next[d.id];
+                                      return next;
+                                    });
+                                  }}
+                                />
+                              </TableCell>
+                              <TableCell>{d.workDate}</TableCell>
+                              <TableCell>{d.timeTypeName ?? d.timeTypeCode ?? ""}</TableCell>
+                              <TableCell>
+                                <TextField
+                                  select
+                                  size="small"
+                                  disabled={!isSelected}
+                                  value={correction.newTimeTypeId ?? ""}
+                                  onChange={(e) => setSelected((prev) => ({
+                                    ...prev, [d.id]: { ...prev[d.id], newTimeTypeId: e.target.value || undefined },
+                                  }))}
+                                  sx={{ minWidth: 180 }}
+                                >
+                                  <MenuItem value="">(keep current type)</MenuItem>
+                                  {timeTypes.map((t) => (
+                                    <MenuItem key={t.id} value={t.id}>{t.name} ({t.code})</MenuItem>
+                                  ))}
+                                </TextField>
+                              </TableCell>
+                              <TableCell>
+                                <TextField
+                                  type="number"
+                                  size="small"
+                                  disabled={!isSelected}
+                                  placeholder="e.g. worked Friday"
+                                  value={correction.workedHours ?? ""}
+                                  onChange={(e) => setSelected((prev) => ({
+                                    ...prev, [d.id]: { ...prev[d.id], workedHours: e.target.value === "" ? undefined : Number(e.target.value) },
+                                  }))}
+                                  sx={{ width: 140 }}
+                                />
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </Box>
+                </Paper>
+              ))}
+            </Stack>
+          ) : (
+            <Paper variant="outlined" sx={{ borderRadius: 2, mb: 2, p: 2 }}>
+              <Typography variant="body2" color="text.secondary">
+                No estimated Day Zero days found for this employee (nothing locked past a configured cutoff yet).
+              </Typography>
+            </Paper>
+          )}
 
           <Stack direction="row" spacing={2} alignItems="center">
             <TextField
