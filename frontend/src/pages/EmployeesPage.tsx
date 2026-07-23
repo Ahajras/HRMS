@@ -77,6 +77,7 @@ const EMPTY: Employee = {
   status: "ACTIVE",
   paymentMethodCode: "BANK",
 };
+const DOC_EXPIRY_ALERTS_STORAGE_KEY = "hrms.employeeDocumentExpiryAlertDays";
 
 // --- shared hooks for dropdown sources ---------------------------------
 function useLookup(category: string) {
@@ -151,7 +152,27 @@ function SelectField(props: {
 // =======================================================================
 // Personal details tab
 // =======================================================================
-function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v: string) => void }) {
+function PersonalTab({
+  form,
+  set,
+  wpsDocType,
+  setWpsDocType,
+  wpsDocNumber,
+  setWpsDocNumber,
+  wpsDocExpiry,
+  setWpsDocExpiry,
+  hasWpsIdentityDocument,
+}: {
+  form: Employee;
+  set: (k: keyof Employee, v: string) => void;
+  wpsDocType: string;
+  setWpsDocType: (v: string) => void;
+  wpsDocNumber: string;
+  setWpsDocNumber: (v: string) => void;
+  wpsDocExpiry: string;
+  setWpsDocExpiry: (v: string) => void;
+  hasWpsIdentityDocument: boolean;
+}) {
   const genders = useLookup("GENDER");
   const maritals = useLookup("MARITAL_STATUS");
   const statuses = useLookup("EMPLOYEE_STATUS");
@@ -171,6 +192,8 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
   const lk = (rows: { code: string; label: string }[]) => rows.map((r) => ({ value: r.code, label: r.label }));
   const airportOpts = lk(airports);
   const jobTitleOpts = lk(jobTitles);
+  const paymentMethod = (form.paymentMethodCode ?? "").toUpperCase();
+  const needsWpsIdentity = ["BANK", "WPS"].includes(paymentMethod);
   const missingRequired = [
     !form.employeeNumber?.trim() ? "Employee Number identifies the employee in payroll, timesheets, and imports." : "",
     !form.firstName?.trim() ? "First Name is required for employee records and approvals." : "",
@@ -183,6 +206,8 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
     !form.homeAirportCode?.trim() ? "Home airport is required for ticket fare and ticket accrual." : "",
     !form.jobTitleCode?.trim() ? "Job Title Code helps reporting and legacy/action sheet matching." : "",
     !form.jobTitle?.trim() ? "Job Title is shown in employee profile and operational reports." : "",
+    needsWpsIdentity && !hasWpsIdentityDocument && !wpsDocNumber.trim() ? "WPS/SIF payment requires QID or Visa number for payroll export." : "",
+    needsWpsIdentity && !hasWpsIdentityDocument && !wpsDocExpiry ? "QID/Visa expiry date is required for document renewal alerts." : "",
   ].filter(Boolean);
 
   // Supervisor candidates + the employee's current crew (read-only).
@@ -268,6 +293,49 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
       <Grid item xs={12} sm={4}>
         <SelectField label="Payment Method" value={form.paymentMethodCode ?? "BANK"} onChange={(v) => set("paymentMethodCode", v)} options={lk(paymentMethods)} allowEmpty={false} required sx={requiredFieldSx(!form.paymentMethodCode?.trim())} />
       </Grid>
+      {needsWpsIdentity && !hasWpsIdentityDocument && (
+        <>
+          <Grid item xs={12} sm={4}>
+            <SelectField
+              label="WPS identity type"
+              value={wpsDocType}
+              onChange={setWpsDocType}
+              options={[
+                { value: "RESIDENCE_ID", label: "Residence ID / QID" },
+                { value: "VISA", label: "Visa" },
+              ]}
+              allowEmpty={false}
+              required
+              sx={requiredFieldSx(!wpsDocType)}
+              helperText="Required when payment method is WPS/SIF"
+            />
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField
+              fullWidth
+              required
+              label={wpsDocType === "VISA" ? "Visa number" : "QID number"}
+              value={wpsDocNumber}
+              onChange={(e) => setWpsDocNumber(e.target.value)}
+              sx={requiredFieldSx(!wpsDocNumber.trim())}
+              helperText="Saved automatically as an employee document"
+            />
+          </Grid>
+          <Grid item xs={12} sm={4}>
+            <TextField
+              fullWidth
+              required
+              type="date"
+              InputLabelProps={{ shrink: true }}
+              label="QID/Visa expiry date"
+              value={wpsDocExpiry}
+              onChange={(e) => setWpsDocExpiry(e.target.value)}
+              sx={requiredFieldSx(!wpsDocExpiry)}
+              helperText="Used for admin expiry alerts"
+            />
+          </Grid>
+        </>
+      )}
       <Grid item xs={12} sm={4}>
         <SelectField label="Band" value={form.band} onChange={(v) => set("band", v)} options={lk(bands)} />
       </Grid>
@@ -364,9 +432,26 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
   const qc = useQueryClient();
   const docTypes = useLookup("DOCUMENT_TYPE");
   const countries = useCountries();
+  const [alertDaysText, setAlertDaysText] = useState(() => localStorage.getItem(DOC_EXPIRY_ALERTS_STORAGE_KEY) || "60,30,7");
+  const alertDays = alertDaysText.split(",").map((v) => Number(v.trim())).filter((v) => Number.isFinite(v) && v >= 0).sort((a, b) => b - a);
   const typeLabel = (code: string) => docTypes.find((d) => d.code === code)?.label ?? code;
   const { data = [] } = useQuery({ queryKey: ["docs", employeeId], queryFn: () => employeeDocumentApi.byEmployee(employeeId) });
   const [form, setForm] = useState<EmployeeDocument>(EMPTY_DOC(employeeId));
+  const daysUntil = (date?: string) => {
+    if (!date) return undefined;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const expiry = new Date(`${date}T00:00:00`);
+    return Math.ceil((expiry.getTime() - today.getTime()) / 86400000);
+  };
+  const expirySeverity = (date?: string) => {
+    const days = daysUntil(date);
+    if (days === undefined) return undefined;
+    if (days < 0) return { label: `Expired ${Math.abs(days)} day(s) ago`, color: "error" as const };
+    const matched = alertDays.find((d) => days <= d);
+    if (matched !== undefined) return { label: `Expires in ${days} day(s)`, color: days <= 7 ? "error" as const : "warning" as const };
+    return { label: `Valid ${days} day(s)`, color: "success" as const };
+  };
 
   const save = useMutation({
     mutationFn: (d: EmployeeDocument) => (d.id ? employeeDocumentApi.update(d.id, d) : employeeDocumentApi.create(d)),
@@ -381,6 +466,24 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
 
   return (
     <Stack spacing={2} mt={1}>
+      <Paper variant="outlined" sx={{ p: 1.5, bgcolor: "#f8fafc" }}>
+        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ xs: "stretch", sm: "center" }}>
+          <Box sx={{ flex: 1 }}>
+            <Typography fontWeight={900}>Document expiry alerts</Typography>
+            <Typography variant="body2" color="text.secondary">
+              Admin alert checkpoints. Example: 60,30,7 means alert before two months, one month, and one week.
+            </Typography>
+          </Box>
+          <TextField
+            label="Alert days"
+            value={alertDaysText}
+            onChange={(e) => setAlertDaysText(e.target.value)}
+            onBlur={() => localStorage.setItem(DOC_EXPIRY_ALERTS_STORAGE_KEY, alertDaysText)}
+            helperText="Comma separated"
+            sx={{ minWidth: 220 }}
+          />
+        </Stack>
+      </Paper>
       {data.map((d) => (
         <Paper key={d.id} variant="outlined" sx={{ p: 1.5 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between">
@@ -390,6 +493,11 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
                 {d.issuingCountryCode ? `${d.issuingCountryCode} · ` : ""}
                 {d.issueDate ? `issued ${d.issueDate}` : ""}{d.expiryDate ? ` · expires ${d.expiryDate}` : ""}
               </Typography>
+              {expirySeverity(d.expiryDate) && (
+                <Box mt={0.75}>
+                  <Chip size="small" color={expirySeverity(d.expiryDate)?.color} label={expirySeverity(d.expiryDate)?.label} />
+                </Box>
+              )}
             </Box>
             <Box>
               <Button size="small" onClick={() => setForm(d)}>Edit</Button>
@@ -404,10 +512,10 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
       <Grid container spacing={2}>
         <Grid item xs={12} sm={4}>
           <SelectField label="Document Type" value={form.documentType} onChange={(v) => set("documentType", v)}
-            options={docTypes.map((d) => ({ value: d.code, label: d.label }))} allowEmpty={false} />
+            options={docTypes.map((d) => ({ value: d.code, label: d.label }))} allowEmpty={false} required sx={requiredFieldSx(!form.documentType)} />
         </Grid>
         <Grid item xs={12} sm={4}>
-          <TextField fullWidth label="Document Number" value={form.documentNumber} onChange={(e) => set("documentNumber", e.target.value)} />
+          <TextField fullWidth required label="Document Number" value={form.documentNumber} onChange={(e) => set("documentNumber", e.target.value)} sx={requiredFieldSx(!form.documentNumber?.trim())} />
         </Grid>
         <Grid item xs={12} sm={4}>
           <SelectField label="Issuing Country" value={form.issuingCountryCode} onChange={(v) => set("issuingCountryCode", v)}
@@ -418,15 +526,15 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
             value={form.issueDate ?? ""} onChange={(e) => set("issueDate", e.target.value)} />
         </Grid>
         <Grid item xs={12} sm={4}>
-          <TextField fullWidth label="Expiry Date" type="date" InputLabelProps={{ shrink: true }}
-            value={form.expiryDate ?? ""} onChange={(e) => set("expiryDate", e.target.value)} />
+          <TextField fullWidth required label="Expiry Date" type="date" InputLabelProps={{ shrink: true }}
+            value={form.expiryDate ?? ""} onChange={(e) => set("expiryDate", e.target.value)} sx={requiredFieldSx(!form.expiryDate)} helperText="Required for admin expiry alerts" />
         </Grid>
         <Grid item xs={12} sm={4}>
           <TextField fullWidth label="Issuing Authority" value={form.issuingAuthority ?? ""} onChange={(e) => set("issuingAuthority", e.target.value)} />
         </Grid>
         <Grid item xs={12}>
           <Stack direction="row" spacing={1}>
-            <Button variant="contained" disabled={!form.documentType || !form.documentNumber || save.isPending}
+            <Button variant="contained" disabled={!form.documentType || !form.documentNumber || !form.expiryDate || save.isPending}
               onClick={() => save.mutate(form)}>{form.id ? "Update" : "Add"}</Button>
             {form.id && <Button onClick={() => setForm(EMPTY_DOC(employeeId))}>Cancel</Button>}
           </Stack>
@@ -1390,12 +1498,57 @@ export default function EmployeesPage() {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState(0);
   const [form, setForm] = useState<Employee>(EMPTY);
+  const [wpsDocType, setWpsDocType] = useState("RESIDENCE_ID");
+  const [wpsDocNumber, setWpsDocNumber] = useState("");
+  const [wpsDocExpiry, setWpsDocExpiry] = useState("");
+  const isSaved = Boolean(form.id);
+  const { data: employeeDocs = [] } = useQuery({
+    queryKey: ["docs", form.id],
+    queryFn: () => employeeDocumentApi.byEmployee(form.id!),
+    enabled: open && isSaved,
+  });
+  const hasWpsIdentityDocument = employeeDocs.some((d) =>
+    ["RESIDENCE_ID", "VISA"].includes((d.documentType ?? "").toUpperCase()) && !!d.documentNumber?.trim()
+  );
+  const paymentMethod = (form.paymentMethodCode ?? "").toUpperCase();
+  const needsWpsIdentity = ["BANK", "WPS"].includes(paymentMethod);
+  const employeeRequiredMessages = [
+    !form.employeeNumber?.trim() ? "Employee Number" : "",
+    !form.firstName?.trim() ? "First Name" : "",
+    !form.lastName?.trim() ? "Last Name" : "",
+    !form.status?.trim() ? "Status" : "",
+    !form.payStatus?.trim() ? "Pay Status" : "",
+    !form.paymentMethodCode?.trim() ? "Payment Method" : "",
+    !form.hireDate?.trim() ? "Hire Date" : "",
+    !form.workAirportCode?.trim() ? "Work airport" : "",
+    !form.homeAirportCode?.trim() ? "Home airport" : "",
+    !form.jobTitleCode?.trim() ? "Job Title Code" : "",
+    !form.jobTitle?.trim() ? "Job Title" : "",
+    needsWpsIdentity && !hasWpsIdentityDocument && !wpsDocNumber.trim() ? "QID or Visa number for WPS" : "",
+    needsWpsIdentity && !hasWpsIdentityDocument && !wpsDocExpiry ? "QID/Visa expiry date" : "",
+  ].filter(Boolean);
+  const canSaveEmployee = employeeRequiredMessages.length === 0;
 
   const save = useMutation({
-    mutationFn: (e: Employee) => (e.id ? employeeApi.update(e.id, e) : employeeApi.create(e)),
+    mutationFn: async (e: Employee) => {
+      const saved = e.id ? await employeeApi.update(e.id, e) : await employeeApi.create(e);
+      if (needsWpsIdentity && !hasWpsIdentityDocument && wpsDocNumber.trim()) {
+        await employeeDocumentApi.create({
+          employeeId: saved.id!,
+          documentType: wpsDocType,
+          documentNumber: wpsDocNumber.trim(),
+          expiryDate: wpsDocExpiry,
+          status: "ACTIVE",
+        });
+      }
+      return saved;
+    },
     onSuccess: (saved) => {
       qc.invalidateQueries({ queryKey: ["employees"] });
+      qc.invalidateQueries({ queryKey: ["docs", saved.id] });
       setForm(saved); // keep dialog open; now has an id so sub-tabs unlock
+      setWpsDocNumber("");
+      setWpsDocExpiry("");
     },
   });
 
@@ -1410,10 +1563,8 @@ export default function EmployeesPage() {
   ];
 
   const set = (k: keyof Employee, v: string) => setForm((current) => ({ ...current, [k]: v }));
-  const openNew = () => { setForm(EMPTY); setTab(0); setOpen(true); };
-  const openExisting = (e: Employee) => { setForm(e); setTab(0); setOpen(true); };
-
-  const isSaved = Boolean(form.id);
+  const openNew = () => { setForm(EMPTY); setWpsDocType("RESIDENCE_ID"); setWpsDocNumber(""); setWpsDocExpiry(""); setTab(0); setOpen(true); };
+  const openExisting = (e: Employee) => { setForm(e); setWpsDocType("RESIDENCE_ID"); setWpsDocNumber(""); setWpsDocExpiry(""); setTab(0); setOpen(true); };
 
   const { data: headerCrew } = useQuery({
     queryKey: ["crewByEmp", form.id],
@@ -1610,7 +1761,19 @@ export default function EmployeesPage() {
             <Tab label="Legacy Data" />
           </Tabs>
 
-          {tab === 0 && <PersonalTab form={form} set={set} />}
+          {tab === 0 && (
+            <PersonalTab
+              form={form}
+              set={set}
+              wpsDocType={wpsDocType}
+              setWpsDocType={setWpsDocType}
+              wpsDocNumber={wpsDocNumber}
+              setWpsDocNumber={setWpsDocNumber}
+              wpsDocExpiry={wpsDocExpiry}
+              setWpsDocExpiry={setWpsDocExpiry}
+              hasWpsIdentityDocument={hasWpsIdentityDocument}
+            />
+          )}
 
           {tab > 0 && !isSaved && (
             <Alert severity="info" sx={{ mt: 2 }}>
@@ -1627,11 +1790,16 @@ export default function EmployeesPage() {
 
           {save.isError && <Alert severity="error" sx={{ mt: 2 }}>Could not save. Check the fields and try again.</Alert>}
           {save.isSuccess && tab === 0 && <Alert severity="success" sx={{ mt: 2 }}>Saved.</Alert>}
+          {tab === 0 && !canSaveEmployee && (
+            <Alert severity="warning" sx={{ mt: 2 }}>
+              Complete required fields before saving: {employeeRequiredMessages.join(", ")}.
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpen(false)}>Close</Button>
           {tab === 0 && (
-            <Button variant="contained" onClick={() => save.mutate(form)} disabled={save.isPending || !form.payStatus}>
+            <Button variant="contained" onClick={() => save.mutate(form)} disabled={save.isPending || !canSaveEmployee}>
               {isSaved ? "Update" : "Save"}
             </Button>
           )}
