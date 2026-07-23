@@ -1,13 +1,16 @@
 package com.hrms.project.service;
 
+import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
 import com.hrms.project.domain.CostCode;
 import com.hrms.project.dto.CostCodeDto;
 import com.hrms.project.repository.CostCodeRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Objects;
 import java.util.List;
 import java.util.UUID;
 
@@ -16,9 +19,11 @@ import java.util.UUID;
 public class CostCodeService {
 
     private final CostCodeRepository repository;
+    private final JdbcTemplate jdbcTemplate;
 
-    public CostCodeService(CostCodeRepository repository) {
+    public CostCodeService(CostCodeRepository repository, JdbcTemplate jdbcTemplate) {
         this.repository = repository;
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     @Transactional(readOnly = true)
@@ -47,12 +52,22 @@ public class CostCodeService {
 
     public CostCodeDto update(UUID id, CostCodeDto dto) {
         CostCode entity = getEntity(id);
+        if (isReferenced(id) && changesProtectedFields(entity, dto)) {
+            throw new BusinessRuleException("COST_CODE_IN_USE",
+                    "Cost code cannot be edited because it is already used in assignments or timesheets. Create a new cost code, or update/remove the related records first. You can still set this cost code to Inactive.");
+        }
         apply(dto, entity);
         return toDto(repository.save(entity));
     }
 
     public void delete(UUID id) {
-        repository.delete(getEntity(id));
+        CostCode entity = getEntity(id);
+        if (isReferenced(id)) {
+            throw new BusinessRuleException("COST_CODE_IN_USE",
+                    "Cost code cannot be deleted because it is already used in assignments or timesheets. Remove those references first, or set the cost code to Inactive.");
+        }
+        repository.delete(entity);
+        repository.flush();
     }
 
     private CostCode getEntity(UUID id) {
@@ -80,6 +95,28 @@ public class CostCodeService {
         }
         entity.setStatus(status);
         entity.setActive(active);
+    }
+
+    private boolean isReferenced(UUID id) {
+        return countReferences("assignment", id)
+                + countReferences("timesheet_day", id)
+                + countReferences("timesheet_day_cost", id) > 0;
+    }
+
+    private long countReferences(String table, UUID id) {
+        Long count = jdbcTemplate.queryForObject("select count(*) from " + table + " where cost_code_id = ?", Long.class, id);
+        return count == null ? 0 : count;
+    }
+
+    private boolean changesProtectedFields(CostCode entity, CostCodeDto dto) {
+        String description = blankToNull(dto.getDescription());
+        String name = description != null ? description : dto.getName();
+        return !Objects.equals(entity.getProjectId(), dto.getProjectId())
+                || !Objects.equals(entity.getPrjcode(), normalizeNullable(dto.getPrjcode()))
+                || !Objects.equals(entity.getCode(), normalize(dto.getCode()))
+                || !Objects.equals(entity.getName(), name)
+                || !Objects.equals(entity.getDescription(), description)
+                || !Objects.equals(entity.getCurrencyCode(), normalizeCurrency(dto.getCurrencyCode()));
     }
 
     private CostCodeDto toDto(CostCode e) {
