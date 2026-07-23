@@ -54,6 +54,7 @@ import MenuIcon from "@mui/icons-material/Menu";
 import KeyboardDoubleArrowLeftIcon from "@mui/icons-material/KeyboardDoubleArrowLeft";
 import DarkModeIcon from "@mui/icons-material/DarkMode";
 import LightModeIcon from "@mui/icons-material/LightMode";
+import PaletteIcon from "@mui/icons-material/Palette";
 import { useQuery } from "@tanstack/react-query";
 import { COMPANY_STORAGE_KEY, getCompanyId, setCompanyId } from "../api/client";
 import { companyProfileApi } from "../api/resources";
@@ -63,6 +64,50 @@ import { ThemeModeContext } from "../theme";
 const DRAWER_WIDTH = 284;
 const RAIL_WIDTH = 76;
 const BRANDING_STORAGE_KEY = "hrms.branding";
+const SIDEBAR_SKIN_STORAGE_KEY = "hrms.sidebarSkin";
+
+const SIDEBAR_SKINS = [
+  {
+    key: "navy",
+    label: "Navy",
+    background:
+      "radial-gradient(circle at top left, rgba(37,99,235,.28), transparent 28%), linear-gradient(180deg, #0f172a 0%, #0b1120 52%, #080b12 100%)",
+    surface: "#0b1120",
+    selected: "#2563eb",
+    selectedHover: "#1d4ed8",
+    selectedSoft: "rgba(37,99,235,.28)",
+  },
+  {
+    key: "steel",
+    label: "Steel",
+    background:
+      "radial-gradient(circle at top left, rgba(14,165,233,.22), transparent 30%), linear-gradient(180deg, #172033 0%, #111827 52%, #0b1020 100%)",
+    surface: "#111827",
+    selected: "#0ea5e9",
+    selectedHover: "#0284c7",
+    selectedSoft: "rgba(14,165,233,.24)",
+  },
+  {
+    key: "teal",
+    label: "Teal",
+    background:
+      "radial-gradient(circle at top left, rgba(20,184,166,.24), transparent 30%), linear-gradient(180deg, #12312f 0%, #0f1f23 54%, #081216 100%)",
+    surface: "#0f1f23",
+    selected: "#0f766e",
+    selectedHover: "#0d9488",
+    selectedSoft: "rgba(20,184,166,.22)",
+  },
+  {
+    key: "graphite",
+    label: "Graphite",
+    background:
+      "radial-gradient(circle at top left, rgba(148,163,184,.18), transparent 28%), linear-gradient(180deg, #18181b 0%, #111113 55%, #09090b 100%)",
+    surface: "#111113",
+    selected: "#52525b",
+    selectedHover: "#3f3f46",
+    selectedSoft: "rgba(148,163,184,.2)",
+  },
+] as const;
 
 interface NavItem {
   to: string;
@@ -183,6 +228,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [company, setCompany] = useState(getCompanyId());
   const [mobileOpen, setMobileOpen] = useState(false);
   const [rail, setRail] = useState(false);
+  const [sidebarSkinKey, setSidebarSkinKey] = useState(() => localStorage.getItem(SIDEBAR_SKIN_STORAGE_KEY) || SIDEBAR_SKINS[0].key);
+  const sidebarSkin = SIDEBAR_SKINS.find((skin) => skin.key === sidebarSkinKey) ?? SIDEBAR_SKINS[0];
 
   // Do not carry the previous screen's scroll position into a new page. On
   // shorter/zoomed viewports that could leave the page title and action
@@ -218,6 +265,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     setCompanyId(value);
   };
 
+  const nextSidebarSkin = () => {
+    const currentIndex = SIDEBAR_SKINS.findIndex((skin) => skin.key === sidebarSkin.key);
+    const next = SIDEBAR_SKINS[(currentIndex + 1) % SIDEBAR_SKINS.length];
+    setSidebarSkinKey(next.key);
+    localStorage.setItem(SIDEBAR_SKIN_STORAGE_KEY, next.key);
+  };
+
   const canSee = (item: NavItem) => {
     if (item.authorities?.length) return item.authorities.some(hasAuthority);
     return !item.authority || hasAuthority(item.authority);
@@ -244,10 +298,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         height: "100%",
         display: "flex",
         flexDirection: "column",
-        bgcolor: "#0b1120",
+        bgcolor: sidebarSkin.surface,
         color: "#e5e7eb",
-        background:
-          "radial-gradient(circle at top left, rgba(37,99,235,.28), transparent 28%), linear-gradient(180deg, #0f172a 0%, #0b1120 52%, #080b12 100%)",
+        background: sidebarSkin.background,
       }}
     >
       <Stack
@@ -321,7 +374,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                 <ListItemButton
                   onClick={() => toggle(group.label)}
                   sx={{
-                    minHeight: 38,
+                    minHeight: 42,
                     borderRadius: 2,
                     color: hasActive ? "#e2e8f0" : "#91a0b5",
                     px: 1.25,
@@ -346,7 +399,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                   </ListItemIcon>
                   <ListItemText
                     primary={group.label}
-                    primaryTypographyProps={{ fontSize: 11.5, fontWeight: 900, letterSpacing: 0, textTransform: "uppercase" }}
+                    primaryTypographyProps={{ fontSize: 13, fontWeight: 950, letterSpacing: 0, textTransform: "uppercase" }}
                   />
                   <Typography variant="caption" sx={{ color: "#64748b", mr: 0.75, fontWeight: 800 }}>
                     {group.items.length}
@@ -372,11 +425,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         px: rail && desktop ? 1 : 1.35,
                         position: "relative",
                         color: selected ? "#ffffff" : "#cbd5e1",
-                        bgcolor: selected ? "rgba(37,99,235,.96)" : "transparent",
-                        boxShadow: selected ? "0 10px 24px rgba(37,99,235,.28)" : "none",
-                        "&.Mui-selected": { bgcolor: "rgba(37,99,235,.96)" },
-                        "&.Mui-selected:hover": { bgcolor: "#1d4ed8" },
-                        "&:hover": { bgcolor: selected ? "#1d4ed8" : "rgba(148,163,184,.12)" },
+                        bgcolor: selected ? sidebarSkin.selected : "transparent",
+                        boxShadow: selected ? `0 10px 24px ${sidebarSkin.selectedSoft}` : "none",
+                        "&.Mui-selected": { bgcolor: sidebarSkin.selected },
+                        "&.Mui-selected:hover": { bgcolor: sidebarSkin.selectedHover },
+                        "&:hover": { bgcolor: selected ? sidebarSkin.selectedHover : "rgba(148,163,184,.12)" },
                         "&::before": selected && !(rail && desktop) ? {
                           content: '""',
                           position: "absolute",
@@ -385,7 +438,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                           bottom: 10,
                           width: 3,
                           borderRadius: 999,
-                          bgcolor: "#bfdbfe",
+                          bgcolor: "#e0f2fe",
                         } : undefined,
                       }}
                     >
@@ -402,8 +455,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         <ListItemText
                           primary={item.label}
                           primaryTypographyProps={{
-                            fontSize: 13.5,
-                            fontWeight: selected ? 900 : 700,
+                            fontSize: selected ? 13.5 : 13,
+                            fontWeight: selected ? 850 : 500,
                             noWrap: true,
                           }}
                         />
@@ -419,13 +472,42 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </Box>
       <Divider sx={{ borderColor: "rgba(148,163,184,.18)" }} />
       <Box sx={{ p: 1.25 }}>
-        {desktop && (
-          <Tooltip title={rail ? "Expand navigation" : "Collapse navigation"} placement="right">
-            <IconButton onClick={() => setRail((v) => !v)} sx={{ color: "#cbd5e1" }}>
-              <KeyboardDoubleArrowLeftIcon sx={{ transform: rail ? "rotate(180deg)" : "none" }} />
+        <Stack direction={rail && desktop ? "column" : "row"} spacing={0.75} alignItems={rail && desktop ? "center" : "center"}>
+          <Tooltip title={`Sidebar color: ${sidebarSkin.label}`} placement="right">
+            <IconButton onClick={nextSidebarSkin} sx={{ color: "#cbd5e1" }}>
+              <PaletteIcon />
             </IconButton>
           </Tooltip>
-        )}
+          {!(rail && desktop) && (
+            <Stack direction="row" spacing={0.5} alignItems="center" sx={{ flex: 1 }}>
+              {SIDEBAR_SKINS.map((skin) => (
+                <Box
+                  key={skin.key}
+                  onClick={() => {
+                    setSidebarSkinKey(skin.key);
+                    localStorage.setItem(SIDEBAR_SKIN_STORAGE_KEY, skin.key);
+                  }}
+                  sx={{
+                    width: 24,
+                    height: 16,
+                    borderRadius: 999,
+                    cursor: "pointer",
+                    bgcolor: skin.selected,
+                    border: skin.key === sidebarSkin.key ? "2px solid #ffffff" : "1px solid rgba(255,255,255,.22)",
+                    boxShadow: skin.key === sidebarSkin.key ? "0 0 0 2px rgba(255,255,255,.16)" : "none",
+                  }}
+                />
+              ))}
+            </Stack>
+          )}
+          {desktop && (
+            <Tooltip title={rail ? "Expand navigation" : "Collapse navigation"} placement="right">
+              <IconButton onClick={() => setRail((v) => !v)} sx={{ color: "#cbd5e1" }}>
+              <KeyboardDoubleArrowLeftIcon sx={{ transform: rail ? "rotate(180deg)" : "none" }} />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Stack>
       </Box>
     </Box>
   );
