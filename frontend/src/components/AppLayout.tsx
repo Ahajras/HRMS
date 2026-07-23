@@ -74,24 +74,32 @@ interface NavItem {
 
 interface NavGroup {
   label: string;
+  icon: React.ReactNode;
+  accent: string;
   items: NavItem[];
 }
 
 const NAV_GROUPS: NavGroup[] = [
   {
     label: "Overview",
+    icon: <SpaceDashboardIcon />,
+    accent: "#38bdf8",
     items: [
       { to: "/dashboard", label: "Dashboard", icon: <SpaceDashboardIcon />, authority: "payroll.config.read" },
     ],
   },
   {
     label: "My Portal",
+    icon: <AccountCircleIcon />,
+    accent: "#a78bfa",
     items: [
       { to: "/my-portal", label: "My Payslips, Timesheet & Leave", icon: <AccountCircleIcon />, authority: "self.payslip.read" },
     ],
   },
   {
     label: "Workforce",
+    icon: <PeopleIcon />,
+    accent: "#60a5fa",
     items: [
       { to: "/employees", label: "Employees", icon: <PeopleIcon />, authority: "employee.read" },
       { to: "/organization", label: "Organization", icon: <AccountTreeIcon />, authority: "organization.read" },
@@ -101,6 +109,8 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Time & Attendance",
+    icon: <AccessTimeIcon />,
+    accent: "#34d399",
     items: [
       { to: "/payroll-calendar", label: "Payroll Calendar", icon: <CalendarMonthIcon />, authority: "employee.read" },
       { to: "/timesheets", label: "Timesheets", icon: <AccessTimeIcon />, authority: "employee.read" },
@@ -112,6 +122,8 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Payroll",
+    icon: <PaymentsIcon />,
+    accent: "#f59e0b",
     items: [
       { to: "/payroll-runs", label: "Payroll Runs", icon: <PaymentsIcon />, authority: "payroll.config.read" },
       { to: "/payroll-reports", label: "Reports", icon: <PaymentsIcon />, authority: "payroll.config.read" },
@@ -126,6 +138,8 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Configuration",
+    icon: <BuildIcon />,
+    accent: "#fb7185",
     items: [
       { to: "/projects", label: "Projects", icon: <WorkIcon />, authority: "reference.read" },
       { to: "/company-profile", label: "Company Profile", icon: <BusinessIcon />, authority: "reference.read" },
@@ -138,6 +152,8 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Workflow",
+    icon: <FactCheckIcon />,
+    accent: "#22c55e",
     items: [
       { to: "/my-approvals", label: "My Approvals", icon: <FactCheckIcon />, authority: "employee.read" },
       { to: "/approval-workflows", label: "Approval Workflows", icon: <FactCheckIcon />, authority: "employee.read" },
@@ -146,6 +162,8 @@ const NAV_GROUPS: NavGroup[] = [
   },
   {
     label: "Administration",
+    icon: <SecurityIcon />,
+    accent: "#94a3b8",
     items: [
       { to: "/users", label: "Users", icon: <ManageAccountsIcon />, authority: "security.user.read" },
       { to: "/roles", label: "Roles", icon: <SecurityIcon />, authority: "security.role.read" },
@@ -221,28 +239,72 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const drawerWidth = desktop && rail ? RAIL_WIDTH : DRAWER_WIDTH;
 
   const drawerContent = (
-    <Box sx={{ height: "100%", display: "flex", flexDirection: "column", bgcolor: "#10131a", color: "#e5e7eb" }}>
-      <Stack direction="row" alignItems="center" spacing={1.25} sx={{ minHeight: 72, px: rail && desktop ? 1.5 : 2 }}>
+    <Box
+      sx={{
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        bgcolor: "#0b1120",
+        color: "#e5e7eb",
+        background:
+          "radial-gradient(circle at top left, rgba(37,99,235,.28), transparent 28%), linear-gradient(180deg, #0f172a 0%, #0b1120 52%, #080b12 100%)",
+      }}
+    >
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1.25}
+        sx={{
+          minHeight: 84,
+          px: rail && desktop ? 1.25 : 1.5,
+          py: 1.25,
+          borderBottom: "1px solid rgba(148,163,184,.16)",
+        }}
+      >
         <Avatar
           src={logoUrl || undefined}
           variant="rounded"
-          sx={{ width: 42, height: 42, bgcolor: "#2563eb", color: "common.white", fontWeight: 900 }}
+          sx={{
+            width: rail && desktop ? 46 : 52,
+            height: rail && desktop ? 46 : 52,
+            bgcolor: "#2563eb",
+            color: "common.white",
+            fontWeight: 900,
+            boxShadow: "0 14px 30px rgba(37,99,235,.3)",
+            border: "1px solid rgba(255,255,255,.16)",
+          }}
         >
           {companyName.slice(0, 1).toUpperCase()}
         </Avatar>
         {!(rail && desktop) && (
-          <Box sx={{ minWidth: 0 }}>
-            <Typography variant="subtitle1" noWrap fontWeight={900}>{companyName}</Typography>
-            <Typography variant="caption" color="#94a3b8" noWrap>Workforce & Payroll</Typography>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Tooltip title={companyName} placement="right">
+              <Typography
+                variant="subtitle1"
+                fontWeight={950}
+                sx={{
+                  lineHeight: 1.15,
+                  overflow: "hidden",
+                  display: "-webkit-box",
+                  WebkitLineClamp: 2,
+                  WebkitBoxOrient: "vertical",
+                  textTransform: "uppercase",
+                }}
+              >
+                {companyName}
+              </Typography>
+            </Tooltip>
+            <Typography variant="caption" color="#93a4bd" noWrap sx={{ display: "block", mt: 0.5 }}>
+              Workforce & Payroll
+            </Typography>
           </Box>
         )}
       </Stack>
-      <Divider sx={{ borderColor: "rgba(148,163,184,.18)" }} />
       <Box
         sx={{
           flex: 1,
           overflowY: "auto",
-          py: 1.25,
+          py: 1.1,
           scrollbarWidth: "thin",
           scrollbarColor: "rgba(148,163,184,.34) transparent",
           "&::-webkit-scrollbar": { width: 8 },
@@ -254,16 +316,41 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           const hasActive = group.items.some((i) => location.pathname.startsWith(i.to));
           const isOpen = rail && desktop ? true : (!collapsed[group.label] || hasActive);
           return (
-            <List key={group.label} disablePadding sx={{ px: 1 }}>
+            <List key={group.label} disablePadding sx={{ px: rail && desktop ? 0.75 : 1.1, mb: rail && desktop ? 0.5 : 0.8 }}>
               {!(rail && desktop) && (
                 <ListItemButton
                   onClick={() => toggle(group.label)}
-                  sx={{ minHeight: 34, borderRadius: 1, color: "#94a3b8", px: 1.25 }}
+                  sx={{
+                    minHeight: 38,
+                    borderRadius: 2,
+                    color: hasActive ? "#e2e8f0" : "#91a0b5",
+                    px: 1.25,
+                    mb: 0.35,
+                    "&:hover": { bgcolor: "rgba(148,163,184,.1)" },
+                  }}
                 >
+                  <ListItemIcon sx={{ minWidth: 31, color: group.accent }}>
+                    <Box
+                      sx={{
+                        width: 25,
+                        height: 25,
+                        borderRadius: 1.5,
+                        display: "grid",
+                        placeItems: "center",
+                        bgcolor: `${group.accent}1f`,
+                        "& svg": { fontSize: 17 },
+                      }}
+                    >
+                      {group.icon}
+                    </Box>
+                  </ListItemIcon>
                   <ListItemText
                     primary={group.label}
-                    primaryTypographyProps={{ fontSize: 11, fontWeight: 800, letterSpacing: 0, textTransform: "uppercase" }}
+                    primaryTypographyProps={{ fontSize: 11.5, fontWeight: 900, letterSpacing: 0, textTransform: "uppercase" }}
                   />
+                  <Typography variant="caption" sx={{ color: "#64748b", mr: 0.75, fontWeight: 800 }}>
+                    {group.items.length}
+                  </Typography>
                   {isOpen ? <ExpandLess fontSize="small" /> : <ExpandMore fontSize="small" />}
                 </ListItemButton>
               )}
@@ -278,20 +365,48 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                       selected={selected}
                       onClick={() => setMobileOpen(false)}
                       sx={{
-                        minHeight: 42,
+                        minHeight: rail && desktop ? 46 : 44,
                         justifyContent: rail && desktop ? "center" : "flex-start",
-                        borderRadius: 1,
+                        borderRadius: 2,
                         mb: 0.25,
-                        px: rail && desktop ? 1 : 1.5,
+                        px: rail && desktop ? 1 : 1.35,
+                        position: "relative",
                         color: selected ? "#ffffff" : "#cbd5e1",
-                        "&.Mui-selected": { bgcolor: "#2563eb" },
+                        bgcolor: selected ? "rgba(37,99,235,.96)" : "transparent",
+                        boxShadow: selected ? "0 10px 24px rgba(37,99,235,.28)" : "none",
+                        "&.Mui-selected": { bgcolor: "rgba(37,99,235,.96)" },
                         "&.Mui-selected:hover": { bgcolor: "#1d4ed8" },
-                        "&:hover": { bgcolor: "rgba(148,163,184,.12)" },
+                        "&:hover": { bgcolor: selected ? "#1d4ed8" : "rgba(148,163,184,.12)" },
+                        "&::before": selected && !(rail && desktop) ? {
+                          content: '""',
+                          position: "absolute",
+                          left: 7,
+                          top: 10,
+                          bottom: 10,
+                          width: 3,
+                          borderRadius: 999,
+                          bgcolor: "#bfdbfe",
+                        } : undefined,
                       }}
                     >
-                      <ListItemIcon sx={{ minWidth: rail && desktop ? 0 : 34, color: "inherit" }}>{item.icon}</ListItemIcon>
+                      <ListItemIcon
+                        sx={{
+                          minWidth: rail && desktop ? 0 : 36,
+                          color: "inherit",
+                          "& svg": { fontSize: rail && desktop ? 24 : 22 },
+                        }}
+                      >
+                        {item.icon}
+                      </ListItemIcon>
                       {!(rail && desktop) && (
-                        <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 13, fontWeight: selected ? 800 : 600 }} />
+                        <ListItemText
+                          primary={item.label}
+                          primaryTypographyProps={{
+                            fontSize: 13.5,
+                            fontWeight: selected ? 900 : 700,
+                            noWrap: true,
+                          }}
+                        />
                       )}
                     </ListItemButton>
                   );
