@@ -66,6 +66,7 @@ public class TimeTypeService {
             e.setFactor(dto.getFactor());
         }
         e.setSortOrder(dto.getSortOrder());
+        e.setColorHex(normalizeColor(dto.getColorHex()));
         if (dto.getStatus() != null) {
             e.setStatus(dto.getStatus());
         }
@@ -83,7 +84,16 @@ public class TimeTypeService {
         dto.setAffectsLeave(e.isAffectsLeave());
         dto.setFactor(e.getFactor());
         dto.setSortOrder(e.getSortOrder());
+        dto.setColorHex(e.getColorHex());
         dto.setStatus(e.getStatus());
         return dto;
+    }
+
+    private String normalizeColor(String raw) {
+        if (raw == null || raw.isBlank()) {
+            return "#64748b";
+        }
+        String color = raw.trim();
+        return color.matches("^#[0-9A-Fa-f]{6}$") ? color : "#64748b";
     }
 }

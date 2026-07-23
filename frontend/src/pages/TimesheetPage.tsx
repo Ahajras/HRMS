@@ -21,7 +21,7 @@ import {
 import PrintIcon from "@mui/icons-material/Print";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { costCodeApi, crewApi, payrollRunApi, periodApi, periodLockApi, projectApi, shiftApi, timeTypeApi, timesheetApi } from "../api/resources";
-import type { CostCode, PayrollRun, Timesheet, TimesheetDay, TimesheetDayCost } from "../api/types";
+import type { CostCode, PayrollRun, TimeType, Timesheet, TimesheetDay, TimesheetDayCost } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 
 const STATUS_COLOR: Record<string, "default" | "info" | "success" | "warning"> = {
@@ -48,6 +48,14 @@ function fmtDuration(seconds?: number): string {
   const m = Math.floor(s / 60);
   const rem = s % 60;
   return m ? `${m}m ${rem}s` : `${rem}s`;
+}
+
+function alphaColor(hex?: string, alpha = 0.12): string {
+  const value = hex && /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#64748b";
+  const r = parseInt(value.slice(1, 3), 16);
+  const g = parseInt(value.slice(3, 5), 16);
+  const b = parseInt(value.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 function paidPayrollLocks(runs: PayrollRun[], projectId: string) {
@@ -622,7 +630,8 @@ export default function TimesheetPage() {
             </Stack>
           )}
         </Box>
-        <Table size="small">
+        <Box sx={{ overflowX: "auto", mt: 1 }}>
+        <Table size="small" sx={{ minWidth: 760 }}>
           <TableHead>
             <TableRow>
               <TableCell>Employee</TableCell>
@@ -652,6 +661,7 @@ export default function TimesheetPage() {
             )}
           </TableBody>
         </Table>
+        </Box>
       </Paper>
 
       {detail && (
@@ -736,7 +746,7 @@ function TimesheetDetail({
   payrollClosedLabel,
 }: {
   timesheet: Timesheet;
-  timeTypes: { id?: string; code: string; name: string }[];
+  timeTypes: TimeType[];
   lifecycleError?: string;
   onLifecycle: (action: "submit" | "approve" | "lock" | "reopen") => void;
   onDelete: () => void;
@@ -747,6 +757,9 @@ function TimesheetDetail({
   const [days, setDays] = useState<TimesheetDay[]>(timesheet.days);
   const [costOpen, setCostOpen] = useState<number | null>(null);
   const editable = timesheet.status === "DRAFT" && !payrollClosed;
+  const timeTypeForDay = (day: TimesheetDay) =>
+    timeTypes.find((t) => (day.timeTypeId && t.id === day.timeTypeId) || (day.timeTypeCode && t.code === day.timeTypeCode));
+  const timeTypeColor = (day: TimesheetDay) => timeTypeForDay(day)?.colorHex ?? "#64748b";
 
   const { data: projects = [] } = useQuery({ queryKey: ["projects"], queryFn: projectApi.list });
   const { data: costCodes = [] } = useQuery({ queryKey: ["costCodesAll"], queryFn: costCodeApi.list });
@@ -881,11 +894,24 @@ function TimesheetDetail({
             <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
               {summary.lines.map((l) => (
                 <Chip key={l.category} size="small" variant="outlined"
-                  color={l.paid ? "default" : "warning"}
+                  sx={{
+                    bgcolor: alphaColor(timeTypes.find((t) => t.code === l.category)?.colorHex, 0.12),
+                    borderColor: alphaColor(timeTypes.find((t) => t.code === l.category)?.colorHex, 0.55),
+                  }}
                   label={`${l.category}: ${l.days}d · ${l.hours}h${l.paid ? "" : " (unpaid)"}`} />
               ))}
             </Stack>
           )}
+          <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mt: 1 }}>
+            {timeTypes.map((t) => (
+              <Chip
+                key={t.id ?? t.code}
+                size="small"
+                label={`${t.code} - ${t.name}`}
+                sx={{ bgcolor: alphaColor(t.colorHex, 0.14), borderLeft: "4px solid", borderLeftColor: t.colorHex ?? "#64748b" }}
+              />
+            ))}
+          </Stack>
           {(summary.allocationLines?.length ?? 0) > 0 && (
             <Box sx={{ mt: 1.5 }}>
               <Typography variant="subtitle2" fontWeight={700} sx={{ display: "block", mb: 0.75 }}>
@@ -907,7 +933,7 @@ function TimesheetDetail({
       )}
 
       <Box sx={{ overflowX: "auto" }}>
-        <Table size="small">
+        <Table size="small" sx={{ minWidth: 1520 }}>
           <TableHead>
             <TableRow>
               <TableCell>Date</TableCell>
@@ -931,8 +957,8 @@ function TimesheetDetail({
           <TableBody>
             {days.map((d, idx) => (
               <Fragment key={d.id ?? d.workDate}>
-              <TableRow>
-                <TableCell>{fmtDay(d.workDate)}</TableCell>
+              <TableRow sx={{ bgcolor: alphaColor(timeTypeColor(d), 0.08), "& td:first-of-type": { borderLeft: "5px solid", borderLeftColor: timeTypeColor(d) } }}>
+                <TableCell sx={{ whiteSpace: "nowrap", fontWeight: 700 }}>{fmtDay(d.workDate)}</TableCell>
                 <TableCell>
                   {d.dayZeroAdjustmentAmount != null ? (
                     <Tooltip title={d.dayZeroAdjustmentReason ?? "Corrected via Day Zero"}>
@@ -950,10 +976,23 @@ function TimesheetDetail({
                 </TableCell>
                 <TableCell>
                   {dayEditable(d) ? (
-                    <TextField select size="small" value={d.timeTypeId ?? ""} onChange={(e) => setDayTimeType(idx, e.target.value)} sx={{ minWidth: 220 }}>
-                      {timeTypes.map((t) => <MenuItem key={t.id} value={t.id}>{t.code} - {t.name}</MenuItem>)}
+                    <TextField select size="small" value={d.timeTypeId ?? ""} onChange={(e) => setDayTimeType(idx, e.target.value)} sx={{ minWidth: 220, bgcolor: alphaColor(timeTypeColor(d), 0.16), borderRadius: 1 }}>
+                      {timeTypes.map((t) => (
+                        <MenuItem key={t.id} value={t.id}>
+                          <Stack direction="row" spacing={1} alignItems="center">
+                            <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: t.colorHex ?? "#64748b" }} />
+                            <span>{t.code} - {t.name}</span>
+                          </Stack>
+                        </MenuItem>
+                      ))}
                     </TextField>
-                  ) : (d.timeTypeCode ?? "")}
+                  ) : (
+                    <Chip
+                      size="small"
+                      label={`${d.timeTypeCode ?? timeTypeForDay(d)?.code ?? ""} - ${timeTypeForDay(d)?.name ?? ""}`.trim()}
+                      sx={{ bgcolor: alphaColor(timeTypeColor(d), 0.18), color: timeTypeColor(d), fontWeight: 800 }}
+                    />
+                  )}
                 </TableCell>
                 <TableCell>
                   {dayEditable(d) ? (

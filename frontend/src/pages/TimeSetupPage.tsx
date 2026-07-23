@@ -35,6 +35,7 @@ const EMPTY_TYPE: TimeType = {
   affectsLeave: false,
   factor: 1,
   sortOrder: 0,
+  colorHex: "#64748b",
 };
 
 const EMPTY_RULE: TimeTypePayrollRule = {
@@ -161,7 +162,10 @@ function TimeTypesSection() {
                         {timeType.category || "No category"} · factor {timeType.factor ?? 1}
                       </Typography>
                     </Box>
-                    <Chip size="small" color={timeType.paid ? "success" : "warning"} label={timeType.paid ? "Paid" : "Unpaid"} />
+                    <Stack direction="row" spacing={0.75} alignItems="center">
+                      <Box sx={{ width: 14, height: 14, borderRadius: "50%", bgcolor: timeType.colorHex ?? "#64748b", border: "1px solid", borderColor: "divider" }} />
+                      <Chip size="small" color={timeType.paid ? "success" : "warning"} label={timeType.paid ? "Paid" : "Unpaid"} />
+                    </Stack>
                   </Stack>
                 </Box>
               );
@@ -212,6 +216,23 @@ function TimeTypesSection() {
               </Grid>
               <Grid item xs={6} md={2}>
                 <TextField fullWidth type="number" label="Sort" value={form.sortOrder} onChange={(e) => setForm({ ...form, sortOrder: Number(e.target.value) })} />
+              </Grid>
+              <Grid item xs={6} md={2}>
+                <TextField
+                  fullWidth
+                  type="color"
+                  label="Color"
+                  value={form.colorHex ?? "#64748b"}
+                  onChange={(e) => setForm({ ...form, colorHex: e.target.value })}
+                  InputLabelProps={{ shrink: true }}
+                  sx={{ "& input": { height: 32, p: 0.5 } }}
+                />
+              </Grid>
+              <Grid item xs={6} md={2}>
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ height: "100%" }}>
+                  <Box sx={{ width: 22, height: 22, borderRadius: "50%", bgcolor: form.colorHex ?? "#64748b", border: "1px solid", borderColor: "divider" }} />
+                  <Typography variant="caption" color="text.secondary">{form.colorHex ?? "#64748b"}</Typography>
+                </Stack>
               </Grid>
               <Grid item xs={12}>
                 <Stack direction="row" spacing={2} flexWrap="wrap">

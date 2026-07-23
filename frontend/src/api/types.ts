@@ -716,6 +716,7 @@ export interface TimeType {
   affectsLeave: boolean;
   factor?: number;
   sortOrder: number;
+  colorHex?: string;
   status?: string;
 }
 

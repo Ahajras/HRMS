@@ -15,6 +15,7 @@ public class TimeTypeDto {
     private boolean affectsLeave;
     private BigDecimal factor = BigDecimal.ONE;
     private int sortOrder;
+    private String colorHex = "#64748b";
     private String status;
 
     public UUID getId() { return id; }
@@ -46,6 +47,9 @@ public class TimeTypeDto {
 
     public int getSortOrder() { return sortOrder; }
     public void setSortOrder(int sortOrder) { this.sortOrder = sortOrder; }
+
+    public String getColorHex() { return colorHex; }
+    public void setColorHex(String colorHex) { this.colorHex = colorHex; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }

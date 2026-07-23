@@ -44,6 +44,9 @@ public class TimeType extends AuditableEntity {
     @Column(name = "sort_order", nullable = false)
     private int sortOrder;
 
+    @Column(name = "color_hex", length = 20)
+    private String colorHex = "#64748b";
+
     @Column(name = "status", nullable = false, length = 20)
     private String status = "ACTIVE";
 
@@ -73,6 +76,9 @@ public class TimeType extends AuditableEntity {
 
     public int getSortOrder() { return sortOrder; }
     public void setSortOrder(int sortOrder) { this.sortOrder = sortOrder; }
+
+    public String getColorHex() { return colorHex; }
+    public void setColorHex(String colorHex) { this.colorHex = colorHex; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
