@@ -25,6 +25,7 @@ const emptyProject: Project = { code: "", name: "", status: "ACTIVE" };
 
 const emptyCostCode = (projectId: string): CostCode => ({
   projectId,
+  prjcode: "",
   code: "",
   name: "",
   description: "",
@@ -53,6 +54,7 @@ function CostCodesPanel({ project }: { project: Project }) {
       const payload: CostCode = {
         ...c,
         projectId,
+        prjcode: c.prjcode?.trim().toUpperCase() || undefined,
         code: c.code.trim().toUpperCase(),
         name: description,
         description,
@@ -83,7 +85,7 @@ function CostCodesPanel({ project }: { project: Project }) {
               <Box>
                 <Typography variant="subtitle2">Cost code chart</Typography>
                 <Typography variant="caption" color="text.secondary">
-                  prjcode, accode, curcod, ldesc, and lactive from the legacy chart.
+                  prjcode is a legacy chart segment, separate from the HRMS project code.
                 </Typography>
               </Box>
               <Chip size="small" label={`${sorted.filter((c) => c.active !== false).length} active`} color="primary" variant="outlined" />
@@ -93,7 +95,7 @@ function CostCodesPanel({ project }: { project: Project }) {
               <Stack key={c.id} direction="row" alignItems="center" justifyContent="space-between" sx={{ py: 1, borderTop: 1, borderColor: "divider" }}>
                 <Box>
                   <Stack direction="row" alignItems="center" spacing={1} flexWrap="wrap">
-                    <Chip size="small" label={`PRJ ${project.code}`} variant="outlined" />
+                    <Chip size="small" label={`prjcode ${c.prjcode || "-"}`} variant="outlined" />
                     <Typography variant="body2" fontWeight={800}>{c.code}</Typography>
                     <Chip size="small" label={c.currencyCode || "QAR"} variant="outlined" />
                     <Chip size="small" label={c.active === false ? "Inactive" : "Active"} color={c.active === false ? "default" : "success"} />
@@ -113,7 +115,7 @@ function CostCodesPanel({ project }: { project: Project }) {
           <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2, bgcolor: "background.paper" }}>
             <Typography variant="subtitle2" gutterBottom>{form.id ? "Edit cost code" : "Add cost code"}</Typography>
             <Stack spacing={1.5}>
-              <TextField size="small" label="Project code (prjcode)" value={project.code} InputProps={{ readOnly: true }} />
+              <TextField size="small" label="Project segment (prjcode)" value={form.prjcode || ""} onChange={(e) => setForm({ ...form, prjcode: e.target.value })} inputProps={{ maxLength: 2 }} />
               <TextField size="small" label="Account code (accode) *" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} sx={requiredFieldSx} inputProps={{ maxLength: 13 }} />
               <TextField size="small" label="Description (ldesc) *" value={form.description || form.name || ""} onChange={(e) => setForm({ ...form, description: e.target.value, name: e.target.value })} sx={requiredFieldSx} inputProps={{ maxLength: 40 }} />
               <TextField size="small" label="Currency code (curcod)" value={form.currencyCode || "QAR"} onChange={(e) => setForm({ ...form, currencyCode: e.target.value })} inputProps={{ maxLength: 10 }} />
@@ -211,7 +213,7 @@ export default function ProjectsPage() {
                     <Typography color="text.secondary">- {p.name}</Typography>
                     <Chip size="small" label={p.status ?? "ACTIVE"} color={p.status === "INACTIVE" ? "default" : "success"} />
                   </Stack>
-                  <Typography variant="caption" color="text.secondary">Cost codes are managed under this project and keep the project code as prjcode.</Typography>
+                  <Typography variant="caption" color="text.secondary">Cost codes are linked to this HRMS project. Their legacy prjcode is maintained separately inside each cost code.</Typography>
                 </Box>
                 <Stack direction="row" spacing={0.5} justifyContent="flex-end">
                   <Button size="small" variant={open === p.id ? "contained" : "outlined"} onClick={() => setOpen(open === p.id ? null : (p.id ?? null))}>

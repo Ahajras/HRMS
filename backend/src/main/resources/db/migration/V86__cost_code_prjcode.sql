@@ -1,0 +1,2 @@
+ALTER TABLE cost_code
+    ADD COLUMN IF NOT EXISTS prjcode VARCHAR(2);

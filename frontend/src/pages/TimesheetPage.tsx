@@ -69,7 +69,7 @@ function printTimesheet(
   const projectLabel = (id?: string) => projects.find((p) => p.id === id)?.code ?? "";
   const costLabel = (id?: string) => {
     const cc = costCodes.find((c) => c.id === id);
-    return cc ? `${cc.code} - ${cc.description || cc.name}${cc.currencyCode ? ` · ${cc.currencyCode}` : ""}` : "";
+    return cc ? `${cc.prjcode ? `${cc.prjcode} / ` : ""}${cc.code} - ${cc.description || cc.name}${cc.currencyCode ? ` · ${cc.currencyCode}` : ""}` : "";
   };
   const timeTypeLabel = (day: TimesheetDay) => {
     if (day.timeTypeCode) return day.timeTypeCode;
@@ -799,7 +799,7 @@ function TimesheetDetail({
   const removeCost = (idx: number, ci: number) =>
     setDays((prev) => prev.map((d, i) =>
       i === idx ? { ...d, costs: (d.costs ?? []).filter((_, j) => j !== ci) } : d));
-  const costDisplay = (cc?: CostCode) => cc ? `${cc.code} - ${cc.description || cc.name}${cc.currencyCode ? ` · ${cc.currencyCode}` : ""}` : "";
+  const costDisplay = (cc?: CostCode) => cc ? `${cc.prjcode ? `${cc.prjcode} / ` : ""}${cc.code} - ${cc.description || cc.name}${cc.currencyCode ? ` · ${cc.currencyCode}` : ""}` : "";
   const costOptions = (projectId?: string, selectedId?: string) =>
     costCodes.filter((cc) => (!projectId || cc.projectId === projectId) && (cc.active !== false || cc.id === selectedId));
   const costLabel = (costCodeId?: string) => {

@@ -580,6 +580,7 @@ export interface CostCode {
   id?: string;
   companyId?: string;
   projectId: string;
+  prjcode?: string;
   code: string;
   name: string;
   currencyCode?: string;

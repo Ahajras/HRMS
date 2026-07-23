@@ -21,6 +21,9 @@ public class CostCode extends AuditableEntity {
     @Column(name = "project_id", nullable = false)
     private UUID projectId;
 
+    @Column(name = "prjcode", length = 2)
+    private String prjcode;
+
     @Column(name = "code", nullable = false, length = 40)
     private String code;
 
@@ -44,6 +47,9 @@ public class CostCode extends AuditableEntity {
 
     public UUID getProjectId() { return projectId; }
     public void setProjectId(UUID projectId) { this.projectId = projectId; }
+
+    public String getPrjcode() { return prjcode; }
+    public void setPrjcode(String prjcode) { this.prjcode = prjcode; }
 
     public String getCode() { return code; }
     public void setCode(String code) { this.code = code; }

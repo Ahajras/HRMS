@@ -1357,7 +1357,7 @@ function AssignmentTab({ employeeId }: { employeeId: string }) {
   });
 
   const set = (k: keyof Assignment, v: string | boolean) => setForm({ ...form, [k]: v } as Assignment);
-  const costCodeLabel = (c: CostCode) => `${c.code} - ${c.description || c.name}${c.currencyCode ? ` · ${c.currencyCode}` : ""}`;
+  const costCodeLabel = (c: CostCode) => `${c.prjcode ? `${c.prjcode} / ` : ""}${c.code} - ${c.description || c.name}${c.currencyCode ? ` · ${c.currencyCode}` : ""}`;
 
   return (
     <Stack spacing={2} mt={1}>

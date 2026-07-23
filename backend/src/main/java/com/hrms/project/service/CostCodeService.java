@@ -61,6 +61,7 @@ public class CostCodeService {
     }
 
     private void apply(CostCodeDto dto, CostCode entity) {
+        entity.setPrjcode(normalizeNullable(dto.getPrjcode()));
         entity.setCode(normalize(dto.getCode()));
         String description = blankToNull(dto.getDescription());
         entity.setName(description != null ? description : dto.getName());
@@ -86,6 +87,7 @@ public class CostCodeService {
         dto.setId(e.getId());
         dto.setCompanyId(e.getCompanyId());
         dto.setProjectId(e.getProjectId());
+        dto.setPrjcode(e.getPrjcode());
         dto.setCode(e.getCode());
         dto.setName(e.getName());
         dto.setCurrencyCode(e.getCurrencyCode());
@@ -97,6 +99,11 @@ public class CostCodeService {
 
     private String normalize(String value) {
         return value == null ? null : value.trim().toUpperCase();
+    }
+
+    private String normalizeNullable(String value) {
+        String normalized = normalize(value);
+        return normalized == null || normalized.isBlank() ? null : normalized;
     }
 
     private String normalizeCurrency(String value) {
