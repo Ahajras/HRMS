@@ -25,7 +25,7 @@ import AddIcon from "@mui/icons-material/Add";
 import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import GroupsIcon from "@mui/icons-material/Groups";
 import SearchIcon from "@mui/icons-material/Search";
-import { crewApi, employeeApi, projectApi, shiftApi, timekeeperApi } from "../api/resources";
+import { crewApi, employeeApi, lookupApi, projectApi, shiftApi, timekeeperApi } from "../api/resources";
 import type { Crew } from "../api/types";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -330,13 +330,22 @@ function CrewMembersPanel({ crewId, projectId }: { crewId: string; projectId?: s
 function CrewTradesPanel({ crewId }: { crewId: string }) {
   const qc = useQueryClient();
   const { data: trades = [] } = useQuery({ queryKey: ["crewTrades", crewId], queryFn: () => crewApi.trades(crewId) });
-  const [code, setCode] = useState("");
-  const [name, setName] = useState("");
+  const { data: jobTitles = [] } = useQuery({ queryKey: ["lookup", "JOB_TITLE"], queryFn: () => lookupApi.byCategory("JOB_TITLE") });
+  const [jobTitleCode, setJobTitleCode] = useState("");
   const [planned, setPlanned] = useState(1);
+  const selectedJobTitle = jobTitles.find((item) => item.code === jobTitleCode);
 
   const add = useMutation({
-    mutationFn: () => crewApi.addTrade(crewId, { tradeCode: code, tradeName: name, plannedCount: planned }),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["crewTrades", crewId] }); setCode(""); setName(""); setPlanned(1); },
+    mutationFn: () => crewApi.addTrade(crewId, {
+      tradeCode: jobTitleCode,
+      tradeName: selectedJobTitle?.label ?? jobTitleCode,
+      plannedCount: planned,
+    }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["crewTrades", crewId] });
+      setJobTitleCode("");
+      setPlanned(1);
+    },
   });
   const remove = useMutation({
     mutationFn: (id: string) => crewApi.removeTrade(id),
@@ -345,12 +354,12 @@ function CrewTradesPanel({ crewId }: { crewId: string }) {
 
   return (
     <Box sx={{ mt: 2 }}>
-      <Typography variant="subtitle2" gutterBottom>Required job titles</Typography>
+      <Typography variant="subtitle2" gutterBottom>Required manpower</Typography>
       <Table size="small">
         <TableHead>
           <TableRow>
-            <TableCell>Title code</TableCell>
-            <TableCell>Title</TableCell>
+            <TableCell>Job title</TableCell>
+            <TableCell>Code</TableCell>
             <TableCell align="right">Required</TableCell>
             <TableCell align="right">Assigned</TableCell>
             <TableCell align="right" />
@@ -361,22 +370,27 @@ function CrewTradesPanel({ crewId }: { crewId: string }) {
             const ok = (t.assignedCount ?? 0) >= t.plannedCount;
             return (
               <TableRow key={t.id} sx={{ bgcolor: ok ? "#e8f5e9" : "#fff3e0" }}>
-                <TableCell>{t.tradeCode}</TableCell>
                 <TableCell>{t.tradeName ?? "-"}</TableCell>
+                <TableCell>{t.tradeCode}</TableCell>
                 <TableCell align="right">{t.plannedCount}</TableCell>
                 <TableCell align="right" sx={{ color: ok ? "success.main" : "warning.dark", fontWeight: 700 }}>{t.assignedCount ?? 0}</TableCell>
                 <TableCell align="right"><IconButton size="small" color="error" onClick={() => t.id && remove.mutate(t.id)}><DeleteIcon fontSize="small" /></IconButton></TableCell>
               </TableRow>
             );
           })}
-          {trades.length === 0 && <TableRow><TableCell colSpan={5}><Typography variant="body2" color="text.secondary">No job title requirements defined.</Typography></TableCell></TableRow>}
+          {trades.length === 0 && <TableRow><TableCell colSpan={5}><Typography variant="body2" color="text.secondary">No manpower requirements defined.</Typography></TableCell></TableRow>}
         </TableBody>
       </Table>
       <Stack direction={{ xs: "column", sm: "row" }} spacing={1} mt={1} alignItems={{ xs: "stretch", sm: "center" }}>
-        <TextField size="small" label="Title code" value={code} onChange={(e) => setCode(e.target.value)} sx={{ width: { sm: 140 } }} />
-        <TextField size="small" label="Title" value={name} onChange={(e) => setName(e.target.value)} sx={{ flex: 1 }} />
+        <TextField select size="small" label="Job title" value={jobTitleCode} onChange={(e) => setJobTitleCode(e.target.value)} sx={{ flex: 1 }}>
+          <MenuItem value="">Select job title</MenuItem>
+          {jobTitles.map((item) => (
+            <MenuItem key={item.id ?? item.code} value={item.code}>{item.label}</MenuItem>
+          ))}
+        </TextField>
+        <TextField size="small" label="Code" value={jobTitleCode || "-"} InputProps={{ readOnly: true }} sx={{ width: { sm: 140 } }} />
         <TextField size="small" type="number" label="Required" value={planned} onChange={(e) => setPlanned(Number(e.target.value))} sx={{ width: { sm: 110 } }} />
-        <Button variant="contained" size="small" disabled={!code || add.isPending} onClick={() => add.mutate()}>Add</Button>
+        <Button variant="contained" size="small" disabled={!jobTitleCode || planned < 1 || add.isPending} onClick={() => add.mutate()}>Add</Button>
       </Stack>
     </Box>
   );
