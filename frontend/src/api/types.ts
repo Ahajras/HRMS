@@ -582,6 +582,9 @@ export interface CostCode {
   projectId: string;
   code: string;
   name: string;
+  currencyCode?: string;
+  description?: string;
+  active?: boolean;
   status?: string;
 }
 

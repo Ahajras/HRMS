@@ -21,7 +21,7 @@ import {
 import PrintIcon from "@mui/icons-material/Print";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { costCodeApi, crewApi, payrollRunApi, periodApi, periodLockApi, projectApi, shiftApi, timeTypeApi, timesheetApi } from "../api/resources";
-import type { PayrollRun, Timesheet, TimesheetDay, TimesheetDayCost } from "../api/types";
+import type { CostCode, PayrollRun, Timesheet, TimesheetDay, TimesheetDayCost } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 
 const STATUS_COLOR: Record<string, "default" | "info" | "success" | "warning"> = {
@@ -63,13 +63,13 @@ function printTimesheet(
   summary: any,
   days: TimesheetDay[],
   projects: { id?: string; code: string; name: string }[],
-  costCodes: { id?: string; code: string; name: string; projectId: string }[],
+  costCodes: CostCode[],
   timeTypes: { id?: string; code: string; name: string }[],
 ) {
   const projectLabel = (id?: string) => projects.find((p) => p.id === id)?.code ?? "";
   const costLabel = (id?: string) => {
     const cc = costCodes.find((c) => c.id === id);
-    return cc ? `${cc.code} - ${cc.name}` : "";
+    return cc ? `${cc.code} - ${cc.description || cc.name}${cc.currencyCode ? ` · ${cc.currencyCode}` : ""}` : "";
   };
   const timeTypeLabel = (day: TimesheetDay) => {
     if (day.timeTypeCode) return day.timeTypeCode;
@@ -799,9 +799,12 @@ function TimesheetDetail({
   const removeCost = (idx: number, ci: number) =>
     setDays((prev) => prev.map((d, i) =>
       i === idx ? { ...d, costs: (d.costs ?? []).filter((_, j) => j !== ci) } : d));
+  const costDisplay = (cc?: CostCode) => cc ? `${cc.code} - ${cc.description || cc.name}${cc.currencyCode ? ` · ${cc.currencyCode}` : ""}` : "";
+  const costOptions = (projectId?: string, selectedId?: string) =>
+    costCodes.filter((cc) => (!projectId || cc.projectId === projectId) && (cc.active !== false || cc.id === selectedId));
   const costLabel = (costCodeId?: string) => {
     const cc = costCodes.find((c) => c.id === costCodeId);
-    return cc ? `${cc.code} ${cc.name}` : "No code";
+    return cc ? costDisplay(cc) : "No code";
   };
   const splitSummary = (d: TimesheetDay) => {
     const active = (d.costs ?? []).filter((c) => c.projectId || c.costCodeId || Number(c.hours));
@@ -989,13 +992,13 @@ function TimesheetDetail({
                       onChange={(e) => setDay(idx, { costCodeId: e.target.value || undefined })}
                       sx={{ minWidth: 160 }}>
                       <MenuItem value="">(none)</MenuItem>
-                      {costCodes.filter((cc) => !d.projectId || cc.projectId === d.projectId).map((cc) => (
-                        <MenuItem key={cc.id} value={cc.id}>{cc.code} — {cc.name}</MenuItem>
+                      {costOptions(d.projectId, d.costCodeId).map((cc) => (
+                        <MenuItem key={cc.id} value={cc.id}>{costDisplay(cc)}</MenuItem>
                       ))}
                     </TextField>
                   ) : (() => {
                     const cc = costCodes.find((c) => c.id === d.costCodeId);
-                    return cc ? `${cc.code} — ${cc.name}` : "";
+                    return costDisplay(cc);
                   })()}
                 </TableCell>
                 <TableCell>
@@ -1021,8 +1024,8 @@ function TimesheetDetail({
                         </TextField>
                         <TextField select size="small" label="Cost code" value={c.costCodeId ?? ""} disabled={!dayEditable(d)}
                           onChange={(e) => setCost(idx, ci, { costCodeId: e.target.value })} sx={{ minWidth: 160 }}>
-                          {costCodes.filter((cc) => !c.projectId || cc.projectId === c.projectId).map((cc) => (
-                            <MenuItem key={cc.id} value={cc.id}>{cc.code} — {cc.name}</MenuItem>
+                          {costOptions(c.projectId, c.costCodeId).map((cc) => (
+                            <MenuItem key={cc.id} value={cc.id}>{costDisplay(cc)}</MenuItem>
                           ))}
                         </TextField>
                         <TextField type="number" size="small" label="Hours" value={c.hours ?? 0} disabled={!dayEditable(d)}

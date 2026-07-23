@@ -2,11 +2,14 @@ import { useState } from "react";
 import {
   Box,
   Button,
+  Chip,
+  FormControlLabel,
   Grid,
   IconButton,
   MenuItem,
   Paper,
   Stack,
+  Switch,
   TextField,
   Typography,
 } from "@mui/material";
@@ -16,41 +19,101 @@ import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import { costCodeApi, projectApi, sponsorApi } from "../api/resources";
 import type { CostCode, Project } from "../api/types";
 
+const emptyCostCode = (projectId: string): CostCode => ({
+  projectId,
+  code: "",
+  name: "",
+  description: "",
+  currencyCode: "QAR",
+  active: true,
+  status: "ACTIVE",
+});
+
+const requiredFieldSx = {
+  "& .MuiOutlinedInput-notchedOutline": { borderColor: "primary.light" },
+  "& .MuiInputLabel-root": { color: "primary.main", fontWeight: 700 },
+};
+
 function CostCodesPanel({ projectId }: { projectId: string }) {
   const qc = useQueryClient();
   const { data = [] } = useQuery({ queryKey: ["costCodes", projectId], queryFn: () => costCodeApi.byProject(projectId) });
-  const [form, setForm] = useState<CostCode>({ projectId, code: "", name: "" });
+  const [form, setForm] = useState<CostCode>(emptyCostCode(projectId));
 
   const save = useMutation({
-    mutationFn: (c: CostCode) => (c.id ? costCodeApi.update(c.id, c) : costCodeApi.create(c)),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["costCodes", projectId] }); setForm({ projectId, code: "", name: "" }); },
+    mutationFn: (c: CostCode) => {
+      const description = (c.description || c.name || "").trim();
+      const payload: CostCode = {
+        ...c,
+        code: c.code.trim().toUpperCase(),
+        name: description,
+        description,
+        currencyCode: (c.currencyCode || "QAR").trim().toUpperCase(),
+        status: c.active === false ? "INACTIVE" : "ACTIVE",
+      };
+      return payload.id ? costCodeApi.update(payload.id, payload) : costCodeApi.create(payload);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["costCodes", projectId] });
+      setForm(emptyCostCode(projectId));
+    },
   });
   const del = useMutation({
     mutationFn: (id: string) => costCodeApi.remove(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["costCodes", projectId] }),
   });
 
+  const sorted = [...data].sort((a, b) => a.code.localeCompare(b.code));
+  const canSave = Boolean(form.code?.trim() && (form.description || form.name)?.trim());
+
   return (
-    <Box sx={{ mt: 1.5, p: 1.5, bgcolor: "action.hover", borderRadius: 1 }}>
-      <Typography variant="subtitle2" gutterBottom>Cost codes</Typography>
-      {data.length === 0 && <Typography variant="body2" color="text.secondary">No cost codes yet.</Typography>}
-      {data.map((c) => (
-        <Stack key={c.id} direction="row" alignItems="center" justifyContent="space-between" sx={{ py: 0.5, borderTop: 1, borderColor: "divider" }}>
-          <Typography variant="body2"><b>{c.code}</b> — {c.name}</Typography>
-          <Box>
-            <Button size="small" onClick={() => setForm(c)}>Edit</Button>
-            <IconButton size="small" color="error" onClick={() => c.id && del.mutate(c.id)}><DeleteIcon fontSize="small" /></IconButton>
-          </Box>
-        </Stack>
-      ))}
-      <Stack direction="row" spacing={1.5} sx={{ mt: 1.5 }}>
-        <TextField size="small" label="Code" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} sx={{ width: 140 }} />
-        <TextField size="small" label="Name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} sx={{ flex: 1 }} />
-        <Button variant="contained" size="small" disabled={!form.code || !form.name || save.isPending} onClick={() => save.mutate(form)}>
-          {form.id ? "Update" : "Add"}
-        </Button>
-        {form.id && <Button size="small" onClick={() => setForm({ projectId, code: "", name: "" })}>Cancel</Button>}
-      </Stack>
+    <Box sx={{ mt: 1.5 }}>
+      <Grid container spacing={1.5}>
+        <Grid item xs={12} md={7}>
+          <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
+            <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+              <Box>
+                <Typography variant="subtitle2">Cost codes</Typography>
+                <Typography variant="caption" color="text.secondary">Legacy chart: account code, currency, description, and active flag.</Typography>
+              </Box>
+              <Chip size="small" label={`${sorted.filter((c) => c.active !== false).length} active`} color="primary" variant="outlined" />
+            </Stack>
+            {sorted.length === 0 && <Typography variant="body2" color="text.secondary">No cost codes yet.</Typography>}
+            {sorted.map((c) => (
+              <Stack key={c.id} direction="row" alignItems="center" justifyContent="space-between" sx={{ py: 1, borderTop: 1, borderColor: "divider" }}>
+                <Box>
+                  <Stack direction="row" alignItems="center" spacing={1}>
+                    <Typography variant="body2" fontWeight={800}>{c.code}</Typography>
+                    <Chip size="small" label={c.currencyCode || "QAR"} variant="outlined" />
+                    <Chip size="small" label={c.active === false ? "Inactive" : "Active"} color={c.active === false ? "default" : "success"} />
+                  </Stack>
+                  <Typography variant="body2" color="text.secondary">{c.description || c.name}</Typography>
+                </Box>
+                <Box>
+                  <Button size="small" onClick={() => setForm({ ...c, description: c.description || c.name, active: c.active !== false })}>Edit</Button>
+                  <IconButton size="small" color="error" onClick={() => c.id && del.mutate(c.id)}><DeleteIcon fontSize="small" /></IconButton>
+                </Box>
+              </Stack>
+            ))}
+          </Paper>
+        </Grid>
+        <Grid item xs={12} md={5}>
+          <Paper variant="outlined" sx={{ p: 1.5, borderRadius: 2 }}>
+            <Typography variant="subtitle2" gutterBottom>{form.id ? "Edit cost code" : "Add cost code"}</Typography>
+            <Stack spacing={1.5}>
+              <TextField size="small" label="Account code *" value={form.code} onChange={(e) => setForm({ ...form, code: e.target.value })} sx={requiredFieldSx} />
+              <TextField size="small" label="Description *" value={form.description || form.name || ""} onChange={(e) => setForm({ ...form, description: e.target.value, name: e.target.value })} sx={requiredFieldSx} />
+              <TextField size="small" label="Currency code" value={form.currencyCode || "QAR"} onChange={(e) => setForm({ ...form, currencyCode: e.target.value })} inputProps={{ maxLength: 10 }} />
+              <FormControlLabel control={<Switch checked={form.active !== false} onChange={(e) => setForm({ ...form, active: e.target.checked, status: e.target.checked ? "ACTIVE" : "INACTIVE" })} />} label="Active" />
+              <Stack direction="row" spacing={1}>
+                <Button variant="contained" size="small" disabled={!canSave || save.isPending} onClick={() => save.mutate(form)}>
+                  {form.id ? "Update" : "Add"}
+                </Button>
+                {form.id && <Button size="small" onClick={() => setForm(emptyCostCode(projectId))}>Cancel</Button>}
+              </Stack>
+            </Stack>
+          </Paper>
+        </Grid>
+      </Grid>
     </Box>
   );
 }
@@ -101,7 +164,7 @@ export default function ProjectsPage() {
         <Paper key={p.id} variant="outlined" sx={{ p: 1.5, borderRadius: 2, mb: 1.5 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between">
             <Box>
-              <Typography fontWeight={600}>{p.code} — {p.name}</Typography>
+              <Typography fontWeight={600}>{p.code} - {p.name}</Typography>
               <Typography variant="caption" color="text.secondary">{p.status}</Typography>
             </Box>
             <Box>

@@ -62,6 +62,7 @@ import type {
   Assignment,
   Contract,
   ContractPayItem,
+  CostCode,
   Employee,
   EmployeeBankAccount,
   EmployeeDocument,
@@ -1356,6 +1357,7 @@ function AssignmentTab({ employeeId }: { employeeId: string }) {
   });
 
   const set = (k: keyof Assignment, v: string | boolean) => setForm({ ...form, [k]: v } as Assignment);
+  const costCodeLabel = (c: CostCode) => `${c.code} - ${c.description || c.name}${c.currencyCode ? ` · ${c.currencyCode}` : ""}`;
 
   return (
     <Stack spacing={2} mt={1}>
@@ -1394,7 +1396,9 @@ function AssignmentTab({ employeeId }: { employeeId: string }) {
         </Grid>
         <Grid item xs={12} sm={6}>
           <SelectField label="Cost Code" value={form.costCodeId} onChange={(v) => set("costCodeId", v)}
-            options={costCodes.map((c) => ({ value: c.id!, label: `${c.code} — ${c.name}` }))} />
+            options={costCodes
+              .filter((c) => c.active !== false || c.id === form.costCodeId)
+              .map((c) => ({ value: c.id!, label: costCodeLabel(c) }))} />
         </Grid>
         <Grid item xs={12} sm={4}>
           <TextField fullWidth label="Effective From" type="date" InputLabelProps={{ shrink: true }}

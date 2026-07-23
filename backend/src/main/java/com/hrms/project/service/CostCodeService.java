@@ -61,11 +61,24 @@ public class CostCodeService {
     }
 
     private void apply(CostCodeDto dto, CostCode entity) {
-        entity.setCode(dto.getCode());
-        entity.setName(dto.getName());
-        if (dto.getStatus() != null) {
-            entity.setStatus(dto.getStatus());
+        entity.setCode(normalize(dto.getCode()));
+        String description = blankToNull(dto.getDescription());
+        entity.setName(description != null ? description : dto.getName());
+        entity.setCurrencyCode(normalizeCurrency(dto.getCurrencyCode()));
+        entity.setDescription(description);
+
+        String status = normalize(dto.getStatus());
+        Boolean active = dto.getActive();
+        if (status == null && active == null) {
+            status = "ACTIVE";
+            active = true;
+        } else if (status == null) {
+            status = active ? "ACTIVE" : "INACTIVE";
+        } else if (active == null) {
+            active = "ACTIVE".equalsIgnoreCase(status);
         }
+        entity.setStatus(status);
+        entity.setActive(active);
     }
 
     private CostCodeDto toDto(CostCode e) {
@@ -75,7 +88,26 @@ public class CostCodeService {
         dto.setProjectId(e.getProjectId());
         dto.setCode(e.getCode());
         dto.setName(e.getName());
+        dto.setCurrencyCode(e.getCurrencyCode());
+        dto.setDescription(e.getDescription());
+        dto.setActive(e.getActive());
         dto.setStatus(e.getStatus());
         return dto;
+    }
+
+    private String normalize(String value) {
+        return value == null ? null : value.trim().toUpperCase();
+    }
+
+    private String normalizeCurrency(String value) {
+        String normalized = normalize(value);
+        return normalized == null || normalized.isBlank() ? "QAR" : normalized;
+    }
+
+    private String blankToNull(String value) {
+        if (value == null || value.trim().isBlank()) {
+            return null;
+        }
+        return value.trim();
     }
 }

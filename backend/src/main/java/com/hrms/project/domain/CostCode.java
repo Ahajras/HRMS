@@ -27,6 +27,15 @@ public class CostCode extends AuditableEntity {
     @Column(name = "name", nullable = false, length = 200)
     private String name;
 
+    @Column(name = "currency_code", length = 10)
+    private String currencyCode = "QAR";
+
+    @Column(name = "description", length = 200)
+    private String description;
+
+    @Column(name = "active")
+    private Boolean active = true;
+
     @Column(name = "status", nullable = false, length = 20)
     private String status = "ACTIVE";
 
@@ -41,6 +50,15 @@ public class CostCode extends AuditableEntity {
 
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
+
+    public String getCurrencyCode() { return currencyCode; }
+    public void setCurrencyCode(String currencyCode) { this.currencyCode = currencyCode; }
+
+    public String getDescription() { return description; }
+    public void setDescription(String description) { this.description = description; }
+
+    public Boolean getActive() { return active; }
+    public void setActive(Boolean active) { this.active = active; }
 
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
