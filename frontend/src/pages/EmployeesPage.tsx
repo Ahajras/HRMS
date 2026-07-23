@@ -14,6 +14,7 @@ import {
   IconButton,
   InputAdornment,
   MenuItem,
+  Pagination,
   Paper,
   Stack,
   Tab,
@@ -34,6 +35,8 @@ import PrintIcon from "@mui/icons-material/Print";
 import SearchIcon from "@mui/icons-material/Search";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
 import SmartToyIcon from "@mui/icons-material/SmartToy";
+import GridViewIcon from "@mui/icons-material/GridView";
+import TableRowsIcon from "@mui/icons-material/TableRows";
 import {
   assignmentApi,
   bankApi,
@@ -1427,6 +1430,7 @@ function AssignmentTab({ employeeId }: { employeeId: string }) {
 export default function EmployeesPage() {
   const qc = useQueryClient();
   const [pagination, setPagination] = useState<GridPaginationModel>({ page: 0, pageSize: 20 });
+  const [viewMode, setViewMode] = useState<"cards" | "table">("cards");
   const [search, setSearch] = useState("");
   const [debounced, setDebounced] = useState("");
   const [payFilter, setPayFilter] = useState("");
@@ -1558,6 +1562,14 @@ export default function EmployeesPage() {
   const set = (k: keyof Employee, v: string) => setForm((current) => ({ ...current, [k]: v }));
   const openNew = () => { setForm(EMPTY); setWpsDocType("RESIDENCE_ID"); setWpsDocNumber(""); setWpsDocExpiry(""); setTab(0); setOpen(true); };
   const openExisting = (e: Employee) => { setForm(e); setWpsDocType("RESIDENCE_ID"); setWpsDocNumber(""); setWpsDocExpiry(""); setTab(0); setOpen(true); };
+  const employees = data?.content ?? [];
+  const totalEmployees = data?.totalElements ?? 0;
+  const pageCount = Math.max(1, Math.ceil(totalEmployees / pagination.pageSize));
+  const pageStart = totalEmployees === 0 ? 0 : pagination.page * pagination.pageSize + 1;
+  const pageEnd = Math.min(totalEmployees, (pagination.page + 1) * pagination.pageSize);
+  const cardInitials = (e: Employee) => `${e.firstName?.[0] ?? ""}${e.lastName?.[0] ?? ""}`.toUpperCase() || "?";
+  const employeeName = (e: Employee) => [e.firstName, e.middleName, e.lastName].filter(Boolean).join(" ") || e.employeeNumber;
+  const statusColor = (status?: string) => (status?.toUpperCase() === "ACTIVE" ? "success" : "default");
 
   const { data: headerCrew } = useQuery({
     queryKey: ["crewByEmp", form.id],
@@ -1673,6 +1685,20 @@ export default function EmployeesPage() {
         ))}
       </Tabs>
 
+      <Stack direction={{ xs: "column", sm: "row" }} justifyContent="space-between" alignItems={{ xs: "stretch", sm: "center" }} spacing={1} mb={1}>
+        <Typography variant="body2" color="text.secondary">
+          Showing {pageStart}-{pageEnd} of {totalEmployees} employee(s), 20 per page.
+        </Typography>
+        <Stack direction="row" spacing={1} justifyContent="flex-end">
+          <Button size="small" variant={viewMode === "cards" ? "contained" : "outlined"} startIcon={<GridViewIcon />} onClick={() => setViewMode("cards")}>
+            Cards
+          </Button>
+          <Button size="small" variant={viewMode === "table" ? "contained" : "outlined"} startIcon={<TableRowsIcon />} onClick={() => setViewMode("table")}>
+            Table
+          </Button>
+        </Stack>
+      </Stack>
+
       <TextField
         fullWidth
         size="small"
@@ -1696,20 +1722,109 @@ export default function EmployeesPage() {
         }}
       />
 
+      {viewMode === "cards" && (
+        <Stack spacing={2} mb={2}>
+          <Grid container spacing={2}>
+            {employees.map((employee) => (
+              <Grid item xs={12} sm={6} lg={4} xl={3} key={employee.id ?? employee.employeeNumber}>
+                <Paper
+                  variant="outlined"
+                  onClick={() => openExisting(employee)}
+                  sx={{
+                    p: 2,
+                    height: "100%",
+                    cursor: "pointer",
+                    borderRadius: 2.5,
+                    transition: "border-color .15s ease, box-shadow .15s ease, transform .15s ease",
+                    "&:hover": {
+                      borderColor: "primary.main",
+                      boxShadow: "0 14px 32px rgba(15, 23, 42, 0.10)",
+                      transform: "translateY(-2px)",
+                    },
+                  }}
+                >
+                  <Stack spacing={1.5}>
+                    <Stack direction="row" spacing={1.5} alignItems="center">
+                      <Avatar src={employee.photoUrl || undefined} sx={{ width: 50, height: 50, bgcolor: "primary.main", fontWeight: 800 }}>
+                        {cardInitials(employee)}
+                      </Avatar>
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="subtitle1" fontWeight={800} noWrap>{employeeName(employee)}</Typography>
+                        <Typography variant="body2" color="text.secondary" noWrap>#{employee.employeeNumber}</Typography>
+                      </Box>
+                    </Stack>
+
+                    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
+                      {employee.payStatus && <Chip size="small" label={employee.payStatus} color="primary" variant="outlined" />}
+                      {employee.status && <Chip size="small" label={employee.status} color={statusColor(employee.status)} />}
+                    </Stack>
+
+                    <Divider />
+
+                    <Grid container spacing={1}>
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">Hire date</Typography>
+                        <Typography variant="body2" fontWeight={600}>{employee.hireDate || "-"}</Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">Job title</Typography>
+                        <Typography variant="body2" fontWeight={600} noWrap>{employee.jobTitle || "-"}</Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">Supervisor</Typography>
+                        <Typography variant="body2" fontWeight={600} noWrap>{employee.supervisorName || "-"}</Typography>
+                      </Grid>
+                      <Grid item xs={6}>
+                        <Typography variant="caption" color="text.secondary">Timekeeper</Typography>
+                        <Typography variant="body2" fontWeight={600} noWrap>{employee.timekeeperName || "-"}</Typography>
+                      </Grid>
+                    </Grid>
+
+                    <Button size="small" variant="text" sx={{ alignSelf: "flex-start", px: 0 }} onClick={(event) => { event.stopPropagation(); openExisting(employee); }}>
+                      Open profile
+                    </Button>
+                  </Stack>
+                </Paper>
+              </Grid>
+            ))}
+          </Grid>
+
+          {!isLoading && employees.length === 0 && (
+            <Paper variant="outlined" sx={{ p: 4, textAlign: "center", borderStyle: "dashed" }}>
+              <Typography color="text.secondary">No employees found.</Typography>
+            </Paper>
+          )}
+
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems="center" justifyContent="space-between">
+            <Typography variant="body2" color="text.secondary">
+              {pageStart}-{pageEnd} of {totalEmployees} employee(s)
+            </Typography>
+            <Pagination
+              color="primary"
+              count={pageCount}
+              page={pagination.page + 1}
+              onChange={(_, page) => setPagination((p) => ({ ...p, page: page - 1 }))}
+            />
+          </Stack>
+        </Stack>
+      )}
+
+      {viewMode === "table" && (
       <div style={{ height: 600, width: "100%" }}>
         <DataGrid
-          rows={data?.content ?? []}
+          rows={employees}
           columns={columns}
           loading={isLoading}
           getRowId={(r) => r.id ?? r.employeeNumber}
-          rowCount={data?.totalElements ?? 0}
+          rowCount={totalEmployees}
           paginationMode="server"
           paginationModel={pagination}
           onPaginationModelChange={setPagination}
-          pageSizeOptions={[10, 20, 50]}
+          pageSizeOptions={[20, 50, 100]}
           onRowClick={(p) => openExisting(p.row as Employee)}
         />
       </div>
+      )}
 
       <Dialog open={open} onClose={() => setOpen(false)} fullWidth maxWidth="md">
         <Box sx={{
