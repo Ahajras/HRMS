@@ -1,5 +1,6 @@
 package com.hrms.employee.service;
 
+import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.employee.domain.EmployeeDocument;
 import com.hrms.employee.dto.EmployeeDocumentDto;
@@ -8,6 +9,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.time.LocalDate;
 import java.util.UUID;
 
 /**
@@ -57,6 +59,9 @@ public class EmployeeDocumentService {
     }
 
     private void apply(EmployeeDocumentDto dto, EmployeeDocument entity) {
+        if (dto.getExpiryDate() != null && dto.getExpiryDate().isBefore(LocalDate.now())) {
+            throw new BusinessRuleException("DOCUMENT_EXPIRED", "This document is already expired.");
+        }
         entity.setDocumentType(dto.getDocumentType());
         entity.setDocumentNumber(dto.getDocumentNumber());
         entity.setIssuingCountryCode(dto.getIssuingCountryCode());

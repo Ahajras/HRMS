@@ -177,6 +177,9 @@ export const ruleApi = {
 export const lookupApi = {
   byCategory: (category: string) =>
     api.get<LookupValue[]>("/lookups", { params: { category } }).then((r) => r.data),
+  create: (d: LookupValue) => api.post<LookupValue>("/lookups", d).then((r) => r.data),
+  update: (id: string, d: LookupValue) => api.put<LookupValue>(`/lookups/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/lookups/${id}`).then(() => undefined),
 };
 
 // --- Banks ---

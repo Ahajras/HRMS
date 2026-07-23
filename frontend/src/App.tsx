@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { Box, CircularProgress } from "@mui/material";
 import AppLayout from "./components/AppLayout";
 import EmployeesPage from "./pages/EmployeesPage";
+import EmployeeSetupPage from "./pages/EmployeeSetupPage";
 import OrganizationPage from "./pages/OrganizationPage";
 import OrgUnitTypesPage from "./pages/OrgUnitTypesPage";
 import PayrollComponentsPage from "./pages/PayrollComponentsPage";
@@ -65,6 +66,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/employees" replace />} />
         <Route path="/login" element={<Navigate to="/employees" replace />} />
         <Route path="/employees" element={<EmployeesPage />} />
+        <Route path="/employee-setup" element={<EmployeeSetupPage />} />
         <Route path="/organization" element={<OrganizationPage />} />
         <Route path="/org-unit-types" element={<OrgUnitTypesPage />} />
         <Route path="/payroll-components" element={<PayrollComponentsPage />} />

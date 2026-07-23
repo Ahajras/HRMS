@@ -46,6 +46,7 @@ import CalendarMonthIcon from "@mui/icons-material/CalendarMonth";
 import GroupsIcon from "@mui/icons-material/Groups";
 import AttachMoneyIcon from "@mui/icons-material/AttachMoney";
 import ManageAccountsIcon from "@mui/icons-material/ManageAccounts";
+import BadgeIcon from "@mui/icons-material/Badge";
 import SecurityIcon from "@mui/icons-material/Security";
 import BuildIcon from "@mui/icons-material/Build";
 import ImportExportIcon from "@mui/icons-material/ImportExport";
@@ -224,6 +225,7 @@ const NAV_GROUPS: NavGroup[] = [
     items: [
       { to: "/users", label: "Users", icon: <ManageAccountsIcon />, authority: "security.user.read" },
       { to: "/roles", label: "Roles", icon: <SecurityIcon />, authority: "security.role.read" },
+      { to: "/employee-setup", label: "Employee Setup", icon: <BadgeIcon />, authority: "employee.read" },
       { to: "/legacy-import", label: "Legacy Import", icon: <ImportExportIcon />, authority: "employee.read" },
       { to: "/audit-tools", label: "Audit Tools", icon: <BuildIcon />, authority: "audit.tools" },
     ],

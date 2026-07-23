@@ -78,6 +78,7 @@ const EMPTY: Employee = {
   paymentMethodCode: "BANK",
 };
 const DOC_EXPIRY_ALERTS_STORAGE_KEY = "hrms.employeeDocumentExpiryAlertDays";
+const EMPLOYEE_ALERT_SETTING_CATEGORY = "EMPLOYEE_DOCUMENT_ALERT_SETTING";
 
 // --- shared hooks for dropdown sources ---------------------------------
 function useLookup(category: string) {
@@ -431,8 +432,9 @@ const EMPTY_DOC = (employeeId: string): EmployeeDocument => ({
 function DocumentsTab({ employeeId }: { employeeId: string }) {
   const qc = useQueryClient();
   const docTypes = useLookup("DOCUMENT_TYPE");
+  const alertSettings = useLookup(EMPLOYEE_ALERT_SETTING_CATEGORY);
   const countries = useCountries();
-  const [alertDaysText, setAlertDaysText] = useState(() => localStorage.getItem(DOC_EXPIRY_ALERTS_STORAGE_KEY) || "60,30,7");
+  const alertDaysText = alertSettings.find((s) => s.code === "ALERT_DAYS")?.label || localStorage.getItem(DOC_EXPIRY_ALERTS_STORAGE_KEY) || "60,30,7";
   const alertDays = alertDaysText.split(",").map((v) => Number(v.trim())).filter((v) => Number.isFinite(v) && v >= 0).sort((a, b) => b - a);
   const typeLabel = (code: string) => docTypes.find((d) => d.code === code)?.label ?? code;
   const { data = [] } = useQuery({ queryKey: ["docs", employeeId], queryFn: () => employeeDocumentApi.byEmployee(employeeId) });
@@ -452,6 +454,8 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
     if (matched !== undefined) return { label: `Expires in ${days} day(s)`, color: days <= 7 ? "error" as const : "warning" as const };
     return { label: `Valid ${days} day(s)`, color: "success" as const };
   };
+  const expiryDays = daysUntil(form.expiryDate);
+  const expiredBeforeToday = expiryDays !== undefined && expiryDays < 0;
 
   const save = useMutation({
     mutationFn: (d: EmployeeDocument) => (d.id ? employeeDocumentApi.update(d.id, d) : employeeDocumentApi.create(d)),
@@ -466,24 +470,6 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
 
   return (
     <Stack spacing={2} mt={1}>
-      <Paper variant="outlined" sx={{ p: 1.5, bgcolor: "#f8fafc" }}>
-        <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ xs: "stretch", sm: "center" }}>
-          <Box sx={{ flex: 1 }}>
-            <Typography fontWeight={900}>Document expiry alerts</Typography>
-            <Typography variant="body2" color="text.secondary">
-              Admin alert checkpoints. Example: 60,30,7 means alert before two months, one month, and one week.
-            </Typography>
-          </Box>
-          <TextField
-            label="Alert days"
-            value={alertDaysText}
-            onChange={(e) => setAlertDaysText(e.target.value)}
-            onBlur={() => localStorage.setItem(DOC_EXPIRY_ALERTS_STORAGE_KEY, alertDaysText)}
-            helperText="Comma separated"
-            sx={{ minWidth: 220 }}
-          />
-        </Stack>
-      </Paper>
       {data.map((d) => (
         <Paper key={d.id} variant="outlined" sx={{ p: 1.5 }}>
           <Stack direction="row" alignItems="center" justifyContent="space-between">
@@ -527,14 +513,17 @@ function DocumentsTab({ employeeId }: { employeeId: string }) {
         </Grid>
         <Grid item xs={12} sm={4}>
           <TextField fullWidth required label="Expiry Date" type="date" InputLabelProps={{ shrink: true }}
-            value={form.expiryDate ?? ""} onChange={(e) => set("expiryDate", e.target.value)} sx={requiredFieldSx(!form.expiryDate)} helperText="Required for admin expiry alerts" />
+            value={form.expiryDate ?? ""} onChange={(e) => set("expiryDate", e.target.value)}
+            error={expiredBeforeToday}
+            sx={requiredFieldSx(!form.expiryDate || expiredBeforeToday)}
+            helperText={expiredBeforeToday ? "This document is already expired." : "Required for admin expiry alerts"} />
         </Grid>
         <Grid item xs={12} sm={4}>
           <TextField fullWidth label="Issuing Authority" value={form.issuingAuthority ?? ""} onChange={(e) => set("issuingAuthority", e.target.value)} />
         </Grid>
         <Grid item xs={12}>
           <Stack direction="row" spacing={1}>
-            <Button variant="contained" disabled={!form.documentType || !form.documentNumber || !form.expiryDate || save.isPending}
+            <Button variant="contained" disabled={!form.documentType || !form.documentNumber || !form.expiryDate || expiredBeforeToday || save.isPending}
               onClick={() => save.mutate(form)}>{form.id ? "Update" : "Add"}</Button>
             {form.id && <Button onClick={() => setForm(EMPTY_DOC(employeeId))}>Cancel</Button>}
           </Stack>
