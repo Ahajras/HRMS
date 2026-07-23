@@ -20,9 +20,12 @@ import java.util.UUID;
 public class EmployeeDocumentService {
 
     private final EmployeeDocumentRepository repository;
+    private final DocumentExpiryNotificationService notificationService;
 
-    public EmployeeDocumentService(EmployeeDocumentRepository repository) {
+    public EmployeeDocumentService(EmployeeDocumentRepository repository,
+                                   DocumentExpiryNotificationService notificationService) {
         this.repository = repository;
+        this.notificationService = notificationService;
     }
 
     @Transactional(readOnly = true)
@@ -40,13 +43,17 @@ public class EmployeeDocumentService {
         EmployeeDocument entity = new EmployeeDocument();
         entity.setEmployeeId(dto.getEmployeeId());
         apply(dto, entity);
-        return toDto(repository.save(entity));
+        EmployeeDocument saved = repository.saveAndFlush(entity);
+        notificationService.sendIfDue(saved.getId());
+        return toDto(saved);
     }
 
     public EmployeeDocumentDto update(UUID id, EmployeeDocumentDto dto) {
         EmployeeDocument entity = getEntity(id);
         apply(dto, entity);
-        return toDto(repository.save(entity));
+        EmployeeDocument saved = repository.saveAndFlush(entity);
+        notificationService.sendIfDue(saved.getId());
+        return toDto(saved);
     }
 
     public void delete(UUID id) {

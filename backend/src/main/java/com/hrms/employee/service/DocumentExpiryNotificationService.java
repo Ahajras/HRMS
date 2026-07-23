@@ -15,6 +15,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -57,6 +58,26 @@ public class DocumentExpiryNotificationService {
         }
     }
 
+    public void sendIfDue(UUID documentId) {
+        String host = environment.getProperty("spring.mail.host");
+        if (!StringUtils.hasText(host) || documentId == null) {
+            return;
+        }
+        try {
+            findDocument(documentId).ifPresent(row -> {
+                UUID companyId = row.companyId();
+                Set<Integer> alertDaySet = new LinkedHashSet<>(alertDays(companyId));
+                long daysLeft = ChronoUnit.DAYS.between(LocalDate.now(), row.expiryDate());
+                if (daysLeft < 0 || !alertDaySet.contains((int) daysLeft)) {
+                    return;
+                }
+                sendRows(companyId, List.of(row));
+            });
+        } catch (Exception ex) {
+            log.warn("Could not send document expiry notification for document {}", documentId, ex);
+        }
+    }
+
     private void sendForCompany(UUID companyId) {
         List<Integer> alertDays = alertDays(companyId);
         Set<String> roleCodes = alertRoleCodes(companyId);
@@ -67,7 +88,9 @@ public class DocumentExpiryNotificationService {
         int maxDays = alertDays.stream().mapToInt(Integer::intValue).max().orElse(0);
         LocalDate today = LocalDate.now();
         List<DocumentExpiryRow> rows = jdbc.query("""
-                select e.employee_number,
+                select d.id as document_id,
+                       e.company_id,
+                       e.employee_number,
                        trim(coalesce(e.first_name, '') || ' ' || coalesce(e.last_name, '')) as employee_name,
                        d.document_type,
                        d.document_number,
@@ -81,6 +104,8 @@ public class DocumentExpiryNotificationService {
                   and d.expiry_date between ? and ?
                 order by d.expiry_date, e.employee_number, d.document_type
                 """, (rs, rowNum) -> new DocumentExpiryRow(
+                (UUID) rs.getObject("document_id"),
+                (UUID) rs.getObject("company_id"),
                 rs.getString("employee_number"),
                 rs.getString("employee_name"),
                 rs.getString("document_type"),
@@ -95,6 +120,14 @@ public class DocumentExpiryNotificationService {
         if (dueRows.isEmpty()) {
             return;
         }
+        sendRows(companyId, dueRows);
+    }
+
+    private void sendRows(UUID companyId, List<DocumentExpiryRow> dueRows) {
+        Set<String> roleCodes = alertRoleCodes(companyId);
+        if (roleCodes.isEmpty()) {
+            return;
+        }
 
         List<String> recipients = recipients(companyId, roleCodes);
         if (recipients.isEmpty()) {
@@ -103,14 +136,22 @@ public class DocumentExpiryNotificationService {
         }
 
         String subject = "HRMS document expiry alert";
-        String body = buildBody(today, dueRows);
+        LocalDate today = LocalDate.now();
         for (String recipient : recipients) {
+            List<DocumentExpiryRow> unsentRows = dueRows.stream()
+                    .filter(row -> !alreadySent(row, recipient, today))
+                    .toList();
+            if (unsentRows.isEmpty()) {
+                continue;
+            }
             try {
                 SimpleMailMessage message = new SimpleMailMessage();
                 message.setTo(recipient);
                 message.setSubject(subject);
-                message.setText(body);
+                message.setText(buildBody(today, unsentRows));
                 mailSender.send(message);
+                unsentRows.forEach(row -> markSent(row, recipient, today));
+                log.info("Sent document expiry alert to {} for {} document(s)", recipient, unsentRows.size());
             } catch (Exception ex) {
                 log.warn("Could not send document expiry alert to {}", recipient, ex);
             }
@@ -136,6 +177,34 @@ public class DocumentExpiryNotificationService {
                 .filter(StringUtils::hasText)
                 .map(String::toUpperCase)
                 .collect(Collectors.toCollection(LinkedHashSet::new));
+    }
+
+    private Optional<DocumentExpiryRow> findDocument(UUID documentId) {
+        List<DocumentExpiryRow> rows = jdbc.query("""
+                select d.id as document_id,
+                       e.company_id,
+                       e.employee_number,
+                       trim(coalesce(e.first_name, '') || ' ' || coalesce(e.last_name, '')) as employee_name,
+                       d.document_type,
+                       d.document_number,
+                       d.expiry_date
+                from employee_document d
+                join employee e on e.id = d.employee_id
+                where d.id = ?
+                  and e.company_id is not null
+                  and upper(coalesce(e.status, '')) = 'ACTIVE'
+                  and upper(coalesce(d.status, '')) = 'ACTIVE'
+                  and d.expiry_date is not null
+                """, (rs, rowNum) -> new DocumentExpiryRow(
+                (UUID) rs.getObject("document_id"),
+                (UUID) rs.getObject("company_id"),
+                rs.getString("employee_number"),
+                rs.getString("employee_name"),
+                rs.getString("document_type"),
+                rs.getString("document_number"),
+                rs.getDate("expiry_date").toLocalDate()
+        ), documentId);
+        return rows.stream().findFirst();
     }
 
     private String setting(UUID companyId, String code, String fallback) {
@@ -186,6 +255,29 @@ public class DocumentExpiryNotificationService {
         return body.toString();
     }
 
+    private boolean alreadySent(DocumentExpiryRow row, String recipient, LocalDate today) {
+        int daysLeft = (int) ChronoUnit.DAYS.between(today, row.expiryDate());
+        Integer count = jdbc.queryForObject("""
+                select count(*)
+                from employee_document_notification_log
+                where employee_document_id = ?
+                  and alert_days = ?
+                  and lower(recipient_email) = lower(?)
+                  and notified_on = ?
+                """, Integer.class, row.documentId(), daysLeft, recipient, today);
+        return count != null && count > 0;
+    }
+
+    private void markSent(DocumentExpiryRow row, String recipient, LocalDate today) {
+        int daysLeft = (int) ChronoUnit.DAYS.between(today, row.expiryDate());
+        jdbc.update("""
+                insert into employee_document_notification_log
+                    (company_id, employee_document_id, alert_days, recipient_email, notified_on)
+                values (?, ?, ?, ?, ?)
+                on conflict (employee_document_id, alert_days, recipient_email, notified_on) do nothing
+                """, row.companyId(), row.documentId(), daysLeft, recipient, today);
+    }
+
     private Integer parseIntOrNull(String value) {
         try {
             return Integer.parseInt(value);
@@ -194,7 +286,7 @@ public class DocumentExpiryNotificationService {
         }
     }
 
-    private record DocumentExpiryRow(String employeeNumber, String employeeName, String documentType,
+    private record DocumentExpiryRow(UUID documentId, UUID companyId, String employeeNumber, String employeeName, String documentType,
                                      String documentNumber, LocalDate expiryDate) {
     }
 }
