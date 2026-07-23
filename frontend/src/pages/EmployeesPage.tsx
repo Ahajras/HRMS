@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   Alert,
+  Autocomplete,
   Avatar,
   Box,
   Button,
@@ -32,6 +33,7 @@ import DeleteIcon from "@mui/icons-material/DeleteOutline";
 import PrintIcon from "@mui/icons-material/Print";
 import SearchIcon from "@mui/icons-material/Search";
 import PhotoCameraIcon from "@mui/icons-material/PhotoCamera";
+import SmartToyIcon from "@mui/icons-material/SmartToy";
 import {
   assignmentApi,
   bankApi,
@@ -73,6 +75,7 @@ const EMPTY: Employee = {
   lastName: "",
   hireDate: new Date().toISOString().slice(0, 10),
   status: "ACTIVE",
+  paymentMethodCode: "BANK",
 };
 
 // --- shared hooks for dropdown sources ---------------------------------
@@ -125,10 +128,12 @@ function SelectField(props: {
   options: { value: string; label: string }[];
   allowEmpty?: boolean;
   required?: boolean;
+  sx?: object;
+  helperText?: string;
 }) {
-  const { label, value, onChange, options, allowEmpty = true, required = false } = props;
+  const { label, value, onChange, options, allowEmpty = true, required = false, sx, helperText } = props;
   return (
-    <TextField select fullWidth required={required} label={label} value={value ?? ""} onChange={(e) => onChange(e.target.value)}>
+    <TextField select fullWidth required={required} label={label} value={value ?? ""} onChange={(e) => onChange(e.target.value)} sx={sx} helperText={helperText}>
       {allowEmpty && (
         <MenuItem value="">
           <em>—</em>
@@ -153,6 +158,8 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
   const payStatuses = useLookup("PAY_STATUS");
   const paymentMethods = useLookup("PAYMENT_METHOD");
   const bands = useLookup("BAND");
+  const airports = useLookup("AIRPORT");
+  const jobTitles = useLookup("JOB_TITLE");
   const { data: otCategories = [] } = useQuery({ queryKey: ["overtimeCategories"], queryFn: overtimeCategoryApi.list });
   const otCategoryOpts = otCategories.map((c) => ({
     value: c.code,
@@ -162,6 +169,21 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
 
   const countryOpts = countries.map((c) => ({ value: c.code, label: c.name }));
   const lk = (rows: { code: string; label: string }[]) => rows.map((r) => ({ value: r.code, label: r.label }));
+  const airportOpts = lk(airports);
+  const jobTitleOpts = lk(jobTitles);
+  const missingRequired = [
+    !form.employeeNumber?.trim() ? "Employee Number identifies the employee in payroll, timesheets, and imports." : "",
+    !form.firstName?.trim() ? "First Name is required for employee records and approvals." : "",
+    !form.lastName?.trim() ? "Last Name is required for employee records and payslips." : "",
+    !form.status?.trim() ? "Status controls whether the employee is active for payroll and timesheets." : "",
+    !form.payStatus?.trim() ? "Pay Status is required so payroll can pick the correct payroll rule." : "",
+    !form.paymentMethodCode?.trim() ? "Payment Method is required for salary payment and WPS/SIF output." : "",
+    !form.hireDate?.trim() ? "Hire Date is required for leave, ticket, and provision entitlement." : "",
+    !form.workAirportCode?.trim() ? "Work airport is required for ticket route calculation." : "",
+    !form.homeAirportCode?.trim() ? "Home airport is required for ticket fare and ticket accrual." : "",
+    !form.jobTitleCode?.trim() ? "Job Title Code helps reporting and legacy/action sheet matching." : "",
+    !form.jobTitle?.trim() ? "Job Title is shown in employee profile and operational reports." : "",
+  ].filter(Boolean);
 
   // Supervisor candidates + the employee's current crew (read-only).
   const { data: managerCandidates = [] } = useQuery({
@@ -186,15 +208,39 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
 
   return (
     <Grid container spacing={2} mt={0}>
+      <Grid item xs={12}>
+        <Paper variant="outlined" sx={{ p: 1.5, bgcolor: missingRequired.length ? "#fff7ed" : "#ecfdf5", borderColor: missingRequired.length ? "#fdba74" : "#86efac" }}>
+          <Stack direction="row" spacing={1.5} alignItems="flex-start">
+            <Avatar sx={{ bgcolor: missingRequired.length ? "#f97316" : "#16a34a", width: 34, height: 34 }}>
+              <SmartToyIcon fontSize="small" />
+            </Avatar>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography fontWeight={900}>{missingRequired.length ? "Employee setup assistant" : "Employee setup looks complete"}</Typography>
+              <Typography variant="body2" color="text.secondary">
+                {missingRequired.length
+                  ? `Complete ${missingRequired.length} highlighted field(s) before saving a clean employee profile.`
+                  : "All required employee fields are filled. You can continue with contracts, assignment, and shift setup."}
+              </Typography>
+              {missingRequired.length > 0 && (
+                <Stack direction="row" flexWrap="wrap" gap={0.75} mt={1}>
+                  {missingRequired.slice(0, 6).map((item) => (
+                    <Chip key={item} size="small" label={item} sx={{ bgcolor: "#ffedd5", color: "#9a3412", fontWeight: 700 }} />
+                  ))}
+                </Stack>
+              )}
+            </Box>
+          </Stack>
+        </Paper>
+      </Grid>
       <Grid item xs={12} sm={4}>
         <TextField fullWidth label="Employee Number" value={form.employeeNumber}
-          onChange={(e) => set("employeeNumber", e.target.value)} />
+          onChange={(e) => set("employeeNumber", e.target.value)} required sx={requiredFieldSx(!form.employeeNumber?.trim())} />
       </Grid>
       <Grid item xs={12} sm={4}>
-        <TextField fullWidth label="First Name" value={form.firstName} onChange={(e) => set("firstName", e.target.value)} />
+        <TextField fullWidth required label="First Name" value={form.firstName} onChange={(e) => set("firstName", e.target.value)} sx={requiredFieldSx(!form.firstName?.trim())} />
       </Grid>
       <Grid item xs={12} sm={4}>
-        <TextField fullWidth label="Last Name" value={form.lastName} onChange={(e) => set("lastName", e.target.value)} />
+        <TextField fullWidth required label="Last Name" value={form.lastName} onChange={(e) => set("lastName", e.target.value)} sx={requiredFieldSx(!form.lastName?.trim())} />
       </Grid>
       <Grid item xs={12} sm={4}>
         <TextField fullWidth label="Middle Name" value={form.middleName ?? ""} onChange={(e) => set("middleName", e.target.value)} />
@@ -214,13 +260,13 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
         <SelectField label="Marital Status" value={form.maritalStatus} onChange={(v) => set("maritalStatus", v)} options={lk(maritals)} />
       </Grid>
       <Grid item xs={12} sm={4}>
-        <SelectField label="Status" value={form.status} onChange={(v) => set("status", v)} options={lk(statuses)} allowEmpty={false} />
+        <SelectField label="Status" value={form.status} onChange={(v) => set("status", v)} options={lk(statuses)} allowEmpty={false} required sx={requiredFieldSx(!form.status?.trim())} />
       </Grid>
       <Grid item xs={12} sm={4}>
-        <SelectField label="Pay Status" value={form.payStatus} onChange={(v) => set("payStatus", v)} options={lk(payStatuses)} allowEmpty={false} required />
+        <SelectField label="Pay Status" value={form.payStatus} onChange={(v) => set("payStatus", v)} options={lk(payStatuses)} allowEmpty={false} required sx={requiredFieldSx(!form.payStatus?.trim())} />
       </Grid>
       <Grid item xs={12} sm={4}>
-        <SelectField label="Payment Method" value={form.paymentMethodCode ?? "BANK"} onChange={(v) => set("paymentMethodCode", v)} options={lk(paymentMethods)} allowEmpty={false} required />
+        <SelectField label="Payment Method" value={form.paymentMethodCode ?? "BANK"} onChange={(v) => set("paymentMethodCode", v)} options={lk(paymentMethods)} allowEmpty={false} required sx={requiredFieldSx(!form.paymentMethodCode?.trim())} />
       </Grid>
       <Grid item xs={12} sm={4}>
         <SelectField label="Band" value={form.band} onChange={(v) => set("band", v)} options={lk(bands)} />
@@ -231,28 +277,34 @@ function PersonalTab({ form, set }: { form: Employee; set: (k: keyof Employee, v
       </Grid>
       <Grid item xs={12} sm={4}>
         <TextField fullWidth label="Hire Date" type="date" InputLabelProps={{ shrink: true }}
-          value={form.hireDate} onChange={(e) => set("hireDate", e.target.value)} />
+          value={form.hireDate} onChange={(e) => set("hireDate", e.target.value)} required sx={requiredFieldSx(!form.hireDate?.trim())} />
       </Grid>
       <Grid item xs={12} sm={4}>
         <TextField fullWidth label="Termination Date" type="date" InputLabelProps={{ shrink: true }}
           value={form.terminationDate ?? ""} onChange={(e) => set("terminationDate", e.target.value)} />
       </Grid>
       <Grid item xs={12} sm={4}>
-        <TextField fullWidth label="Work airport" value={form.workAirportCode ?? ""}
-          onChange={(e) => set("workAirportCode", e.target.value.toUpperCase())} helperText="Used for ticket fare route" />
+        <ComboField label="Work airport" value={form.workAirportCode ?? ""}
+          onChange={(v) => set("workAirportCode", v.toUpperCase())} options={airportOpts} required
+          helperText="Used for ticket fare route" sx={requiredFieldSx(!form.workAirportCode?.trim())} />
       </Grid>
       <Grid item xs={12} sm={4}>
-        <TextField fullWidth label="Home airport" value={form.homeAirportCode ?? ""}
-          onChange={(e) => set("homeAirportCode", e.target.value.toUpperCase())} helperText="Used for ticket fare route" />
+        <ComboField label="Home airport" value={form.homeAirportCode ?? ""}
+          onChange={(v) => set("homeAirportCode", v.toUpperCase())} options={airportOpts} required
+          helperText="Used for ticket fare route" sx={requiredFieldSx(!form.homeAirportCode?.trim())} />
       </Grid>
 
       <Grid item xs={12}><Divider textAlign="left"><Typography variant="caption">Employment Classification</Typography></Divider></Grid>
 
       <Grid item xs={12} sm={4}>
-        <TextField fullWidth label="Job Title" value={form.jobTitle ?? ""} onChange={(e) => set("jobTitle", e.target.value)} />
+        <ComboField label="Job Title" value={form.jobTitleCode ?? ""}
+          onChange={(v, option) => {
+            set("jobTitleCode", v);
+            set("jobTitle", option?.label ?? "");
+          }} options={jobTitleOpts} required sx={requiredFieldSx(!form.jobTitle?.trim() || !form.jobTitleCode?.trim())} />
       </Grid>
       <Grid item xs={12} sm={4}>
-        <TextField fullWidth label="Job Title Code" value={form.jobTitleCode ?? ""} onChange={(e) => set("jobTitleCode", e.target.value)} />
+        <TextField fullWidth required label="Job Title Code" value={form.jobTitleCode ?? ""} onChange={(e) => set("jobTitleCode", e.target.value.toUpperCase())} sx={requiredFieldSx(!form.jobTitleCode?.trim())} />
       </Grid>
       <Grid item xs={12} sm={4}>
         <TextField fullWidth label="Arabic Name" value={form.arabicName ?? ""} onChange={(e) => set("arabicName", e.target.value)} />
@@ -470,6 +522,38 @@ function BankTab({ employeeId }: { employeeId: string }) {
     </Stack>
   );
 }
+
+function ComboField(props: {
+  label: string;
+  value?: string;
+  onChange: (v: string, option?: { value: string; label: string }) => void;
+  options: { value: string; label: string }[];
+  required?: boolean;
+  helperText?: string;
+  sx?: object;
+}) {
+  const { label, value, onChange, options, required = false, helperText, sx } = props;
+  const selected = options.find((o) => o.value === value) ?? (value ? { value, label: value } : null);
+  return (
+    <Autocomplete
+      fullWidth
+      value={selected}
+      options={options}
+      getOptionLabel={(option) => option.label}
+      isOptionEqualToValue={(option, current) => option.value === current.value}
+      onChange={(_event, option) => onChange(option?.value ?? "", option ?? undefined)}
+      renderInput={(params) => (
+        <TextField {...params} required={required} label={label} helperText={helperText} sx={sx} />
+      )}
+    />
+  );
+}
+
+const requiredFieldSx = (missing: boolean) => missing ? {
+  "& .MuiOutlinedInput-root": { bgcolor: "#fff7ed" },
+  "& .MuiOutlinedInput-notchedOutline": { borderColor: "#f59e0b", borderWidth: 2 },
+  "& .MuiInputLabel-root": { color: "#b45309", fontWeight: 800 },
+} : undefined;
 
 // =======================================================================
 // Time type usage tab
@@ -1325,7 +1409,7 @@ export default function EmployeesPage() {
     { field: "status", headerName: "Status", width: 110 },
   ];
 
-  const set = (k: keyof Employee, v: string) => setForm({ ...form, [k]: v });
+  const set = (k: keyof Employee, v: string) => setForm((current) => ({ ...current, [k]: v }));
   const openNew = () => { setForm(EMPTY); setTab(0); setOpen(true); };
   const openExisting = (e: Employee) => { setForm(e); setTab(0); setOpen(true); };
 
