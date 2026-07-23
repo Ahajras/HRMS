@@ -31,6 +31,12 @@ public class Crew extends AuditableEntity {
     @Column(name = "foreman_employee_id")
     private UUID foremanEmployeeId;
 
+    @Column(name = "supervisor_employee_id")
+    private UUID supervisorEmployeeId;
+
+    @Column(name = "timekeeper_employee_id")
+    private UUID timekeeperEmployeeId;
+
     @Column(name = "parent_crew_id")
     private UUID parentCrewId;
 
@@ -51,6 +57,12 @@ public class Crew extends AuditableEntity {
 
     public UUID getForemanEmployeeId() { return foremanEmployeeId; }
     public void setForemanEmployeeId(UUID foremanEmployeeId) { this.foremanEmployeeId = foremanEmployeeId; }
+
+    public UUID getSupervisorEmployeeId() { return supervisorEmployeeId; }
+    public void setSupervisorEmployeeId(UUID supervisorEmployeeId) { this.supervisorEmployeeId = supervisorEmployeeId; }
+
+    public UUID getTimekeeperEmployeeId() { return timekeeperEmployeeId; }
+    public void setTimekeeperEmployeeId(UUID timekeeperEmployeeId) { this.timekeeperEmployeeId = timekeeperEmployeeId; }
 
     public UUID getParentCrewId() { return parentCrewId; }
     public void setParentCrewId(UUID parentCrewId) { this.parentCrewId = parentCrewId; }

@@ -126,13 +126,15 @@ public class CrewService {
 
     public CrewDto create(CrewDto dto) {
         UUID companyId = TenantContext.requireCompanyId();
+        String code = generateOrNormalizeCode(companyId, dto.getProjectId(), dto.getCode());
+        dto.setCode(code);
         // Code is unique per project (the same code may be reused in another project).
         boolean dup = dto.getProjectId() != null
-                ? repository.existsByCompanyIdAndProjectIdAndCode(companyId, dto.getProjectId(), dto.getCode())
-                : repository.existsByCompanyIdAndCode(companyId, dto.getCode());
+                ? repository.existsByCompanyIdAndProjectIdAndCode(companyId, dto.getProjectId(), code)
+                : repository.existsByCompanyIdAndCode(companyId, code);
         if (dup) {
             throw new BusinessRuleException("crew.code.duplicate",
-                    "Crew code already exists in this project: " + dto.getCode());
+                    "Crew code already exists in this project: " + code);
         }
         Crew e = new Crew();
         e.setCompanyId(companyId);
@@ -227,10 +229,12 @@ public class CrewService {
     }
 
     private void apply(CrewDto dto, Crew e) {
-        e.setCode(dto.getCode());
+        e.setCode(normalizeCode(dto.getCode()));
         e.setName(dto.getName());
         e.setProjectId(dto.getProjectId());
         e.setForemanEmployeeId(dto.getForemanEmployeeId());
+        e.setSupervisorEmployeeId(dto.getSupervisorEmployeeId());
+        e.setTimekeeperEmployeeId(dto.getTimekeeperEmployeeId());
         e.setParentCrewId(dto.getParentCrewId());
         if (dto.getStatus() != null) {
             e.setStatus(dto.getStatus());
@@ -245,6 +249,8 @@ public class CrewService {
         dto.setName(e.getName());
         dto.setProjectId(e.getProjectId());
         dto.setForemanEmployeeId(e.getForemanEmployeeId());
+        dto.setSupervisorEmployeeId(e.getSupervisorEmployeeId());
+        dto.setTimekeeperEmployeeId(e.getTimekeeperEmployeeId());
         dto.setParentCrewId(e.getParentCrewId());
         dto.setStatus(e.getStatus());
         if (e.getProjectId() != null) {
@@ -254,8 +260,52 @@ public class CrewService {
             employeeRepository.findById(e.getForemanEmployeeId())
                     .ifPresent(emp -> dto.setForemanName((emp.getFirstName() + " " + emp.getLastName()).trim()));
         }
+        if (e.getSupervisorEmployeeId() != null) {
+            employeeRepository.findById(e.getSupervisorEmployeeId())
+                    .ifPresent(emp -> dto.setSupervisorName((emp.getFirstName() + " " + emp.getLastName()).trim()));
+        }
+        if (e.getTimekeeperEmployeeId() != null) {
+            employeeRepository.findById(e.getTimekeeperEmployeeId())
+                    .ifPresent(emp -> dto.setTimekeeperName((emp.getFirstName() + " " + emp.getLastName()).trim()));
+        }
         dto.setMemberCount(memberRepository.findByCrewIdOrderByEffectiveFromDesc(e.getId()).size());
         return dto;
+    }
+
+    private String generateOrNormalizeCode(UUID companyId, UUID projectId, String raw) {
+        String code = normalizeCode(raw);
+        if (code == null || code.isBlank()) {
+            throw new BusinessRuleException("crew.code.required", "Crew code prefix is required.");
+        }
+        if (code.matches(".*-\\d{3,}$")) {
+            return code;
+        }
+        String prefix = code.endsWith("-") ? code.substring(0, code.length() - 1) : code;
+        String startsWith = prefix + "-";
+        List<Crew> existing = projectId != null
+                ? repository.findByCompanyIdAndProjectIdAndCodeStartingWithOrderByCode(companyId, projectId, startsWith)
+                : repository.findByCompanyIdAndCodeStartingWithOrderByCode(companyId, startsWith);
+        int max = existing.stream()
+                .map(Crew::getCode)
+                .mapToInt(existingCode -> parseSuffix(existingCode, startsWith))
+                .max()
+                .orElse(0);
+        return "%s-%03d".formatted(prefix, max + 1);
+    }
+
+    private String normalizeCode(String raw) {
+        return raw == null ? null : raw.trim().toUpperCase().replaceAll("\\s+", "-");
+    }
+
+    private int parseSuffix(String code, String prefix) {
+        if (code == null || !code.startsWith(prefix)) {
+            return 0;
+        }
+        try {
+            return Integer.parseInt(code.substring(prefix.length()));
+        } catch (NumberFormatException ignored) {
+            return 0;
+        }
     }
 
     private CrewMemberDto toMemberDto(CrewMember m) {

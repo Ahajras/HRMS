@@ -12,6 +12,10 @@ public class CrewDto {
     private String projectCode;
     private UUID foremanEmployeeId;
     private String foremanName;
+    private UUID supervisorEmployeeId;
+    private String supervisorName;
+    private UUID timekeeperEmployeeId;
+    private String timekeeperName;
     private UUID parentCrewId;
     private String status;
     private int memberCount;
@@ -39,6 +43,18 @@ public class CrewDto {
 
     public String getForemanName() { return foremanName; }
     public void setForemanName(String foremanName) { this.foremanName = foremanName; }
+
+    public UUID getSupervisorEmployeeId() { return supervisorEmployeeId; }
+    public void setSupervisorEmployeeId(UUID supervisorEmployeeId) { this.supervisorEmployeeId = supervisorEmployeeId; }
+
+    public String getSupervisorName() { return supervisorName; }
+    public void setSupervisorName(String supervisorName) { this.supervisorName = supervisorName; }
+
+    public UUID getTimekeeperEmployeeId() { return timekeeperEmployeeId; }
+    public void setTimekeeperEmployeeId(UUID timekeeperEmployeeId) { this.timekeeperEmployeeId = timekeeperEmployeeId; }
+
+    public String getTimekeeperName() { return timekeeperName; }
+    public void setTimekeeperName(String timekeeperName) { this.timekeeperName = timekeeperName; }
 
     public UUID getParentCrewId() { return parentCrewId; }
     public void setParentCrewId(UUID parentCrewId) { this.parentCrewId = parentCrewId; }

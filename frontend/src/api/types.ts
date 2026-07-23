@@ -816,6 +816,10 @@ export interface Crew {
   projectCode?: string;
   foremanEmployeeId?: string;
   foremanName?: string;
+  supervisorEmployeeId?: string;
+  supervisorName?: string;
+  timekeeperEmployeeId?: string;
+  timekeeperName?: string;
   parentCrewId?: string;
   status?: string;
   memberCount?: number;
