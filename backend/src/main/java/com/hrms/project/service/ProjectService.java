@@ -1,5 +1,6 @@
 package com.hrms.project.service;
 
+import com.hrms.common.exception.BusinessRuleException;
 import com.hrms.common.exception.ResourceNotFoundException;
 import com.hrms.common.tenant.TenantContext;
 import com.hrms.crew.service.TimekeeperService;
@@ -10,6 +11,7 @@ import com.hrms.project.repository.ProjectRepository;
 import com.hrms.security.AuthenticatedUser;
 import com.hrms.security.domain.AppUser;
 import com.hrms.security.repository.AppUserRepository;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
@@ -73,7 +75,14 @@ public class ProjectService {
 
     public void delete(UUID id) {
         assertProjectAllowed(id);
-        repository.delete(getEntity(id));
+        Project entity = getEntity(id);
+        try {
+            repository.delete(entity);
+            repository.flush();
+        } catch (DataIntegrityViolationException ex) {
+            throw new BusinessRuleException("PROJECT_IN_USE",
+                    "Project cannot be deleted because it already has related data. Delete assignments, shifts, cost codes, timesheets, payroll records, and approvals first, or set the project to Inactive.");
+        }
     }
 
     private Project getEntity(UUID id) {
