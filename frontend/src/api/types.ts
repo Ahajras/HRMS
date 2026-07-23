@@ -589,6 +589,45 @@ export interface CostCode {
   status?: string;
 }
 
+export interface WorkPackage {
+  id?: string;
+  companyId?: string;
+  projectId: string;
+  projectCode?: string;
+  projectName?: string;
+  costCodeId?: string;
+  costCode?: string;
+  costCodeName?: string;
+  code: string;
+  name: string;
+  description?: string;
+  plannedStart?: string;
+  plannedEnd?: string;
+  status?: string;
+  requirementCount?: number;
+  crewCount?: number;
+}
+
+export interface WorkPackageRequirement {
+  id?: string;
+  workPackageId?: string;
+  jobTitleCode: string;
+  jobTitleName?: string;
+  requiredCount: number;
+  assignedCount?: number;
+}
+
+export interface WorkPackageCrew {
+  id?: string;
+  workPackageId?: string;
+  crewId: string;
+  crewCode?: string;
+  crewName?: string;
+  plannedStart?: string;
+  plannedEnd?: string;
+  status?: string;
+}
+
 export interface RulePackage {
   id?: string;
   companyId?: string;

@@ -40,6 +40,9 @@ import type {
   Crew,
   CrewMember,
   CrewTrade,
+  WorkPackage,
+  WorkPackageCrew,
+  WorkPackageRequirement,
   TimekeeperProject,
   TimekeeperDay,
   TimekeeperMarkRequest,
@@ -456,6 +459,24 @@ export const crewApi = {
   trades: (id: string) => api.get<CrewTrade[]>(`/crews/${id}/trades`).then((r) => r.data),
   addTrade: (id: string, d: CrewTrade) => api.post<CrewTrade>(`/crews/${id}/trades`, d).then((r) => r.data),
   removeTrade: (tradeId: string) => api.delete(`/crews/trades/${tradeId}`).then(() => undefined),
+};
+
+// --- Work packages: scope of work -> manpower -> crew assignment ---
+export const workPackageApi = {
+  list: (projectId?: string) =>
+    api.get<WorkPackage[]>("/work-packages", { params: projectId ? { projectId } : {} }).then((r) => r.data),
+  create: (d: WorkPackage) => api.post<WorkPackage>("/work-packages", d).then((r) => r.data),
+  update: (id: string, d: WorkPackage) => api.put<WorkPackage>(`/work-packages/${id}`, d).then((r) => r.data),
+  remove: (id: string) => api.delete(`/work-packages/${id}`).then(() => undefined),
+  requirements: (id: string) =>
+    api.get<WorkPackageRequirement[]>(`/work-packages/${id}/requirements`).then((r) => r.data),
+  addRequirement: (id: string, d: WorkPackageRequirement) =>
+    api.post<WorkPackageRequirement>(`/work-packages/${id}/requirements`, d).then((r) => r.data),
+  removeRequirement: (id: string) => api.delete(`/work-packages/requirements/${id}`).then(() => undefined),
+  crews: (id: string) => api.get<WorkPackageCrew[]>(`/work-packages/${id}/crews`).then((r) => r.data),
+  addCrew: (id: string, d: WorkPackageCrew) =>
+    api.post<WorkPackageCrew>(`/work-packages/${id}/crews`, d).then((r) => r.data),
+  removeCrew: (id: string) => api.delete(`/work-packages/crews/${id}`).then(() => undefined),
 };
 
 // --- Timekeeper -> project assignment ---

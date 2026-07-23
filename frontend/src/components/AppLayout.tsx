@@ -162,6 +162,7 @@ const NAV_GROUPS: NavGroup[] = [
       { to: "/employees", label: "Employees", icon: <PeopleIcon />, authority: "employee.read" },
       { to: "/organization", label: "Organization", icon: <AccountTreeIcon />, authority: "organization.read" },
       { to: "/crews", label: "Crews", icon: <GroupsIcon />, authority: "employee.read" },
+      { to: "/work-packages", label: "Work Packages", icon: <WorkIcon />, authority: "employee.read" },
       { to: "/timekeepers", label: "Timekeepers", icon: <ManageAccountsIcon />, authorities: ["employee.read", "timekeeper.attendance"] },
     ],
   },

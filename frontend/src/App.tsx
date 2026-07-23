@@ -35,6 +35,7 @@ import TimesheetPage from "./pages/TimesheetPage";
 import CalendarPage from "./pages/CalendarPage";
 import RosterPage from "./pages/RosterPage";
 import CrewsPage from "./pages/CrewsPage";
+import WorkPackagesPage from "./pages/WorkPackagesPage";
 import TimekeepersPage from "./pages/TimekeepersPage";
 import LeavePage from "./pages/LeavePage";
 import LoginPage from "./pages/LoginPage";
@@ -96,6 +97,7 @@ export default function App() {
         <Route path="/payroll-calendar" element={<CalendarPage />} />
         <Route path="/roster" element={<RosterPage />} />
         <Route path="/crews" element={<CrewsPage />} />
+        <Route path="/work-packages" element={<WorkPackagesPage />} />
         <Route path="/timekeepers" element={<TimekeepersPage />} />
         <Route path="/shifts" element={<ShiftsPage />} />
         <Route path="/time-setup" element={<TimeSetupPage />} />
